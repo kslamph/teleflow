@@ -64,25 +64,32 @@ func main() {
 	transferFlow := teleflow.NewFlow("transfer").
 		// Step 1: Amount input with number validation
 		Step("amount").
-		OnInput(func(ctx *teleflow.Context) error {
+		OnStart(func(ctx *teleflow.Context) error {
 			return ctx.Reply("💰 Please enter the amount to transfer:")
+		}).
+		OnInput(func(ctx *teleflow.Context) error {
+			amount := ctx.Update.Message.Text
+			ctx.Set("amount", amount)
+			return nil
 		}).
 		WithValidator(teleflow.NumberValidator()).
 
 		// Step 2: Recipient input (text)
 		Step("recipient").
-		OnInput(func(ctx *teleflow.Context) error {
-			amount := ctx.Update.Message.Text
-			ctx.Set("amount", amount)
+		OnStart(func(ctx *teleflow.Context) error {
 			return ctx.Reply("👤 Please enter the recipient's username:")
+		}).
+		OnInput(func(ctx *teleflow.Context) error {
+			recipient := ctx.Update.Message.Text
+			ctx.Set("recipient", recipient)
+			return nil
 		}).
 
 		// Step 3: Confirmation with choice validation (yes/no)
 		Step("confirm").
-		OnInput(func(ctx *teleflow.Context) error {
-			recipient := ctx.Update.Message.Text
-			ctx.Set("recipient", recipient)
+		OnStart(func(ctx *teleflow.Context) error {
 			amount, _ := ctx.Get("amount")
+			recipient, _ := ctx.Get("recipient")
 
 			// Create inline keyboard for confirmation
 			keyboard := teleflow.NewInlineKeyboard(
@@ -97,12 +104,22 @@ func main() {
 				keyboard,
 			)
 		}).
+		OnInput(func(ctx *teleflow.Context) error {
+			// Input handling is done by the choice validator
+			return nil
+		}).
 		WithValidator(teleflow.ChoiceValidator([]string{"yes", "no"})).
+		AddTransition("yes", ""). // Empty string means flow completion
+		AddTransition("no", "_cancel_").
 
 		// Flow completion handler
 		OnComplete(func(ctx *teleflow.Context) error {
 			amount, _ := ctx.Get("amount")
 			recipient, _ := ctx.Get("recipient")
+			insufficientBalance, _ := ctx.Get("InsufficientBalance")
+			if insufficientBalance.(bool) {
+				return ctx.EditOrReply("❌ Insufficient balance for this transfer!")
+			}
 
 			return ctx.EditOrReply(fmt.Sprintf(
 				"✅ Transfer completed successfully!\n\n"+
@@ -217,13 +234,21 @@ func main() {
 
 	// Callback handlers for inline keyboard buttons in the flow
 	bot.RegisterCallback(teleflow.SimpleCallback("yes", func(ctx *teleflow.Context, data string) error {
-		// This will be handled by the flow system automatically
-		// since we're using ChoiceValidator with "yes" and "no"
+		// The flow system will handle this automatically via the choice validator
+		// No additional action needed - the flow will proceed to completion
+		log.Printf("User %d confirmed transfer with data: %s", ctx.UserID(), data)
+		amount, _ := ctx.Get("amount")
+		if !hasSufficientBalance(ctx.UserID(), amount) {
+			ctx.Set("InsufficientBalance", true)
+			return ctx.EditOrReply("❌ Insufficient balance!")
+		}
+
 		return nil
 	}))
 
 	bot.RegisterCallback(teleflow.SimpleCallback("no", func(ctx *teleflow.Context, data string) error {
-		// This will trigger flow cancellation
+		// The flow system will handle this automatically via the choice validator
+		// "no" will trigger flow cancellation through the choice validator logic
 		return nil
 	}))
 
@@ -250,4 +275,10 @@ func main() {
 	if err := bot.Start(); err != nil {
 		log.Fatal("Failed to start bot:", err)
 	}
+}
+
+func hasSufficientBalance(userID int64, amount interface{}) bool {
+	// Check if the user has sufficient balance for the transfer
+	// This is just a placeholder implementation
+	return false
 }

@@ -210,7 +210,7 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 
 	// Check for global flow exit commands first
 	if b.flowManager.IsUserInFlow(ctx.UserID()) {
-		if b.isGlobalExitCommand(ctx.Update.Message.Text) {
+		if ctx.Update.Message != nil && b.isGlobalExitCommand(ctx.Update.Message.Text) {
 			handler = func(ctx *Context) error {
 				b.flowManager.CancelFlow(ctx.UserID())
 				return ctx.Reply(b.flowConfig.ExitMessage)
@@ -238,7 +238,6 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 	}
 
 	if handler != nil {
-		handler = b.applyMiddleware(handler)
 		if err := handler(ctx); err != nil {
 			log.Printf("Handler error for UserID %d: %v", ctx.UserID(), err)
 			ctx.Reply("An error occurred. Please try again.")

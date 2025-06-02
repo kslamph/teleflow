@@ -150,7 +150,8 @@ type Flow struct {
 // FlowStep represents a single step in a flow
 type FlowStep struct {
 	Name                string
-	Handler             HandlerFunc
+	StartHandler        HandlerFunc // Called when entering the step
+	Handler             HandlerFunc // Called when receiving input
 	Validator           FlowValidatorFunc
 	NextStep            string
 	Transitions         map[string]string // input -> next step
@@ -249,6 +250,12 @@ func (fsb *FlowStepBuilder) NextStep(stepName string) *FlowStepBuilder {
 	return fsb
 }
 
+// OnStart sets the step start handler (called when entering the step)
+func (fsb *FlowStepBuilder) OnStart(handler HandlerFunc) *FlowStepBuilder {
+	fsb.step.StartHandler = handler
+	return fsb
+}
+
 // OnInput sets the step input handler
 func (fsb *FlowStepBuilder) OnInput(handler HandlerFunc) *FlowStepBuilder {
 	fsb.step.Handler = handler
@@ -273,6 +280,12 @@ func (fsb *FlowStepBuilder) WithStepType(stepType FlowStepType) *FlowStepBuilder
 	return fsb
 }
 
+// AddTransition adds an input-based transition to another step
+func (fsb *FlowStepBuilder) AddTransition(input, nextStep string) *FlowStepBuilder {
+	fsb.step.Transitions[input] = nextStep
+	return fsb
+}
+
 // Step continues building the flow with a new step
 func (fsb *FlowStepBuilder) Step(name string) *FlowStepBuilder {
 	return fsb.flowBuilder.Step(name)
@@ -281,6 +294,11 @@ func (fsb *FlowStepBuilder) Step(name string) *FlowStepBuilder {
 // OnComplete sets the completion handler
 func (fsb *FlowStepBuilder) OnComplete(handler HandlerFunc) *FlowBuilder {
 	return fsb.flowBuilder.OnComplete(handler)
+}
+
+// OnCancel sets the cancellation handler
+func (fsb *FlowStepBuilder) OnCancel(handler HandlerFunc) *FlowBuilder {
+	return fsb.flowBuilder.OnCancel(handler)
 }
 
 // Build creates the final flow
@@ -321,6 +339,17 @@ func (fm *FlowManager) StartFlow(userID int64, flowName string, ctx *Context) er
 	}
 
 	fm.userFlows[userID] = userState
+
+	// Execute the start handler of the first step if it exists
+	firstStep := flow.Steps[0]
+	if firstStep.StartHandler != nil && ctx != nil {
+		// Store user state data in context
+		for key, value := range userState.Data {
+			ctx.Set(key, value)
+		}
+		return firstStep.StartHandler(ctx)
+	}
+
 	return nil
 }
 
@@ -352,19 +381,40 @@ func (fm *FlowManager) HandleUpdate(ctx *Context) (bool, error) {
 	}
 
 	// Validate input if validator exists
-	if currentStep.Validator != nil && ctx.Update.Message != nil {
-		if valid, helpText := currentStep.Validator(ctx.Update.Message.Text); !valid {
-			exitHint := ""
-			if fm.botConfig != nil && len(fm.botConfig.ExitCommands) > 0 {
-				exitHint = fmt.Sprintf("\n\nType '%s' to cancel.", fm.botConfig.ExitCommands[0])
+	if currentStep.Validator != nil {
+		var inputToValidate string
+		if ctx.Update.Message != nil {
+			inputToValidate = ctx.Update.Message.Text
+		} else if ctx.Update.CallbackQuery != nil {
+			inputToValidate = ctx.Update.CallbackQuery.Data
+		}
+
+		if inputToValidate != "" {
+			if valid, helpText := currentStep.Validator(inputToValidate); !valid {
+				exitHint := ""
+				if fm.botConfig != nil && len(fm.botConfig.ExitCommands) > 0 {
+					exitHint = fmt.Sprintf("\n\nType '%s' to cancel.", fm.botConfig.ExitCommands[0])
+				}
+				return true, ctx.Reply(fmt.Sprintf("❌ Invalid input.\n\n%s%s", helpText, exitHint))
 			}
-			return true, ctx.Reply(fmt.Sprintf("❌ Invalid input.\n\n%s%s", helpText, exitHint))
 		}
 	}
 
 	// Execute step handler
-	if err := currentStep.Handler(ctx); err != nil {
-		return true, err
+	if currentStep.Handler != nil {
+		if err := currentStep.Handler(ctx); err != nil {
+			return true, err
+		}
+	}
+
+	// For callback queries, also execute the registered callback handler
+	if ctx.Update.CallbackQuery != nil {
+		callbackHandler := ctx.Bot.callbackRegistry.Handle(ctx.Update.CallbackQuery.Data)
+		if callbackHandler != nil {
+			if err := callbackHandler(ctx); err != nil {
+				return true, err
+			}
+		}
 	}
 
 	// Determine next step
@@ -412,6 +462,17 @@ func (fm *FlowManager) HandleUpdate(ctx *Context) (bool, error) {
 		for key, value := range ctx.data {
 			userState.Data[key] = value
 		}
+
+		// Execute start handler for the new step if it exists
+		newStep := flow.stepMap[nextStep]
+		if newStep != nil && newStep.StartHandler != nil {
+			// Update context with the new state data
+			for key, value := range userState.Data {
+				ctx.Set(key, value)
+			}
+			return true, newStep.StartHandler(ctx)
+		}
+
 		return true, nil
 	}
 }

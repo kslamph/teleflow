@@ -135,6 +135,16 @@ func (c *Context) StartFlow(flowName string) error {
 	return c.Bot.flowManager.StartFlow(c.UserID(), flowName, c)
 }
 
+// IsUserInFlow checks if the user is currently in a flow
+func (c *Context) IsUserInFlow() bool {
+	return c.Bot.flowManager.IsUserInFlow(c.UserID())
+}
+
+// CancelFlow cancels the current flow for the user
+func (c *Context) CancelFlow() error {
+	return c.Bot.flowManager.CancelFlow(c.UserID())
+}
+
 // send is an internal helper for sending messages
 func (c *Context) send(text string, keyboard ...interface{}) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
