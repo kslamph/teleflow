@@ -135,8 +135,32 @@ func LoggingMiddleware() MiddlewareFunc {
 func AuthMiddleware(checker UserPermissionChecker) MiddlewareFunc {
 	return func(next HandlerFunc) HandlerFunc {
 		return func(ctx *Context) error {
-			if !checker.CanExecute(ctx.UserID(), "basic_access") {
-				return ctx.Reply("🚫 You are not authorized to use this bot.")
+			// Create permission context
+			permCtx := &PermissionContext{
+				UserID: ctx.UserID(),
+				ChatID: ctx.ChatID(),
+				Update: &ctx.Update,
+			}
+
+			// Extract command and arguments if available
+			if ctx.Update.Message != nil && ctx.Update.Message.IsCommand() {
+				permCtx.Command = ctx.Update.Message.Command()
+				if args := ctx.Update.Message.CommandArguments(); args != "" {
+					permCtx.Arguments = []string{args}
+				}
+			}
+
+			// Check if it's a group chat
+			if ctx.Update.Message != nil {
+				permCtx.IsGroup = ctx.Update.Message.Chat.IsGroup() || ctx.Update.Message.Chat.IsSuperGroup()
+				permCtx.MessageID = ctx.Update.Message.MessageID
+			} else if ctx.Update.CallbackQuery != nil && ctx.Update.CallbackQuery.Message != nil {
+				permCtx.IsGroup = ctx.Update.CallbackQuery.Message.Chat.IsGroup() || ctx.Update.CallbackQuery.Message.Chat.IsSuperGroup()
+				permCtx.MessageID = ctx.Update.CallbackQuery.Message.MessageID
+			}
+
+			if err := checker.CanExecute(permCtx); err != nil {
+				return ctx.Reply("🚫 " + err.Error())
 			}
 			return next(ctx)
 		}

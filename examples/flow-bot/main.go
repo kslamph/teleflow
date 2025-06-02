@@ -11,10 +11,11 @@ import (
 // SimplePermissionChecker provides a basic permission implementation for demonstration
 type SimplePermissionChecker struct{}
 
-// CanExecute always returns true for this simple example
-func (spc *SimplePermissionChecker) CanExecute(userID int64, action string) bool {
+// CanExecute always returns nil (no error) for this simple example
+func (spc *SimplePermissionChecker) CanExecute(ctx *teleflow.PermissionContext) error {
 	// In a real implementation, you would check user permissions here
-	return true
+	// Return nil means permission granted, return error means permission denied
+	return nil
 }
 
 // GetMainMenuForUser returns a basic main menu keyboard for the user
@@ -116,10 +117,6 @@ func main() {
 		OnComplete(func(ctx *teleflow.Context) error {
 			amount, _ := ctx.Get("amount")
 			recipient, _ := ctx.Get("recipient")
-			insufficientBalance, _ := ctx.Get("InsufficientBalance")
-			if insufficientBalance.(bool) {
-				return ctx.EditOrReply("❌ Insufficient balance for this transfer!")
-			}
 
 			return ctx.EditOrReply(fmt.Sprintf(
 				"✅ Transfer completed successfully!\n\n"+
@@ -235,20 +232,19 @@ func main() {
 	// Callback handlers for inline keyboard buttons in the flow
 	bot.RegisterCallback(teleflow.SimpleCallback("yes", func(ctx *teleflow.Context, data string) error {
 		// The flow system will handle this automatically via the choice validator
-		// No additional action needed - the flow will proceed to completion
+		// "yes" will trigger flow completion through the choice validator logic
 		log.Printf("User %d confirmed transfer with data: %s", ctx.UserID(), data)
-		amount, _ := ctx.Get("amount")
-		if !hasSufficientBalance(ctx.UserID(), amount) {
-			ctx.Set("InsufficientBalance", true)
-			return ctx.EditOrReply("❌ Insufficient balance!")
-		}
-
+		// You can add any additional logic here if needed
+		// Returning nil means the flow will complete and the completion handler will be called
 		return nil
 	}))
 
 	bot.RegisterCallback(teleflow.SimpleCallback("no", func(ctx *teleflow.Context, data string) error {
 		// The flow system will handle this automatically via the choice validator
 		// "no" will trigger flow cancellation through the choice validator logic
+		log.Printf("User %d cancelled transfer with data: %s", ctx.UserID(), data)
+		// You can add any additional logic here if needed
+		// Returning nil means the flow will be cancelled and the cancellation handler will be called
 		return nil
 	}))
 
@@ -275,10 +271,4 @@ func main() {
 	if err := bot.Start(); err != nil {
 		log.Fatal("Failed to start bot:", err)
 	}
-}
-
-func hasSufficientBalance(userID int64, amount interface{}) bool {
-	// Check if the user has sufficient balance for the transfer
-	// This is just a placeholder implementation
-	return false
 }

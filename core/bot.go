@@ -62,9 +62,20 @@ type MiddlewareFunc func(next HandlerFunc) HandlerFunc
 // BotOption defines functional options for Bot configuration
 type BotOption func(*Bot)
 
+// PermissionContext provides rich context for permission checking
+type PermissionContext struct {
+	UserID    int64
+	ChatID    int64
+	Command   string
+	Arguments []string
+	IsGroup   bool
+	MessageID int
+	Update    *tgbotapi.Update
+}
+
 // UserPermissionChecker interface for authorization
 type UserPermissionChecker interface {
-	CanExecute(userID int64, action string) bool
+	CanExecute(ctx *PermissionContext) error
 	GetMainMenuForUser(userID int64) *ReplyKeyboard
 }
 
@@ -194,10 +205,32 @@ func (b *Bot) wrapWithPermissions(handler HandlerFunc, permissions []string) Han
 	}
 
 	return func(ctx *Context) error {
-		for _, permission := range permissions {
-			if !b.userPermissions.CanExecute(ctx.UserID(), permission) {
-				return ctx.Reply("❌ You don't have permission to perform this action.")
+		// Create permission context
+		permCtx := &PermissionContext{
+			UserID: ctx.UserID(),
+			ChatID: ctx.ChatID(),
+			Update: &ctx.Update,
+		}
+
+		// Extract command and arguments if available
+		if ctx.Update.Message != nil && ctx.Update.Message.IsCommand() {
+			permCtx.Command = ctx.Update.Message.Command()
+			if args := ctx.Update.Message.CommandArguments(); args != "" {
+				permCtx.Arguments = []string{args}
 			}
+		}
+
+		// Check if it's a group chat
+		if ctx.Update.Message != nil {
+			permCtx.IsGroup = ctx.Update.Message.Chat.IsGroup() || ctx.Update.Message.Chat.IsSuperGroup()
+			permCtx.MessageID = ctx.Update.Message.MessageID
+		} else if ctx.Update.CallbackQuery != nil && ctx.Update.CallbackQuery.Message != nil {
+			permCtx.IsGroup = ctx.Update.CallbackQuery.Message.Chat.IsGroup() || ctx.Update.CallbackQuery.Message.Chat.IsSuperGroup()
+			permCtx.MessageID = ctx.Update.CallbackQuery.Message.MessageID
+		}
+
+		if err := b.userPermissions.CanExecute(permCtx); err != nil {
+			return ctx.Reply("❌ " + err.Error())
 		}
 		return handler(ctx)
 	}

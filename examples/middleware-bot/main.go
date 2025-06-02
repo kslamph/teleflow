@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -38,19 +39,34 @@ func NewAdminPermissionChecker() *AdminPermissionChecker {
 	return checker
 }
 
-// CanExecute checks if user can execute the given action
-func (c *AdminPermissionChecker) CanExecute(userID int64, action string) bool {
-	switch action {
-	case "admin_access":
-		// Only admin users can access admin commands
-		return c.adminUsers[userID]
-	case "basic_access":
-		// All users can access basic commands
-		return true
-	default:
-		// Unknown actions are denied
-		return false
+// CanExecute checks if user can execute based on permission context
+func (c *AdminPermissionChecker) CanExecute(ctx *teleflow.PermissionContext) error {
+	// Check if user is admin
+	isAdmin := c.adminUsers[ctx.UserID]
+
+	// Allow admin users to do anything
+	if isAdmin {
+		return nil
 	}
+
+	// Check command-specific permissions for non-admin users
+	if ctx.Command != "" {
+		switch ctx.Command {
+		case "admin", "status", "panic":
+			return fmt.Errorf("Admin access required for command '%s'", ctx.Command)
+		default:
+			// Allow basic commands for all users
+			return nil
+		}
+	}
+
+	// Allow basic access for non-command interactions
+	return nil
+}
+
+// IsAdmin is a helper method to check if a user is admin (for legacy compatibility)
+func (c *AdminPermissionChecker) IsAdmin(userID int64) bool {
+	return c.adminUsers[userID]
 }
 
 // GetMainMenuForUser returns different keyboards based on user role
@@ -148,7 +164,7 @@ func registerCommands(bot *teleflow.Bot, permissionChecker *AdminPermissionCheck
 	// /admin command - Admin-only command demonstrating authorization middleware
 	bot.HandleCommand("admin", func(ctx *teleflow.Context) error {
 		// This command has additional admin-specific authorization check
-		if !permissionChecker.CanExecute(ctx.UserID(), "admin_access") {
+		if !permissionChecker.IsAdmin(ctx.UserID()) {
 			return ctx.Reply("🚫 **Access Denied**\n\n" +
 				"This command requires admin privileges.\n\n" +
 				"🔒 **Authorization Middleware in Action:**\n" +
@@ -290,7 +306,7 @@ func registerTextHandlers(bot *teleflow.Bot, permissionChecker *AdminPermissionC
 // handleHomeButton returns to main menu with middleware status
 func handleHomeButton(ctx *teleflow.Context, checker *AdminPermissionChecker) error {
 	userType := "Regular User"
-	if checker.CanExecute(ctx.UserID(), "admin_access") {
+	if checker.IsAdmin(ctx.UserID()) {
 		userType = "Admin User"
 	}
 
@@ -384,7 +400,7 @@ func handlePanicTestButton(ctx *teleflow.Context, checker *AdminPermissionChecke
 
 // handleAdminPanelButton tests admin authorization
 func handleAdminPanelButton(ctx *teleflow.Context, checker *AdminPermissionChecker) error {
-	if !checker.CanExecute(ctx.UserID(), "admin_access") {
+	if !checker.IsAdmin(ctx.UserID()) {
 		return ctx.Reply("🚫 **Authorization Failed**\n\n" +
 			"❌ **Access Denied by AuthMiddleware:**\n" +
 			"• Command: Admin Panel Access\n" +
