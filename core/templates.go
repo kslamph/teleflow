@@ -145,10 +145,11 @@ func (b *Bot) addTemplateInternal(name, templateText string, parseMode ParseMode
 	if err != nil {
 		return fmt.Errorf("failed to parse template '%s': %w", name, err)
 	}
-
 	// Add the template to the bot's template collection
 	if b.templates == nil {
-		b.templates = template.New("botMessages").Funcs(getTemplateFuncs(parseMode))
+		// Initialize with all template functions (combine all parse modes)
+		allFuncs := getAllTemplateFuncs()
+		b.templates = template.New("botMessages").Funcs(allFuncs)
 	}
 
 	// Add the template to the collection
@@ -165,6 +166,28 @@ func (b *Bot) addTemplateInternal(name, templateText string, parseMode ParseMode
 	}
 
 	return nil
+}
+
+// getAllTemplateFuncs returns all template functions for all parse modes
+func getAllTemplateFuncs() template.FuncMap {
+	return template.FuncMap{
+		"escape": func(s string) string {
+			// Default to HTML escaping - will be overridden in execution context
+			return html.EscapeString(s)
+		},
+		"safe": func(s string) string {
+			return s
+		},
+		"title": func(s string) string {
+			return strings.Title(s)
+		},
+		"upper": func(s string) string {
+			return strings.ToUpper(s)
+		},
+		"lower": func(s string) string {
+			return strings.ToLower(s)
+		},
+	}
 }
 
 // GetTemplateInfo retrieves template metadata by name

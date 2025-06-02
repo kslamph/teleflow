@@ -203,18 +203,18 @@ func (c *Context) send(text string, keyboard ...interface{}) error {
 		}
 	} else {
 		// Apply user-specific main menu
-		if c.Bot.userPermissions != nil {
+		if c.Bot.accessManager != nil {
 			menuContext := &MenuContext{
 				UserID:    c.UserID(),
 				ChatID:    c.ChatID(),
 				IsGroup:   c.Update.Message != nil && (c.Update.Message.Chat.IsGroup() || c.Update.Message.Chat.IsSuperGroup()),
 				IsChannel: c.Update.Message != nil && c.Update.Message.Chat.IsChannel(),
 			}
-			if userMenu := c.Bot.userPermissions.GetMainMenu(menuContext); userMenu != nil {
+			if userMenu := c.Bot.accessManager.GetMainMenu(menuContext); userMenu != nil {
 				msg.ReplyMarkup = userMenu.ToTgbotapi()
 			}
-		} else if c.Bot.mainMenu != nil {
-			msg.ReplyMarkup = c.Bot.mainMenu.ToTgbotapi()
+		} else if c.Bot.replyKeyboard != nil {
+			msg.ReplyMarkup = c.Bot.replyKeyboard.ToTgbotapi()
 		}
 	}
 
@@ -224,16 +224,31 @@ func (c *Context) send(text string, keyboard ...interface{}) error {
 
 // executeTemplate executes a template and returns the result with parse mode
 func (c *Context) executeTemplate(templateName string, data interface{}) (string, ParseMode, error) {
-	var buf bytes.Buffer
-	if err := c.Bot.templates.ExecuteTemplate(&buf, templateName, data); err != nil {
-		return "", ParseModeNone, fmt.Errorf("executing template %s: %w", templateName, err)
-	}
-
-	// Get template info to determine parse mode
-	templateInfo := c.Bot.GetTemplateInfo(templateName)
+	// Get template info to determine parse mode first
+	templateInfo := templateRegistry[templateName]
 	parseMode := ParseModeNone
 	if templateInfo != nil {
 		parseMode = templateInfo.ParseMode
+	}
+
+	// Create a template with the correct functions for this parse mode
+	tmpl := c.Bot.templates.Lookup(templateName)
+	if tmpl == nil {
+		return "", parseMode, fmt.Errorf("template %s not found", templateName)
+	}
+
+	// Clone the template and add the correct functions
+	clonedTmpl, err := tmpl.Clone()
+	if err != nil {
+		return "", parseMode, fmt.Errorf("failed to clone template %s: %w", templateName, err)
+	}
+
+	// Add parse mode specific functions
+	clonedTmpl = clonedTmpl.Funcs(getTemplateFuncs(parseMode))
+
+	var buf bytes.Buffer
+	if err := clonedTmpl.Execute(&buf, data); err != nil {
+		return "", parseMode, fmt.Errorf("executing template %s: %w", templateName, err)
 	}
 
 	return buf.String(), parseMode, nil
@@ -264,18 +279,18 @@ func (c *Context) sendWithParseMode(text string, parseMode ParseMode, keyboard .
 		}
 	} else {
 		// Apply user-specific main menu
-		if c.Bot.userPermissions != nil {
+		if c.Bot.accessManager != nil {
 			menuContext := &MenuContext{
 				UserID:    c.UserID(),
 				ChatID:    c.ChatID(),
 				IsGroup:   c.Update.Message != nil && (c.Update.Message.Chat.IsGroup() || c.Update.Message.Chat.IsSuperGroup()),
 				IsChannel: c.Update.Message != nil && c.Update.Message.Chat.IsChannel(),
 			}
-			if userMenu := c.Bot.userPermissions.GetMainMenu(menuContext); userMenu != nil {
+			if userMenu := c.Bot.accessManager.GetMainMenu(menuContext); userMenu != nil {
 				msg.ReplyMarkup = userMenu.ToTgbotapi()
 			}
-		} else if c.Bot.mainMenu != nil {
-			msg.ReplyMarkup = c.Bot.mainMenu.ToTgbotapi()
+		} else if c.Bot.replyKeyboard != nil {
+			msg.ReplyMarkup = c.Bot.replyKeyboard.ToTgbotapi()
 		}
 	}
 
@@ -311,6 +326,10 @@ func (c *Context) editOrReplyWithParseMode(text string, parseMode ParseMode, key
 			cb := tgbotapi.NewCallback(c.Update.CallbackQuery.ID, "")
 			c.Bot.api.Request(cb)
 			return nil
+		} else {
+			// Log why the edit failed (optional - could be removed for production)
+			// Common reasons: identical content, message too old, rate limiting
+			_ = err // Acknowledge the error but continue to fallback
 		}
 	}
 	return c.sendWithParseMode(text, parseMode, keyboard...)

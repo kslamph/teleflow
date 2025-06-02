@@ -98,10 +98,10 @@ type Bot struct {
 	middleware       []MiddlewareFunc
 
 	// Configuration
-	mainMenu        *ReplyKeyboard
-	menuButton      *MenuButtonConfig
-	userPermissions AccessManager
-	flowConfig      FlowConfig
+	replyKeyboard *ReplyKeyboard
+	menuButton    *MenuButtonConfig
+	accessManager AccessManager // AccessManager for user permission checking and replyKeyboard management
+	flowConfig    FlowConfig
 }
 
 // NewBot creates a new Bot instance
@@ -135,12 +135,9 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 
 	return b, nil
 }
-
-// WithMainMenu sets the default main ReplyKeyboard
-func WithMainMenu(checker AccessManager) BotOption {
+func WithMenuButton(config *MenuButtonConfig) BotOption {
 	return func(b *Bot) {
-		b.userPermissions = checker
-
+		b.menuButton = config
 	}
 }
 
@@ -158,10 +155,10 @@ func WithExitCommands(commands []string) BotOption {
 	}
 }
 
-// WithUserPermissions sets the user permission checker
-func WithUserPermissions(checker AccessManager) BotOption {
+// WithAccessManager sets the user permission checker
+func WithAccessManager(accessManager AccessManager) BotOption {
 	return func(b *Bot) {
-		b.userPermissions = checker
+		b.accessManager = accessManager
 	}
 }
 

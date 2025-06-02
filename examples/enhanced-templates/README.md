@@ -1,103 +1,178 @@
-# Enhanced Template System
+# Enhanced Template System Demo
 
-The Teleflow framework now includes an enhanced template system with support for different parsing modes, validation, and secure content handling.
+This example showcases the powerful enhanced template system in Teleflow with support for multiple parsing modes, automatic content escaping, and advanced formatting capabilities.
 
-## New Features
+## Features Demonstrated
 
-### Parse Modes
+### 🎨 Multiple Parsing Modes
+- **Plain Text** (`ParseModeNone`) - No formatting
+- **Markdown** (`ParseModeMarkdown`) - Basic Markdown formatting
+- **MarkdownV2** (`ParseModeMarkdownV2`) - Advanced Telegram MarkdownV2
+- **HTML** (`ParseModeHTML`) - Rich HTML formatting
 
-Templates now support different Telegram parsing modes:
+### 🛡️ Security Features
+- **Automatic Content Escaping** - User input is safely escaped based on parse mode
+- **Template Validation** - Templates are validated for syntax correctness
+- **Injection Prevention** - Prevents formatting injection attacks
 
-- `ParseModeNone` - Plain text (no formatting)
-- `ParseModeMarkdown` - Basic Markdown formatting  
-- `ParseModeMarkdownV2` - Advanced MarkdownV2 with stricter rules
-- `ParseModeHTML` - HTML formatting
+### ⚡ Enhanced Functionality
+- **EditOrReplyTemplate** - Seamlessly edit messages or send new ones
+- **Template Functions** - Built-in functions for text processing
+- **Dynamic Data Binding** - Real-time data updates with templates
 
-### Template Functions
+## Available Commands
 
-- `escape` - Safely escapes user content based on parse mode
-- `safe` - Returns unescaped content (use with caution)
-- `title`, `upper`, `lower` - Text transformation functions
+### Basic Commands
+- `/start` - Welcome message with plain text template
+- `/help` - Comprehensive help with HTML formatting
 
-### New Methods
+### Parsing Mode Demos
+- `/markdown` - Markdown formatting demonstration
+- `/markdownv2` - MarkdownV2 advanced formatting
+- `/html` - HTML rich formatting showcase
 
-- `AddTemplate(name, text, parseMode)` - Add template with parse mode
-- `MustAddTemplate(name, text, parseMode)` - Add template or panic (for development)
-- `GetTemplateInfo(name)` - Get template metadata
-- `ctx.EditOrReplyTemplate(name, data)` - Edit message or reply with template
+### Interactive Features
+- `/profile` - User profile with dynamic data and HTML
+- `/status` - System status with refresh button (demonstrates EditOrReplyTemplate)
+  - **First click**: Updates message in-place with new data
+  - **Subsequent clicks**: Continues to update the same message (no duplicates)
+  - **Smart editing**: Only updates when content actually changes
 
-## Examples
+### Text Echo
+Send any non-command text to see automatic content escaping in action.
 
-### Plain Text Template
+## How to Run
+
+1. **Set Bot Token**:
+   ```bash
+   # Edit main.go and replace "YOUR_BOT_TOKEN" with your actual bot token
+   ```
+
+2. **Build and Run**:
+   ```bash
+   go build main.go
+   ./main
+   ```
+
+3. **Start Chatting**:
+   - Send `/start` to begin
+   - Try different commands to see various parsing modes
+   - Send regular text to see content escaping
+   - Use the refresh button in `/status` to see EditOrReplyTemplate
+
+## Code Highlights
+
+### Template Registration with Parse Modes
 ```go
-bot.AddTemplate("welcome", `
+// Plain text template
+bot.MustAddTemplate("welcome", `
 Welcome {{.Name}}!
 Status: {{.Status}}
 `, teleflow.ParseModeNone)
-```
 
-### Markdown Template
-```go
-bot.AddTemplate("info", `
-*Hello {{.Name | escape}}!*
-_You have {{.Count}} messages_
-`, teleflow.ParseModeMarkdown)
-```
-
-### HTML Template
-```go
-bot.MustAddTemplate("report", `
-<b>Daily Report</b>
-<i>Date: {{.Date | escape}}</i>
-
-<u>Stats:</u>
-• Users: <code>{{.UserCount}}</code>
-• Messages: <code>{{.MessageCount}}</code>
+// HTML template with escaping
+bot.MustAddTemplate("profile", `
+<b>User: {{.Name | escape}}</b>
+<i>Safe content display</i>
 `, teleflow.ParseModeHTML)
 ```
 
-### Using Templates in Handlers
+### Secure Content Handling
 ```go
-bot.HandleCommand("/start", func(ctx *teleflow.Context) error {
-    data := map[string]interface{}{
-        "Name": "User",
-        "Status": "Active",
-    }
-    return ctx.ReplyTemplate("welcome", data)
-})
+data := map[string]interface{}{
+    "Name": userInput, // Automatically escaped in template
+}
+return ctx.ReplyTemplate("profile", data)
 ```
 
-### Edit or Reply Pattern
+### EditOrReplyTemplate Usage
 ```go
-// This will edit the message if it's from a callback, otherwise send new message
-bot.RegisterCallback(handler{
-    Pattern: "refresh",
-    Handler: func(ctx *teleflow.Context) error {
-        return ctx.EditOrReplyTemplate("report", updatedData)
+// This will edit the message if possible, otherwise send new
+return ctx.EditOrReplyTemplate("system_status", updatedData, keyboard)
+```
+
+### Template Functions
+```go
+// In templates:
+{{.UserInput | escape}}  // Safe escaping
+{{.Text | upper}}        // Uppercase
+{{.Message | title}}     // Title case
+```
+
+## Template Examples
+
+### Markdown Template
+```markdown
+**Bold Text** and *Italic Text*
+[Links](https://example.com)
+`Inline code` snippets
+```
+
+### MarkdownV2 Template
+```markdown
+*Bold*, _italic_, ~strikethrough~
+||spoiler text||, __underlined__
+[Links](https://example.com)
+```
+
+### HTML Template
+```html
+<b>Bold</b>, <i>italic</i>, <u>underlined</u>
+<code>code</code>, <pre>preformatted</pre>
+<a href="https://example.com">Links</a>
+<blockquote>Quotes</blockquote>
+```
+
+## Security Best Practices
+
+1. **Always use `escape` function** for user-provided data:
+   ```go
+   // ✅ Safe
+   "Hello {{.UserName | escape}}"
+   
+   // ❌ Unsafe
+   "Hello {{.UserName}}"
+   ```
+
+2. **Use `MustAddTemplate` during development** to catch template errors early:
+   ```go
+   // Will panic if template is invalid
+   bot.MustAddTemplate("name", template, parseMode)
+   ```
+
+3. **Validate templates** for their intended parse mode:
+   ```go
+   // Template validation happens automatically
+   err := bot.AddTemplate("test", "<b>{{.Text | escape}}</b>", ParseModeHTML)
+   ```
+
+## Advanced Features
+
+### Conditional Logic
+```go
+{{if .IsPremium}}
+⭐ Premium User
+{{else}}
+Standard User  
+{{end}}
+```
+
+### Loops and Iteration
+```go
+{{range .Items}}
+• {{.Name | escape}} - {{.Price}}
+{{end}}
+```
+
+### Custom Data Processing
+```go
+data := map[string]interface{}{
+    "Items": []map[string]interface{}{
+        {"Name": "Item 1", "Price": 10.99},
+        {"Name": "Item 2", "Price": 15.50},
     },
-})
+    "Total": calculateTotal(items),
+}
 ```
 
-## Security Features
-
-- **Input Validation**: Templates are validated against their parse mode during registration
-- **Content Escaping**: The `escape` function automatically escapes user content to prevent injection
-- **Template Integrity**: Ensures templates are syntactically correct for their parse mode
-
-## Migration from Old API
-
-The old `AddTemplate(name, text)` method is now `AddTemplate(name, text, parseMode)`. Update your code:
-
-```go
-// Old
-bot.AddTemplate("welcome", "Hello {{.Name}}")
-
-// New
-bot.AddTemplate("welcome", "Hello {{.Name}}", teleflow.ParseModeNone)
-```
-
-For development, use `MustAddTemplate` to catch template errors early:
-
-```go
-// This will panic if template is invalid (good for development)
-bot.MustAddTemplate("welcome", "Hello {{.Name}}", teleflow.ParseModeNone)
+This demo provides a comprehensive showcase of Teleflow's enhanced template system, demonstrating both the power and security of the framework's template capabilities.

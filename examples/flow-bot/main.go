@@ -45,7 +45,7 @@ func main() {
 
 	// Create bot with configuration
 	bot, err := teleflow.NewBot(token,
-		teleflow.WithUserPermissions(accessManager),
+		teleflow.WithAccessManager(accessManager),
 		teleflow.WithFlowConfig(teleflow.FlowConfig{
 			ExitCommands:        []string{"/cancel", "/exit"},
 			ExitMessage:         "❌ Operation cancelled.",
