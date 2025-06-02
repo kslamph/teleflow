@@ -2,7 +2,11 @@ package main
 
 import (
 	"log"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	teleflow "github.com/kslamph/teleflow/core"
 )
@@ -50,7 +54,21 @@ func registerCommands(bot *teleflow.Bot) {
 
 		// Create reply keyboard with main menu buttons
 		keyboard := createMainKeyboard()
+		messageReceived := ctx.Update.Message
 
+		chatidText := strconv.FormatInt(messageReceived.Chat.ID, 10)
+
+		welcomeText += "\n\n" +
+			"Message received at: " + time.Unix(int64(messageReceived.Date), 0).Format("2006-01-02 15:04:05") + "\n" +
+			"From: " + messageReceived.From.String() + "\n" +
+			"Chat ID: " + chatidText + "\n" +
+			"Message: " + messageReceived.Text + "\n"
+
+		queryParams := toQueryParams(messageReceived.Text)
+		if orderID, ok := queryParams["orderid"]; ok {
+			welcomeText += " (Order ID: " + orderID + ")"
+		}
+		welcomeText += "\n\n"
 		return ctx.Reply(welcomeText, keyboard)
 	})
 
@@ -201,4 +219,30 @@ func createMainKeyboard() *teleflow.ReplyKeyboard {
 	keyboard.Resize() // Make keyboard smaller
 
 	return keyboard
+}
+
+func toQueryParams(fullText string) map[string]string {
+	// Parse the full text into query parameters
+	params := make(map[string]string)
+	if fullText == "" {
+		return params
+	}
+	parts := strings.SplitN(fullText, "?", 2)
+	var queryString string
+	if len(parts) > 1 {
+		queryString = parts[1] // "orderid=319"
+	}
+
+	// Split by spaces to get key-value pairs
+	pairs, err := url.ParseQuery(queryString)
+	if err != nil {
+		log.Println("Error parsing query parameters:", err)
+		return params
+	}
+	for key, values := range pairs {
+		if len(values) > 0 {
+			params[key] = values[0]
+		}
+	}
+	return params
 }
