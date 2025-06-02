@@ -12,30 +12,34 @@ import (
 
 func main() {
 
+	// Configure native menu button to show bot commands
 	var menuButton = &teleflow.MenuButtonConfig{
-		{
-			Text:    "📖 Help",
-			Command: "/help",
-		},
-		{
-			Text:    "📝 Markdown",
-			Command: "/markdown",
-		},
-		{
-			Text:    "📝 MarkdownV2",
-			Command: "/markdownv2",
-		},
-		{
-			Text:    "🌐 HTML",
-			Command: "/html",
-		},
-		{
-			Text:    "🧑 Profile",
-			Command: "/profile",
-		},
-		{
-			Text:    "⚙️ Status",
-			Command: "/status",
+		Type: teleflow.MenuButtonTypeCommands,
+		Items: []teleflow.MenuButtonItem{
+			{
+				Text:    "📖 Help",
+				Command: "/help",
+			},
+			{
+				Text:    "📝 Markdown",
+				Command: "/markdown",
+			},
+			{
+				Text:    "📝 MarkdownV2",
+				Command: "/markdownv2",
+			},
+			{
+				Text:    "🌐 HTML",
+				Command: "/html",
+			},
+			{
+				Text:    "🧑 Profile",
+				Command: "/profile",
+			},
+			{
+				Text:    "⚙️ Status",
+				Command: "/status",
+			},
 		},
 	}
 
@@ -432,5 +436,3 @@ func containsEmoji(s string) bool {
 	}
 	return false
 }
-
-func mainMenu()

@@ -19,8 +19,8 @@ func (spc *SimpleAccessManager) CheckPermission(ctx *teleflow.PermissionContext)
 	return nil
 }
 
-// GetMainMenu returns a basic main menu keyboard for the user
-func (spc *SimpleAccessManager) GetMainMenu(ctx *teleflow.MenuContext) *teleflow.ReplyKeyboard {
+// GetReplyKeyboard returns a basic main menu keyboard for the user
+func (spc *SimpleAccessManager) GetReplyKeyboard(ctx *teleflow.MenuContext) *teleflow.ReplyKeyboard {
 	return teleflow.NewReplyKeyboard(
 		[]teleflow.ReplyKeyboardButton{
 			{Text: "💸 Transfer"},
@@ -31,6 +31,17 @@ func (spc *SimpleAccessManager) GetMainMenu(ctx *teleflow.MenuContext) *teleflow
 			{Text: "⚙️ Settings"},
 		},
 	)
+}
+
+// GetMenuButton returns the menu button configuration for the user
+func (spc *SimpleAccessManager) GetMenuButton(ctx *teleflow.MenuContext) *teleflow.MenuButtonConfig {
+	return &teleflow.MenuButtonConfig{
+		Type: teleflow.MenuButtonTypeCommands,
+		Items: []teleflow.MenuButtonItem{
+			{Text: "❌ Cancel", Command: "/cancel"},
+			{Text: "❓ Help", Command: "/help"},
+		},
+	}
 }
 
 func main() {

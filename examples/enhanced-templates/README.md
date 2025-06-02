@@ -1,6 +1,6 @@
 # Enhanced Template System Demo
 
-This example showcases the powerful enhanced template system in Teleflow with support for multiple parsing modes, automatic content escaping, and advanced formatting capabilities.
+This example showcases the powerful enhanced template system in Teleflow with support for multiple parsing modes, automatic content escaping, advanced formatting capabilities, and **native menu button integration**.
 
 ## Features Demonstrated
 
@@ -19,6 +19,7 @@ This example showcases the powerful enhanced template system in Teleflow with su
 - **EditOrReplyTemplate** - Seamlessly edit messages or send new ones
 - **Template Functions** - Built-in functions for text processing
 - **Dynamic Data Binding** - Real-time data updates with templates
+- **Native Menu Button** - Quick access to bot commands via Telegram's menu button
 
 ## Available Commands
 
@@ -45,7 +46,8 @@ Send any non-command text to see automatic content escaping in action.
 
 1. **Set Bot Token**:
    ```bash
-   # Edit main.go and replace "YOUR_BOT_TOKEN" with your actual bot token
+   # Set your bot token as environment variable
+   export TOKEN="your_bot_token_here"
    ```
 
 2. **Build and Run**:
@@ -56,9 +58,41 @@ Send any non-command text to see automatic content escaping in action.
 
 3. **Start Chatting**:
    - Send `/start` to begin
+   - **Use the menu button** (📋 icon next to attachment) for quick command access
    - Try different commands to see various parsing modes
    - Send regular text to see content escaping
    - Use the refresh button in `/status` to see EditOrReplyTemplate
+
+## Native Menu Button
+
+This example demonstrates Teleflow's **native menu button** support:
+
+- **📖 Help** - Quick access to help information
+- **📝 Markdown** - Try Markdown formatting
+- **📝 MarkdownV2** - Advanced MarkdownV2 features
+- **🌐 HTML** - Rich HTML formatting
+- **🧑 Profile** - View user profile
+- **⚙️ Status** - System status with refresh
+
+The menu button appears next to the attachment icon (📎) and provides instant access to all bot commands without typing.
+
+### Menu Button Configuration
+
+```go
+// Native menu button with commands
+var menuButton = &teleflow.MenuButtonConfig{
+    Type: teleflow.MenuButtonTypeCommands,
+    Items: []teleflow.MenuButtonItem{
+        {Text: "📖 Help", Command: "/help"},
+        {Text: "📝 Markdown", Command: "/markdown"},
+        {Text: "🌐 HTML", Command: "/html"},
+        // ... more commands
+    },
+}
+
+// Apply to bot
+bot.WithMenuButton(menuButton)
+```
 
 ## Code Highlights
 
