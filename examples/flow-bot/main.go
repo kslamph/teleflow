@@ -8,18 +8,19 @@ import (
 	teleflow "github.com/kslamph/teleflow/core"
 )
 
-// SimplePermissionChecker provides a basic permission implementation for demonstration
-type SimplePermissionChecker struct{}
+// SimpleAccessManager provides a basic permission implementation for demonstration
+type SimpleAccessManager struct{}
 
-// CanExecute always returns nil (no error) for this simple example
-func (spc *SimplePermissionChecker) CanExecute(ctx *teleflow.PermissionContext) error {
+// CheckPermission always returns nil (no error) for this simple example
+func (spc *SimpleAccessManager) CheckPermission(ctx *teleflow.PermissionContext) error {
 	// In a real implementation, you would check user permissions here
 	// Return nil means permission granted, return error means permission denied
+	// Error message will be sent to the user
 	return nil
 }
 
-// GetMainMenuForUser returns a basic main menu keyboard for the user
-func (spc *SimplePermissionChecker) GetMainMenuForUser(userID int64) *teleflow.ReplyKeyboard {
+// GetMainMenu returns a basic main menu keyboard for the user
+func (spc *SimpleAccessManager) GetMainMenu(ctx *teleflow.MenuContext) *teleflow.ReplyKeyboard {
 	return teleflow.NewReplyKeyboard(
 		[]teleflow.ReplyKeyboardButton{
 			{Text: "💸 Transfer"},
@@ -40,11 +41,11 @@ func main() {
 	}
 
 	// Create permission checker
-	permissionChecker := &SimplePermissionChecker{}
+	accessManager := &SimpleAccessManager{}
 
 	// Create bot with configuration
 	bot, err := teleflow.NewBot(token,
-		teleflow.WithUserPermissions(permissionChecker),
+		teleflow.WithUserPermissions(accessManager),
 		teleflow.WithFlowConfig(teleflow.FlowConfig{
 			ExitCommands:        []string{"/cancel", "/exit"},
 			ExitMessage:         "❌ Operation cancelled.",
@@ -58,7 +59,7 @@ func main() {
 
 	// Add middleware in the correct order
 	bot.Use(teleflow.LoggingMiddleware())
-	bot.Use(teleflow.AuthMiddleware(permissionChecker))
+	bot.Use(teleflow.AuthMiddleware(accessManager))
 	bot.Use(teleflow.RecoveryMiddleware())
 
 	// Register transfer flow - adapted from newdesign.md lines 1050-1100

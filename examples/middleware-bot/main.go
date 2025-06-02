@@ -10,14 +10,14 @@ import (
 	teleflow "github.com/kslamph/teleflow/core"
 )
 
-// AdminPermissionChecker implements UserPermissionChecker with admin/user roles
-type AdminPermissionChecker struct {
+// AdminAccessManager implements AccessManager with admin/user roles
+type AdminAccessManager struct {
 	adminUsers map[int64]bool
 }
 
-// NewAdminPermissionChecker creates a new permission checker with admin users from environment
-func NewAdminPermissionChecker() *AdminPermissionChecker {
-	checker := &AdminPermissionChecker{
+// NewAdminAccessManager creates a new AccessManager with admin users from environment
+func NewAdminAccessManager() *AdminAccessManager {
+	checker := &AdminAccessManager{
 		adminUsers: make(map[int64]bool),
 	}
 
@@ -39,8 +39,8 @@ func NewAdminPermissionChecker() *AdminPermissionChecker {
 	return checker
 }
 
-// CanExecute checks if user can execute based on permission context
-func (c *AdminPermissionChecker) CanExecute(ctx *teleflow.PermissionContext) error {
+// CheckPermission checks if user can execute based on permission context
+func (c *AdminAccessManager) CheckPermission(ctx *teleflow.PermissionContext) error {
 	// Check if user is admin
 	isAdmin := c.adminUsers[ctx.UserID]
 
@@ -65,12 +65,12 @@ func (c *AdminPermissionChecker) CanExecute(ctx *teleflow.PermissionContext) err
 }
 
 // IsAdmin is a helper method to check if a user is admin (for legacy compatibility)
-func (c *AdminPermissionChecker) IsAdmin(userID int64) bool {
+func (c *AdminAccessManager) IsAdmin(userID int64) bool {
 	return c.adminUsers[userID]
 }
 
-// GetMainMenuForUser returns different keyboards based on user role
-func (c *AdminPermissionChecker) GetMainMenuForUser(userID int64) *teleflow.ReplyKeyboard {
+// GetMainMenu returns different keyboards based on user role
+func (c *AdminAccessManager) GetMainMenu(ctx *teleflow.MenuContext) *teleflow.ReplyKeyboard {
 	keyboard := teleflow.NewReplyKeyboard()
 
 	// Basic buttons for all users
@@ -78,7 +78,7 @@ func (c *AdminPermissionChecker) GetMainMenuForUser(userID int64) *teleflow.Repl
 	keyboard.AddButton("⚡ Spam Test").AddButton("💥 Panic Test").AddRow()
 
 	// Admin-only button
-	if c.adminUsers[userID] {
+	if c.adminUsers[ctx.UserID] {
 		keyboard.AddButton("👑 Admin Panel").AddRow()
 	}
 
@@ -93,8 +93,8 @@ func main() {
 		log.Fatal("TOKEN environment variable is required")
 	}
 
-	// Create permission checker with admin users from environment
-	permissionChecker := NewAdminPermissionChecker()
+	// Create access manager with admin users from environment
+	accessManager := NewAdminAccessManager()
 
 	// Create new bot instance
 	bot, err := teleflow.NewBot(token)
@@ -116,13 +116,13 @@ func main() {
 	bot.Use(teleflow.RateLimitMiddleware(2))
 
 	// 4. Auth middleware (innermost) - checks basic user authorization
-	bot.Use(teleflow.AuthMiddleware(permissionChecker))
+	bot.Use(teleflow.AuthMiddleware(accessManager))
 
 	// Register command handlers
-	registerCommands(bot, permissionChecker)
+	registerCommands(bot, accessManager)
 
 	// Register text handlers for keyboard buttons
-	registerTextHandlers(bot, permissionChecker)
+	registerTextHandlers(bot, accessManager)
 
 	// Start the bot
 	log.Println("Starting middleware demonstration bot...")
@@ -140,7 +140,7 @@ func main() {
 }
 
 // registerCommands sets up all command handlers with middleware demonstrations
-func registerCommands(bot *teleflow.Bot, permissionChecker *AdminPermissionChecker) {
+func registerCommands(bot *teleflow.Bot, permissionChecker *AdminAccessManager) {
 	// /start command - Welcome message explaining middleware demo
 	bot.HandleCommand("start", func(ctx *teleflow.Context) error {
 		welcomeText := "🛡️ **Middleware Demonstration Bot**\n\n" +
@@ -157,7 +157,7 @@ func registerCommands(bot *teleflow.Bot, permissionChecker *AdminPermissionCheck
 			"• `/help` - Detailed middleware information\n\n" +
 			"Use the buttons below to interact with different middleware features!"
 
-		keyboard := permissionChecker.GetMainMenuForUser(ctx.UserID())
+		keyboard := permissionChecker.GetMainMenu(ctx.GetMenuContext())
 		return ctx.Reply(welcomeText, keyboard)
 	})
 
@@ -188,7 +188,7 @@ func registerCommands(bot *teleflow.Bot, permissionChecker *AdminPermissionCheck
 			"• Monitoring and analytics\n\n" +
 			"⚠️ **Note:** This demonstrates how AuthMiddleware works with custom permission checkers to implement role-based access control."
 
-		keyboard := permissionChecker.GetMainMenuForUser(ctx.UserID())
+		keyboard := permissionChecker.GetMainMenu(ctx.GetMenuContext())
 		return ctx.Reply(adminText, keyboard)
 	})
 
@@ -209,7 +209,7 @@ func registerCommands(bot *teleflow.Bot, permissionChecker *AdminPermissionCheck
 			"• Blocks requests that exceed the limit\n" +
 			"• Provides clear feedback to users"
 
-		keyboard := permissionChecker.GetMainMenuForUser(ctx.UserID())
+		keyboard := permissionChecker.GetMainMenu(ctx.GetMenuContext())
 		return ctx.Reply(spamText, keyboard)
 	})
 
@@ -266,13 +266,13 @@ func registerCommands(bot *teleflow.Bot, permissionChecker *AdminPermissionCheck
 			"• `/spam` - Test rate limiting\n" +
 			"• `/panic` - Test panic recovery"
 
-		keyboard := permissionChecker.GetMainMenuForUser(ctx.UserID())
+		keyboard := permissionChecker.GetMainMenu(ctx.GetMenuContext())
 		return ctx.Reply(helpText, keyboard)
 	})
 }
 
 // registerTextHandlers sets up handlers for keyboard button presses
-func registerTextHandlers(bot *teleflow.Bot, permissionChecker *AdminPermissionChecker) {
+func registerTextHandlers(bot *teleflow.Bot, permissionChecker *AdminAccessManager) {
 	// Handle all text messages (keyboard button presses and regular text)
 	bot.HandleText(func(ctx *teleflow.Context) error {
 		if ctx.Update.Message == nil {
@@ -304,7 +304,7 @@ func registerTextHandlers(bot *teleflow.Bot, permissionChecker *AdminPermissionC
 }
 
 // handleHomeButton returns to main menu with middleware status
-func handleHomeButton(ctx *teleflow.Context, checker *AdminPermissionChecker) error {
+func handleHomeButton(ctx *teleflow.Context, checker *AdminAccessManager) error {
 	userType := "Regular User"
 	if checker.IsAdmin(ctx.UserID()) {
 		userType = "Admin User"
@@ -322,12 +322,12 @@ func handleHomeButton(ctx *teleflow.Context, checker *AdminPermissionChecker) er
 		"✅ Authorization checks enabled\n\n" +
 		"Use the buttons below to test different middleware features!"
 
-	keyboard := checker.GetMainMenuForUser(ctx.UserID())
+	keyboard := checker.GetMainMenu(ctx.GetMenuContext())
 	return ctx.Reply(homeText, keyboard)
 }
 
 // handleHelpButton shows middleware help information
-func handleHelpButton(ctx *teleflow.Context, checker *AdminPermissionChecker) error {
+func handleHelpButton(ctx *teleflow.Context, checker *AdminAccessManager) error {
 	helpText := "ℹ️ **Quick Middleware Guide**\n\n" +
 		"🚀 **How to Test Each Middleware:**\n\n" +
 		"1️⃣ **Rate Limiting:**\n" +
@@ -348,12 +348,12 @@ func handleHelpButton(ctx *teleflow.Context, checker *AdminPermissionChecker) er
 		"   • Includes timing and status information\n\n" +
 		"💡 **Tip:** Run with verbose logging to see all middleware actions!"
 
-	keyboard := checker.GetMainMenuForUser(ctx.UserID())
+	keyboard := checker.GetMainMenu(ctx.GetMenuContext())
 	return ctx.Reply(helpText, keyboard)
 }
 
 // handleSpamTestButton initiates rate limiting test
-func handleSpamTestButton(ctx *teleflow.Context, checker *AdminPermissionChecker) error {
+func handleSpamTestButton(ctx *teleflow.Context, checker *AdminAccessManager) error {
 	spamText := "⚡ **Rate Limiting Active Test**\n\n" +
 		"🎯 **Current Request Status:**\n" +
 		"• This message: **DELIVERED** ✅\n" +
@@ -369,12 +369,12 @@ func handleSpamTestButton(ctx *teleflow.Context, checker *AdminPermissionChecker
 		"• Blocks excess requests with clear feedback\n" +
 		"• Thread-safe with mutex protection"
 
-	keyboard := checker.GetMainMenuForUser(ctx.UserID())
+	keyboard := checker.GetMainMenu(ctx.GetMenuContext())
 	return ctx.Reply(spamText, keyboard)
 }
 
 // handlePanicTestButton shows panic test information
-func handlePanicTestButton(ctx *teleflow.Context, checker *AdminPermissionChecker) error {
+func handlePanicTestButton(ctx *teleflow.Context, checker *AdminAccessManager) error {
 	panicText := "💥 **Panic Recovery Demonstration**\n\n" +
 		"⚠️ **Safety Notice:**\n" +
 		"This is a controlled panic test to demonstrate RecoveryMiddleware.\n\n" +
@@ -399,7 +399,7 @@ func handlePanicTestButton(ctx *teleflow.Context, checker *AdminPermissionChecke
 }
 
 // handleAdminPanelButton tests admin authorization
-func handleAdminPanelButton(ctx *teleflow.Context, checker *AdminPermissionChecker) error {
+func handleAdminPanelButton(ctx *teleflow.Context, checker *AdminAccessManager) error {
 	if !checker.IsAdmin(ctx.UserID()) {
 		return ctx.Reply("🚫 **Authorization Failed**\n\n" +
 			"❌ **Access Denied by AuthMiddleware:**\n" +
@@ -437,7 +437,7 @@ func handleAdminPanelButton(ctx *teleflow.Context, checker *AdminPermissionCheck
 		"• Recovery: 0 unhandled panics\n" +
 		"• Auth: Role-based access working"
 
-	keyboard := checker.GetMainMenuForUser(ctx.UserID())
+	keyboard := checker.GetMainMenu(ctx.GetMenuContext())
 	return ctx.Reply(adminText, keyboard)
 }
 
@@ -451,7 +451,7 @@ func handleActualPanic(ctx *teleflow.Context) error {
 }
 
 // handleCancelPanic cancels the panic test
-func handleCancelPanic(ctx *teleflow.Context, checker *AdminPermissionChecker) error {
+func handleCancelPanic(ctx *teleflow.Context, checker *AdminAccessManager) error {
 	cancelText := "🚫 **Panic Test Cancelled**\n\n" +
 		"✅ **Smart Choice!**\n" +
 		"You cancelled the panic test. No panic was triggered.\n\n" +
@@ -466,12 +466,12 @@ func handleCancelPanic(ctx *teleflow.Context, checker *AdminPermissionChecker) e
 		"• Authorization with admin panel\n" +
 		"• Logging (happens automatically)"
 
-	keyboard := checker.GetMainMenuForUser(ctx.UserID())
+	keyboard := checker.GetMainMenu(ctx.GetMenuContext())
 	return ctx.Reply(cancelText, keyboard)
 }
 
 // handleUnknownText processes any text that doesn't match known buttons
-func handleUnknownText(ctx *teleflow.Context, text string, checker *AdminPermissionChecker) error {
+func handleUnknownText(ctx *teleflow.Context, text string, checker *AdminAccessManager) error {
 	responseText := "🤔 **Unknown Message Received**\n\n" +
 		"📝 **Logging Middleware Captured:**\n" +
 		"• Message: \"" + text + "\"\n" +
@@ -488,6 +488,6 @@ func handleUnknownText(ctx *teleflow.Context, text string, checker *AdminPermiss
 		"✅ Authorization verified for basic access\n" +
 		"✅ Logging recorded automatically"
 
-	keyboard := checker.GetMainMenuForUser(ctx.UserID())
+	keyboard := checker.GetMainMenu(ctx.GetMenuContext())
 	return ctx.Reply(responseText, keyboard)
 }

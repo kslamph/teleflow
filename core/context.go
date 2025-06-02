@@ -48,8 +48,17 @@ type Context struct {
 	data   map[string]interface{}
 
 	// User context
-	userID int64
-	chatID int64
+	userID    int64
+	chatID    int64
+	isGroup   bool
+	isChannel bool
+}
+
+type MenuContext struct {
+	UserID    int64
+	ChatID    int64
+	IsGroup   bool
+	IsChannel bool
 }
 
 // NewContext creates a new Context
@@ -62,6 +71,8 @@ func NewContext(bot *Bot, update tgbotapi.Update) *Context {
 
 	ctx.userID = ctx.extractUserID(update)
 	ctx.chatID = ctx.extractChatID(update)
+	ctx.isGroup = update.Message != nil && (update.Message.Chat.IsGroup() || update.Message.Chat.IsSuperGroup())
+	ctx.isChannel = update.Message != nil && update.Message.Chat.IsChannel()
 
 	return ctx
 }
@@ -145,6 +156,23 @@ func (c *Context) CancelFlow() error {
 	return c.Bot.flowManager.CancelFlow(c.UserID())
 }
 
+func (c *Context) IsGroup() bool {
+	return c.isGroup
+}
+
+func (c *Context) IsChannel() bool {
+	return c.isChannel
+}
+
+func (c *Context) GetMenuContext() *MenuContext {
+	return &MenuContext{
+		UserID:    c.UserID(),
+		ChatID:    c.ChatID(),
+		IsGroup:   c.isGroup,
+		IsChannel: c.isChannel,
+	}
+}
+
 // send is an internal helper for sending messages
 func (c *Context) send(text string, keyboard ...interface{}) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
@@ -166,7 +194,13 @@ func (c *Context) send(text string, keyboard ...interface{}) error {
 	} else {
 		// Apply user-specific main menu
 		if c.Bot.userPermissions != nil {
-			if userMenu := c.Bot.userPermissions.GetMainMenuForUser(c.UserID()); userMenu != nil {
+			menuContext := &MenuContext{
+				UserID:    c.UserID(),
+				ChatID:    c.ChatID(),
+				IsGroup:   c.Update.Message != nil && (c.Update.Message.Chat.IsGroup() || c.Update.Message.Chat.IsSuperGroup()),
+				IsChannel: c.Update.Message != nil && c.Update.Message.Chat.IsChannel(),
+			}
+			if userMenu := c.Bot.userPermissions.GetMainMenu(menuContext); userMenu != nil {
 				msg.ReplyMarkup = userMenu.ToTgbotapi()
 			}
 		} else if c.Bot.mainMenu != nil {

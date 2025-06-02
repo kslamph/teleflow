@@ -69,17 +69,22 @@ type PermissionContext struct {
 	Command   string
 	Arguments []string
 	IsGroup   bool
+	IsChannel bool
 	MessageID int
 	Update    *tgbotapi.Update
 }
 
-// UserPermissionChecker interface for authorization
-type UserPermissionChecker interface {
-	CanExecute(ctx *PermissionContext) error
-	GetMainMenuForUser(userID int64) *ReplyKeyboard
+// AccessManager interface for authorization and menu management
+// It allows checking user permissions and retrieving the main menu
+type AccessManager interface {
+	// CheckPermission checks if the user has permission to perform an action
+	// Returns an error if permission is denied, nil if allowed
+	// The error message is used to inform the user
+	CheckPermission(ctx *PermissionContext) error
+	// GetMainMenu returns the main menu keyboard for the user
+	// This can be used to provide a dynamic menu based on user permissions
+	GetMainMenu(ctx *MenuContext) *ReplyKeyboard
 }
-
-// FlowConfig is now implemented in flow.go
 
 // Bot is the main application structure
 type Bot struct {
@@ -95,7 +100,7 @@ type Bot struct {
 	// Configuration
 	mainMenu        *ReplyKeyboard
 	menuButton      *MenuButtonConfig
-	userPermissions UserPermissionChecker
+	userPermissions AccessManager
 	flowConfig      FlowConfig
 }
 
@@ -132,11 +137,10 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 }
 
 // WithMainMenu sets the default main ReplyKeyboard
-func WithMainMenu(checker UserPermissionChecker) BotOption {
+func WithMainMenu(checker AccessManager) BotOption {
 	return func(b *Bot) {
 		b.userPermissions = checker
-		// Note: The original design seems to have inconsistent signature
-		// This matches the task requirement but may need adjustment
+
 	}
 }
 
@@ -155,7 +159,7 @@ func WithExitCommands(commands []string) BotOption {
 }
 
 // WithUserPermissions sets the user permission checker
-func WithUserPermissions(checker UserPermissionChecker) BotOption {
+func WithUserPermissions(checker AccessManager) BotOption {
 	return func(b *Bot) {
 		b.userPermissions = checker
 	}
@@ -229,7 +233,7 @@ func (b *Bot) wrapWithPermissions(handler HandlerFunc, permissions []string) Han
 			permCtx.MessageID = ctx.Update.CallbackQuery.Message.MessageID
 		}
 
-		if err := b.userPermissions.CanExecute(permCtx); err != nil {
+		if err := b.userPermissions.CheckPermission(permCtx); err != nil {
 			return ctx.Reply("❌ " + err.Error())
 		}
 		return handler(ctx)

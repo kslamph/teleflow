@@ -132,7 +132,7 @@ func LoggingMiddleware() MiddlewareFunc {
 }
 
 // AuthMiddleware checks if user is authorized
-func AuthMiddleware(checker UserPermissionChecker) MiddlewareFunc {
+func AuthMiddleware(accessManager AccessManager) MiddlewareFunc {
 	return func(next HandlerFunc) HandlerFunc {
 		return func(ctx *Context) error {
 			// Create permission context
@@ -159,7 +159,7 @@ func AuthMiddleware(checker UserPermissionChecker) MiddlewareFunc {
 				permCtx.MessageID = ctx.Update.CallbackQuery.Message.MessageID
 			}
 
-			if err := checker.CanExecute(permCtx); err != nil {
+			if err := accessManager.CheckPermission(permCtx); err != nil {
 				return ctx.Reply("🚫 " + err.Error())
 			}
 			return next(ctx)
