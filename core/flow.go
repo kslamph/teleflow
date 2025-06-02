@@ -2,6 +2,7 @@ package teleflow
 
 import (
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -128,12 +129,10 @@ func (fm *FlowManager) IsUserInFlow(userID int64) bool {
 }
 
 // CancelFlow cancels the current flow for a user
-func (fm *FlowManager) CancelFlow(userID int64) error {
-	if _, exists := fm.userFlows[userID]; exists {
-		delete(fm.userFlows, userID)
-		return nil
-	}
-	return fmt.Errorf("user %d is not in a flow", userID)
+func (fm *FlowManager) CancelFlow(userID int64) {
+
+	delete(fm.userFlows, userID)
+
 }
 
 // Flow represents a structured multi-step conversation
@@ -447,7 +446,9 @@ func (fm *FlowManager) HandleUpdate(ctx *Context) (bool, error) {
 			if fm.botConfig != nil && len(fm.botConfig.ExitCommands) > 0 {
 				exitHint = fmt.Sprintf(" Type '%s' to cancel.", fm.botConfig.ExitCommands[0])
 			}
-			ctx.Reply(currentStep.InvalidInputMessage + exitHint)
+			if ctx.Reply(currentStep.InvalidInputMessage+exitHint) != nil {
+				log.Printf("Failed to send invalid input message for step %s in flow %s", currentStep.Name, flow.Name)
+			}
 		}
 		// Save context data back to user state but don't advance
 		for key, value := range ctx.data {

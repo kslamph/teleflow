@@ -100,9 +100,7 @@ func NewReplyKeyboard(rows ...[]ReplyKeyboardButton) *ReplyKeyboard {
 		currentRow: make([]ReplyKeyboardButton, 0),
 	}
 
-	for _, row := range rows {
-		kb.Keyboard = append(kb.Keyboard, row)
-	}
+	kb.Keyboard = append(kb.Keyboard, rows...)
 
 	return kb
 }
@@ -114,9 +112,7 @@ func NewInlineKeyboard(rows ...[]InlineKeyboardButton) *InlineKeyboard {
 		currentRow:     make([]InlineKeyboardButton, 0),
 	}
 
-	for _, row := range rows {
-		kb.InlineKeyboard = append(kb.InlineKeyboard, row)
-	}
+	kb.InlineKeyboard = append(kb.InlineKeyboard, rows...)
 
 	return kb
 }

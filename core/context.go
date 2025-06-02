@@ -152,8 +152,9 @@ func (c *Context) IsUserInFlow() bool {
 }
 
 // CancelFlow cancels the current flow for the user
-func (c *Context) CancelFlow() error {
-	return c.Bot.flowManager.CancelFlow(c.UserID())
+// This is an idempotent operation
+func (c *Context) CancelFlow() {
+	c.Bot.flowManager.CancelFlow(c.UserID())
 }
 
 func (c *Context) IsGroup() bool {

@@ -170,18 +170,16 @@ func (b *Bot) Use(middleware MiddlewareFunc) {
 	b.middleware = append(b.middleware, middleware)
 }
 
-// HandleCommand registers a handler for a specific command with permission check
-func (b *Bot) HandleCommand(command string, handler HandlerFunc, permissions ...string) {
-	wrappedHandler := b.wrapWithPermissions(handler, permissions)
-	b.handlers[command] = b.applyMiddleware(wrappedHandler)
+// HandleCommand registers a handler for a specific command
+func (b *Bot) HandleCommand(command string, handler HandlerFunc) {
+	b.handlers[command] = b.applyMiddleware(handler)
 }
 
 // HandleText registers a handler for specific text input
-func (b *Bot) HandleText(handler HandlerFunc, permissions ...string) {
+func (b *Bot) HandleText(handler HandlerFunc) {
 	// Note: Original design had inconsistent signature, implementing as generic text handler
-	wrappedHandler := b.wrapWithPermissions(handler, permissions)
 	// Store as default text handler (empty key means default)
-	b.textHandlers[""] = b.applyMiddleware(wrappedHandler)
+	b.textHandlers[""] = b.applyMiddleware(handler)
 }
 
 // RegisterCallback registers a type-safe callback handler
@@ -200,44 +198,6 @@ func (b *Bot) applyMiddleware(handler HandlerFunc) HandlerFunc {
 		handler = b.middleware[i](handler)
 	}
 	return handler
-}
-
-// wrapWithPermissions wraps a handler with permission checking
-func (b *Bot) wrapWithPermissions(handler HandlerFunc, permissions []string) HandlerFunc {
-	if len(permissions) == 0 || b.userPermissions == nil {
-		return handler
-	}
-
-	return func(ctx *Context) error {
-		// Create permission context
-		permCtx := &PermissionContext{
-			UserID: ctx.UserID(),
-			ChatID: ctx.ChatID(),
-			Update: &ctx.Update,
-		}
-
-		// Extract command and arguments if available
-		if ctx.Update.Message != nil && ctx.Update.Message.IsCommand() {
-			permCtx.Command = ctx.Update.Message.Command()
-			if args := ctx.Update.Message.CommandArguments(); args != "" {
-				permCtx.Arguments = []string{args}
-			}
-		}
-
-		// Check if it's a group chat
-		if ctx.Update.Message != nil {
-			permCtx.IsGroup = ctx.Update.Message.Chat.IsGroup() || ctx.Update.Message.Chat.IsSuperGroup()
-			permCtx.MessageID = ctx.Update.Message.MessageID
-		} else if ctx.Update.CallbackQuery != nil && ctx.Update.CallbackQuery.Message != nil {
-			permCtx.IsGroup = ctx.Update.CallbackQuery.Message.Chat.IsGroup() || ctx.Update.CallbackQuery.Message.Chat.IsSuperGroup()
-			permCtx.MessageID = ctx.Update.CallbackQuery.Message.MessageID
-		}
-
-		if err := b.userPermissions.CheckPermission(permCtx); err != nil {
-			return ctx.Reply("❌ " + err.Error())
-		}
-		return handler(ctx)
-	}
 }
 
 // processUpdate processes incoming updates with full middleware chain
@@ -277,7 +237,9 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 	if handler != nil {
 		if err := handler(ctx); err != nil {
 			log.Printf("Handler error for UserID %d: %v", ctx.UserID(), err)
-			ctx.Reply("An error occurred. Please try again.")
+			if ctx.Reply("An error occurred. Please try again.") != nil {
+				log.Printf("Failed to send error reply to UserID %d: %v", ctx.UserID(), err)
+			}
 		}
 	}
 }
