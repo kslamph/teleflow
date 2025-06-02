@@ -3,6 +3,7 @@ package teleflow
 import (
 	"bytes"
 	"fmt"
+	"log"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -183,9 +184,35 @@ func (c *Context) GetMenuContext() *MenuContext {
 	}
 }
 
-// send is an internal helper for sending messages
+// applyAutomaticMenuButton automatically sets the menu button for the chat based on user context
+func (c *Context) applyAutomaticMenuButton() {
+	if c.Bot.accessManager != nil {
+		menuContext := &MenuContext{
+			UserID:    c.UserID(),
+			ChatID:    c.ChatID(),
+			IsGroup:   c.isGroup,
+			IsChannel: c.isChannel,
+		}
+
+		if menuButton := c.Bot.accessManager.GetMenuButton(menuContext); menuButton != nil {
+			// Set menu button for this specific chat
+			log.Printf("Setting menu button for chat %d: %+v", c.ChatID(), menuButton)
+			if err := c.Bot.SetMenuButton(c.ChatID(), menuButton); err != nil {
+				// Log error but don't fail the message send
+				// In production, you might want to log this more appropriately
+				log.Printf("Failed to set menu button for chat %d: %v", c.ChatID(), err)
+				_ = err
+			}
+		}
+	}
+}
+
+// send is an internal helper for sending messages with automatic UI management
 func (c *Context) send(text string, keyboard ...interface{}) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
+
+	// Automatic menu button management
+	c.applyAutomaticMenuButton()
 
 	// Apply keyboard markup
 	if len(keyboard) > 0 && keyboard[0] != nil {
@@ -202,7 +229,7 @@ func (c *Context) send(text string, keyboard ...interface{}) error {
 			msg.ReplyMarkup = kb
 		}
 	} else {
-		// Apply user-specific main menu
+		// Apply user-specific reply keyboard automatically
 		if c.Bot.accessManager != nil {
 			menuContext := &MenuContext{
 				UserID:    c.UserID(),
@@ -210,7 +237,7 @@ func (c *Context) send(text string, keyboard ...interface{}) error {
 				IsGroup:   c.Update.Message != nil && (c.Update.Message.Chat.IsGroup() || c.Update.Message.Chat.IsSuperGroup()),
 				IsChannel: c.Update.Message != nil && c.Update.Message.Chat.IsChannel(),
 			}
-			if userMenu := c.Bot.accessManager.GetMainMenu(menuContext); userMenu != nil {
+			if userMenu := c.Bot.accessManager.GetReplyKeyboard(menuContext); userMenu != nil {
 				msg.ReplyMarkup = userMenu.ToTgbotapi()
 			}
 		} else if c.Bot.replyKeyboard != nil {
@@ -254,7 +281,7 @@ func (c *Context) executeTemplate(templateName string, data interface{}) (string
 	return buf.String(), parseMode, nil
 }
 
-// sendWithParseMode sends a message with the specified parse mode
+// sendWithParseMode sends a message with the specified parse mode and automatic UI management
 func (c *Context) sendWithParseMode(text string, parseMode ParseMode, keyboard ...interface{}) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
 
@@ -262,6 +289,9 @@ func (c *Context) sendWithParseMode(text string, parseMode ParseMode, keyboard .
 	if parseMode != ParseModeNone {
 		msg.ParseMode = string(parseMode)
 	}
+
+	// Automatic menu button management
+	c.applyAutomaticMenuButton()
 
 	// Apply keyboard markup
 	if len(keyboard) > 0 && keyboard[0] != nil {
@@ -278,7 +308,7 @@ func (c *Context) sendWithParseMode(text string, parseMode ParseMode, keyboard .
 			msg.ReplyMarkup = kb
 		}
 	} else {
-		// Apply user-specific main menu
+		// Apply user-specific reply keyboard automatically
 		if c.Bot.accessManager != nil {
 			menuContext := &MenuContext{
 				UserID:    c.UserID(),
@@ -286,7 +316,7 @@ func (c *Context) sendWithParseMode(text string, parseMode ParseMode, keyboard .
 				IsGroup:   c.Update.Message != nil && (c.Update.Message.Chat.IsGroup() || c.Update.Message.Chat.IsSuperGroup()),
 				IsChannel: c.Update.Message != nil && c.Update.Message.Chat.IsChannel(),
 			}
-			if userMenu := c.Bot.accessManager.GetMainMenu(menuContext); userMenu != nil {
+			if userMenu := c.Bot.accessManager.GetReplyKeyboard(menuContext); userMenu != nil {
 				msg.ReplyMarkup = userMenu.ToTgbotapi()
 			}
 		} else if c.Bot.replyKeyboard != nil {

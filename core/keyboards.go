@@ -81,11 +81,27 @@ type InlineKeyboard struct {
 	currentRow     []InlineKeyboardButton
 }
 
-// MenuButtonConfig represents a menu button configuration
+// MenuButtonType represents the type of native menu button
+type MenuButtonType string
+
+const (
+	MenuButtonTypeCommands MenuButtonType = "commands"
+	MenuButtonTypeWebApp   MenuButtonType = "web_app"
+	MenuButtonTypeDefault  MenuButtonType = "default"
+)
+
+// MenuButtonItem represents a command item for menu buttons
+type MenuButtonItem struct {
+	Text    string `json:"text"`
+	Command string `json:"command"`
+}
+
+// MenuButtonConfig represents the configuration for Telegram's native menu button
 type MenuButtonConfig struct {
-	Type   string      `json:"type"`
-	Text   string      `json:"text,omitempty"`
-	WebApp *WebAppInfo `json:"web_app,omitempty"`
+	Type   MenuButtonType   `json:"type"`
+	Text   string           `json:"text,omitempty"`    // For web_app type
+	WebApp *WebAppInfo      `json:"web_app,omitempty"` // For web_app type
+	Items  []MenuButtonItem `json:"items,omitempty"`   // For commands type (not sent to API, used internally)
 }
 
 // WebAppInfo represents a web app

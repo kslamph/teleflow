@@ -7,6 +7,9 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // Template system provides powerful message templating capabilities using
@@ -170,6 +173,7 @@ func (b *Bot) addTemplateInternal(name, templateText string, parseMode ParseMode
 
 // getAllTemplateFuncs returns all template functions for all parse modes
 func getAllTemplateFuncs() template.FuncMap {
+	titleCaser := cases.Title(language.Und)
 	return template.FuncMap{
 		"escape": func(s string) string {
 			// Default to HTML escaping - will be overridden in execution context
@@ -179,7 +183,7 @@ func getAllTemplateFuncs() template.FuncMap {
 			return s
 		},
 		"title": func(s string) string {
-			return strings.Title(s)
+			return titleCaser.String(s)
 		},
 		"upper": func(s string) string {
 			return strings.ToUpper(s)

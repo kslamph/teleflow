@@ -74,16 +74,21 @@ type PermissionContext struct {
 	Update    *tgbotapi.Update
 }
 
-// AccessManager interface for authorization and menu management
-// It allows checking user permissions and retrieving the main menu
+// AccessManager interface for authorization and automatic UI management
+// It provides context-aware keyboards and menu buttons based on user permissions
 type AccessManager interface {
 	// CheckPermission checks if the user has permission to perform an action
 	// Returns an error if permission is denied, nil if allowed
 	// The error message is used to inform the user
 	CheckPermission(ctx *PermissionContext) error
-	// GetMainMenu returns the main menu keyboard for the user
-	// This can be used to provide a dynamic menu based on user permissions
-	GetMainMenu(ctx *MenuContext) *ReplyKeyboard
+
+	// GetReplyKeyboard returns the reply keyboard for the user based on context
+	// This keyboard will be automatically applied to reply messages
+	GetReplyKeyboard(ctx *MenuContext) *ReplyKeyboard
+
+	// GetMenuButton returns the menu button configuration for the user based on context
+	// This menu button will be automatically set for the chat
+	GetMenuButton(ctx *MenuContext) *MenuButtonConfig
 }
 
 // Bot is the main application structure
@@ -135,10 +140,17 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 
 	return b, nil
 }
+
+// WithMenuButton sets the menu button configuration using functional options
 func WithMenuButton(config *MenuButtonConfig) BotOption {
 	return func(b *Bot) {
 		b.menuButton = config
 	}
+}
+
+// WithMenuButton sets the menu button configuration (method style)
+func (b *Bot) WithMenuButton(config *MenuButtonConfig) {
+	b.menuButton = config
 }
 
 // WithFlowConfig sets the flow configuration
@@ -286,6 +298,9 @@ func (b *Bot) resolveHandler(update tgbotapi.Update) HandlerFunc {
 // Start begins listening for updates
 func (b *Bot) Start() error {
 	log.Printf("Authorized on account %s", b.api.Self.UserName)
+
+	// Initialize menu button if configured
+	b.InitializeMenuButton()
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
