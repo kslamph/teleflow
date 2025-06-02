@@ -105,11 +105,20 @@ func (c *Context) Reply(text string, keyboard ...interface{}) error {
 
 // ReplyTemplate sends a text message using a template
 func (c *Context) ReplyTemplate(templateName string, data interface{}, keyboard ...interface{}) error {
-	var buf bytes.Buffer
-	if err := c.Bot.templates.ExecuteTemplate(&buf, templateName, data); err != nil {
-		return fmt.Errorf("executing template %s: %w", templateName, err)
+	text, parseMode, err := c.executeTemplate(templateName, data)
+	if err != nil {
+		return err
 	}
-	return c.send(buf.String(), keyboard...)
+	return c.sendWithParseMode(text, parseMode, keyboard...)
+}
+
+// EditOrReplyTemplate attempts to edit current message using template or sends new one
+func (c *Context) EditOrReplyTemplate(templateName string, data interface{}, keyboard ...interface{}) error {
+	text, parseMode, err := c.executeTemplate(templateName, data)
+	if err != nil {
+		return err
+	}
+	return c.editOrReplyWithParseMode(text, parseMode, keyboard...)
 }
 
 // EditOrReply attempts to edit current message or sends new one
@@ -211,6 +220,100 @@ func (c *Context) send(text string, keyboard ...interface{}) error {
 
 	_, err := c.Bot.api.Send(msg)
 	return err
+}
+
+// executeTemplate executes a template and returns the result with parse mode
+func (c *Context) executeTemplate(templateName string, data interface{}) (string, ParseMode, error) {
+	var buf bytes.Buffer
+	if err := c.Bot.templates.ExecuteTemplate(&buf, templateName, data); err != nil {
+		return "", ParseModeNone, fmt.Errorf("executing template %s: %w", templateName, err)
+	}
+
+	// Get template info to determine parse mode
+	templateInfo := c.Bot.GetTemplateInfo(templateName)
+	parseMode := ParseModeNone
+	if templateInfo != nil {
+		parseMode = templateInfo.ParseMode
+	}
+
+	return buf.String(), parseMode, nil
+}
+
+// sendWithParseMode sends a message with the specified parse mode
+func (c *Context) sendWithParseMode(text string, parseMode ParseMode, keyboard ...interface{}) error {
+	msg := tgbotapi.NewMessage(c.ChatID(), text)
+
+	// Set parse mode if specified
+	if parseMode != ParseModeNone {
+		msg.ParseMode = string(parseMode)
+	}
+
+	// Apply keyboard markup
+	if len(keyboard) > 0 && keyboard[0] != nil {
+		switch kb := keyboard[0].(type) {
+		case *ReplyKeyboard:
+			msg.ReplyMarkup = kb.ToTgbotapi()
+		case *InlineKeyboard:
+			msg.ReplyMarkup = kb.ToTgbotapi()
+		case tgbotapi.ReplyKeyboardRemove:
+			msg.ReplyMarkup = kb
+		case tgbotapi.ReplyKeyboardMarkup:
+			msg.ReplyMarkup = kb
+		case tgbotapi.InlineKeyboardMarkup:
+			msg.ReplyMarkup = kb
+		}
+	} else {
+		// Apply user-specific main menu
+		if c.Bot.userPermissions != nil {
+			menuContext := &MenuContext{
+				UserID:    c.UserID(),
+				ChatID:    c.ChatID(),
+				IsGroup:   c.Update.Message != nil && (c.Update.Message.Chat.IsGroup() || c.Update.Message.Chat.IsSuperGroup()),
+				IsChannel: c.Update.Message != nil && c.Update.Message.Chat.IsChannel(),
+			}
+			if userMenu := c.Bot.userPermissions.GetMainMenu(menuContext); userMenu != nil {
+				msg.ReplyMarkup = userMenu.ToTgbotapi()
+			}
+		} else if c.Bot.mainMenu != nil {
+			msg.ReplyMarkup = c.Bot.mainMenu.ToTgbotapi()
+		}
+	}
+
+	_, err := c.Bot.api.Send(msg)
+	return err
+}
+
+// editOrReplyWithParseMode attempts to edit current message with parse mode or sends new one
+func (c *Context) editOrReplyWithParseMode(text string, parseMode ParseMode, keyboard ...interface{}) error {
+	if c.Update.CallbackQuery != nil && c.Update.CallbackQuery.Message != nil {
+		msg := tgbotapi.NewEditMessageText(
+			c.ChatID(),
+			c.Update.CallbackQuery.Message.MessageID,
+			text,
+		)
+
+		// Set parse mode if specified
+		if parseMode != ParseModeNone {
+			msg.ParseMode = string(parseMode)
+		}
+
+		if len(keyboard) > 0 && keyboard[0] != nil {
+			switch kb := keyboard[0].(type) {
+			case *InlineKeyboard:
+				markup := kb.ToTgbotapi()
+				msg.ReplyMarkup = &markup
+			case tgbotapi.InlineKeyboardMarkup:
+				msg.ReplyMarkup = &kb
+			}
+		}
+
+		if _, err := c.Bot.api.Send(msg); err == nil {
+			cb := tgbotapi.NewCallback(c.Update.CallbackQuery.ID, "")
+			c.Bot.api.Request(cb)
+			return nil
+		}
+	}
+	return c.sendWithParseMode(text, parseMode, keyboard...)
 }
 
 // extractUserID extracts user ID from update

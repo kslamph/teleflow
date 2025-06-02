@@ -13,7 +13,7 @@ func TestReplyTemplateIntegration(t *testing.T) {
 	}
 
 	// Add a template
-	err := bot.AddTemplate("greeting", "Hello {{.Name}}! You have {{.Count}} messages.")
+	err := bot.AddTemplate("greeting", "Hello {{.Name}}! You have {{.Count}} messages.", ParseModeNone)
 	if err != nil {
 		t.Fatalf("Failed to add template: %v", err)
 	}
@@ -48,7 +48,7 @@ You have {{len .Messages}} messages:
 {{range .Messages}}- {{.}}
 {{end}}`
 
-	err := bot.AddTemplate("welcome_complex", templateText)
+	err := bot.AddTemplate("welcome_complex", templateText, ParseModeNone)
 	if err != nil {
 		t.Fatalf("Failed to add complex template: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestTemplateErrorHandling(t *testing.T) {
 	}
 
 	// Add a template that references undefined fields
-	err := bot.AddTemplate("error_template", "Hello {{.UndefinedField}}!")
+	err := bot.AddTemplate("error_template", "Hello {{.UndefinedField}}!", ParseModeNone)
 	if err != nil {
 		t.Fatalf("Failed to add template: %v", err)
 	}
@@ -118,13 +118,13 @@ func TestTemplateOverwrite(t *testing.T) {
 	}
 
 	// Add initial template
-	err := bot.AddTemplate("test", "Original: {{.Value}}")
+	err := bot.AddTemplate("test", "Original: {{.Value}}", ParseModeNone)
 	if err != nil {
 		t.Fatalf("Failed to add initial template: %v", err)
 	}
 
 	// Overwrite with new template
-	err = bot.AddTemplate("test", "Updated: {{.Value}}")
+	err = bot.AddTemplate("test", "Updated: {{.Value}}", ParseModeNone)
 	if err != nil {
 		t.Fatalf("Failed to overwrite template: %v", err)
 	}

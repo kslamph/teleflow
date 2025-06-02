@@ -41,7 +41,7 @@ Available options:
 
 	// Register all templates
 	for name, templateText := range templates {
-		if err := bot.AddTemplate(name, templateText); err != nil {
+		if err := bot.AddTemplate(name, templateText, teleflow.ParseModeNone); err != nil {
 			log.Printf("Failed to add template %s: %v", name, err)
 		} else {
 			fmt.Printf("✅ Added template: %s\n", name)

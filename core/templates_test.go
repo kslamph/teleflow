@@ -12,7 +12,7 @@ func TestAddTemplate(t *testing.T) {
 
 	// Test adding a simple template
 	templateText := "Hello {{.Name}}, welcome to {{.BotName}}!"
-	err := bot.AddTemplate("welcome", templateText)
+	err := bot.AddTemplate("welcome", templateText, ParseModeNone)
 	if err != nil {
 		t.Fatalf("Failed to add template: %v", err)
 	}
@@ -23,19 +23,19 @@ func TestAddTemplate(t *testing.T) {
 	}
 
 	// Test adding template with empty name
-	err = bot.AddTemplate("", "some text")
+	err = bot.AddTemplate("", "some text", ParseModeNone)
 	if err == nil {
 		t.Error("Expected error when adding template with empty name")
 	}
 
 	// Test adding template with empty text
-	err = bot.AddTemplate("empty", "")
+	err = bot.AddTemplate("empty", "", ParseModeNone)
 	if err == nil {
 		t.Error("Expected error when adding template with empty text")
 	}
 
 	// Test adding invalid template syntax
-	err = bot.AddTemplate("invalid", "Hello {{.Name")
+	err = bot.AddTemplate("invalid", "Hello {{.Name", ParseModeNone)
 	if err == nil {
 		t.Error("Expected error when adding template with invalid syntax")
 	}
@@ -53,8 +53,8 @@ func TestListTemplates(t *testing.T) {
 	}
 
 	// Add some templates
-	bot.AddTemplate("template1", "Hello {{.Name}}")
-	bot.AddTemplate("template2", "Goodbye {{.Name}}")
+	bot.AddTemplate("template1", "Hello {{.Name}}", ParseModeNone)
+	bot.AddTemplate("template2", "Goodbye {{.Name}}", ParseModeNone)
 
 	templates = bot.ListTemplates()
 	if len(templates) != 2 {
@@ -90,7 +90,7 @@ func TestGetTemplate(t *testing.T) {
 	}
 
 	// Add a template and test retrieval
-	bot.AddTemplate("test", "Test template")
+	bot.AddTemplate("test", "Test template", ParseModeNone)
 	tmpl = bot.GetTemplate("test")
 	if tmpl == nil {
 		t.Error("Expected to find template 'test'")
@@ -108,7 +108,7 @@ func TestHasTemplate(t *testing.T) {
 	}
 
 	// Add template and test
-	bot.AddTemplate("exists", "Template content")
+	bot.AddTemplate("exists", "Template content", ParseModeNone)
 	if !bot.HasTemplate("exists") {
 		t.Error("Expected true for existing template")
 	}
