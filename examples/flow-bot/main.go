@@ -38,6 +38,7 @@ func (spc *SimpleAccessManager) GetMenuButton(ctx *teleflow.MenuContext) *telefl
 	return &teleflow.MenuButtonConfig{
 		Type: teleflow.MenuButtonTypeCommands,
 		Items: []teleflow.MenuButtonItem{
+			{Text: "🏠 Start", Command: "/start"},
 			{Text: "❌ Cancel", Command: "/cancel"},
 			{Text: "❓ Help", Command: "/help"},
 		},
@@ -202,42 +203,40 @@ func main() {
 	// Text handlers for button interactions
 
 	// Handle "💸 Transfer" button
-	bot.HandleText(func(ctx *teleflow.Context) error {
-		if ctx.Update.Message != nil && ctx.Update.Message.Text == "💸 Transfer" {
-			log.Printf("Starting transfer flow via button for user %d", ctx.UserID())
-			if err := ctx.StartFlow("transfer"); err != nil {
-				return ctx.Reply("❌ Failed to start transfer flow. Please try again.")
-			}
-			return nil
+	// Handle specific button presses
+	bot.HandleText("💸 Transfer", func(ctx *teleflow.Context) error {
+		log.Printf("Starting transfer flow via button for user %d", ctx.UserID())
+		if err := ctx.StartFlow("transfer"); err != nil {
+			return ctx.Reply("❌ Failed to start transfer flow. Please try again.")
 		}
+		return nil
+	})
 
-		// Handle "📊 Balance" button
-		if ctx.Update.Message != nil && ctx.Update.Message.Text == "📊 Balance" {
-			return ctx.Reply("💳 Your current balance: $1,234.56")
-		}
+	bot.HandleText("📊 Balance", func(ctx *teleflow.Context) error {
+		return ctx.Reply("💳 Your current balance: $1,234.56")
+	})
 
-		// Handle "❓ Help" button
-		if ctx.Update.Message != nil && ctx.Update.Message.Text == "❓ Help" {
-			return ctx.Reply(
-				"❓ **Teleflow Bot Help**\n\n" +
-					"**Available Commands:**\n" +
-					"💸 /transfer - Start a money transfer flow\n" +
-					"❌ /cancel - Cancel current operation\n" +
-					"❓ /help - Show this help message\n\n" +
-					"**Transfer Flow:**\n" +
-					"1️⃣ Enter amount (numbers only)\n" +
-					"2️⃣ Enter recipient username\n" +
-					"3️⃣ Confirm the transfer\n\n" +
-					"You can cancel any operation at any time using /cancel.",
-			)
-		}
+	bot.HandleText("❓ Help", func(ctx *teleflow.Context) error {
+		return ctx.Reply(
+			"❓ **Teleflow Bot Help**\n\n" +
+				"**Available Commands:**\n" +
+				"💸 /transfer - Start a money transfer flow\n" +
+				"❌ /cancel - Cancel current operation\n" +
+				"❓ /help - Show this help message\n\n" +
+				"**Transfer Flow:**\n" +
+				"1️⃣ Enter amount (numbers only)\n" +
+				"2️⃣ Enter recipient username\n" +
+				"3️⃣ Confirm the transfer\n\n" +
+				"You can cancel any operation at any time using /cancel.",
+		)
+	})
 
-		// Handle "⚙️ Settings" button
-		if ctx.Update.Message != nil && ctx.Update.Message.Text == "⚙️ Settings" {
-			return ctx.Reply("⚙️ Settings feature coming soon!")
-		}
+	bot.HandleText("⚙️ Settings", func(ctx *teleflow.Context) error {
+		return ctx.Reply("⚙️ Settings feature coming soon!")
+	})
 
-		// Default response for unrecognized text
+	// Default handler for unrecognized text
+	bot.HandleText("", func(ctx *teleflow.Context) error {
 		return ctx.Reply("ℹ️ I don't understand that command. Type /help for available commands.")
 	})
 

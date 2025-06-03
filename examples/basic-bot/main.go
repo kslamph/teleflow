@@ -103,26 +103,19 @@ func registerCommands(bot *teleflow.Bot) {
 
 // registerTextHandlers sets up handlers for keyboard button presses
 func registerTextHandlers(bot *teleflow.Bot) {
-	// Handle all text messages (keyboard button presses and regular text)
-	bot.HandleText(func(ctx *teleflow.Context) error {
+	// Handle specific keyboard button presses
+	bot.HandleText("🏠 Home", handleHomeButton)
+	bot.HandleText("ℹ️ Info", handleInfoButton)
+	bot.HandleText("❓ Help", handleHelpButton)
+
+	// Handle all other text messages (default handler)
+	bot.HandleText("", func(ctx *teleflow.Context) error {
 		// Get the text from the message
 		if ctx.Update.Message == nil {
 			return ctx.Reply("❌ No message received")
 		}
-
 		text := ctx.Update.Message.Text
-
-		// Handle specific keyboard button presses
-		switch text {
-		case "🏠 Home":
-			return handleHomeButton(ctx)
-		case "ℹ️ Info":
-			return handleInfoButton(ctx)
-		case "❓ Help":
-			return handleHelpButton(ctx)
-		default:
-			return handleUnknownText(ctx, text)
-		}
+		return handleUnknownText(ctx, text)
 	})
 }
 

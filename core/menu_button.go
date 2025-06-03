@@ -77,14 +77,11 @@ func (b *Bot) setMyCommands(items []MenuButtonItem) error {
 
 	// Use Send method - this is what makes the menu button appear!
 	// Note: This may cause a JSON unmarshal error which we'll ignore since it still works
-	_, err := b.api.Send(cmdCfg)
+	_, err := b.api.Request(cmdCfg)
 	if err != nil {
-		// Check if it's the known JSON unmarshal error that we can ignore
-		if err.Error() == "json: cannot unmarshal bool into Go value of type tgbotapi.Message" {
-			log.Printf("✅ Commands registered successfully (ignoring expected JSON unmarshal error)")
-		} else {
-			return fmt.Errorf("failed to set bot commands: %w", err)
-		}
+
+		return fmt.Errorf("failed to set bot commands: %w", err)
+
 	} else {
 		log.Printf("✅ Registered %d bot commands with Telegram", len(commands))
 	}

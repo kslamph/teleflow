@@ -358,8 +358,8 @@ func setupHandlers(bot *teleflow.Bot) {
 		return ctx.ReplyTemplate("help_message", map[string]interface{}{})
 	})
 
-	// Text handler for general messages
-	bot.HandleText(func(ctx *teleflow.Context) error {
+	// Text handler for general messages (default handler)
+	bot.HandleText("", func(ctx *teleflow.Context) error {
 		if ctx.Update.Message == nil {
 			return nil
 		}

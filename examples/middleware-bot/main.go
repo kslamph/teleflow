@@ -303,33 +303,42 @@ func registerCommands(bot *teleflow.Bot, permissionChecker *AdminAccessManager) 
 
 // registerTextHandlers sets up handlers for keyboard button presses
 func registerTextHandlers(bot *teleflow.Bot, permissionChecker *AdminAccessManager) {
-	// Handle all text messages (keyboard button presses and regular text)
-	bot.HandleText(func(ctx *teleflow.Context) error {
+	// Handle specific keyboard button presses
+	bot.HandleText("🏠 Home", func(ctx *teleflow.Context) error {
+		return handleHomeButton(ctx, permissionChecker)
+	})
+
+	bot.HandleText("ℹ️ Help", func(ctx *teleflow.Context) error {
+		return handleHelpButton(ctx, permissionChecker)
+	})
+
+	bot.HandleText("⚡ Spam Test", func(ctx *teleflow.Context) error {
+		return handleSpamTestButton(ctx, permissionChecker)
+	})
+
+	bot.HandleText("💥 Panic Test", func(ctx *teleflow.Context) error {
+		return handlePanicTestButton(ctx, permissionChecker)
+	})
+
+	bot.HandleText("👑 Admin Panel", func(ctx *teleflow.Context) error {
+		return handleAdminPanelButton(ctx, permissionChecker)
+	})
+
+	bot.HandleText("💥 YES - Trigger Panic", func(ctx *teleflow.Context) error {
+		return handleActualPanic(ctx)
+	})
+
+	bot.HandleText("🚫 Cancel", func(ctx *teleflow.Context) error {
+		return handleCancelPanic(ctx, permissionChecker)
+	})
+
+	// Handle all other text messages (default handler)
+	bot.HandleText("", func(ctx *teleflow.Context) error {
 		if ctx.Update.Message == nil {
 			return ctx.Reply("❌ No message received")
 		}
-
 		text := ctx.Update.Message.Text
-
-		// Handle specific keyboard button presses
-		switch text {
-		case "🏠 Home":
-			return handleHomeButton(ctx, permissionChecker)
-		case "ℹ️ Help":
-			return handleHelpButton(ctx, permissionChecker)
-		case "⚡ Spam Test":
-			return handleSpamTestButton(ctx, permissionChecker)
-		case "💥 Panic Test":
-			return handlePanicTestButton(ctx, permissionChecker)
-		case "👑 Admin Panel":
-			return handleAdminPanelButton(ctx, permissionChecker)
-		case "💥 YES - Trigger Panic":
-			return handleActualPanic(ctx)
-		case "🚫 Cancel":
-			return handleCancelPanic(ctx, permissionChecker)
-		default:
-			return handleUnknownText(ctx, text, permissionChecker)
-		}
+		return handleUnknownText(ctx, text, permissionChecker)
 	})
 }
 
