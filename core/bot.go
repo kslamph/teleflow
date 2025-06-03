@@ -185,10 +185,9 @@ func (b *Bot) HandleCommand(command string, handler HandlerFunc) {
 }
 
 // HandleText registers a handler for specific text input
-func (b *Bot) HandleText(handler HandlerFunc) {
-	// Note: Original design had inconsistent signature, implementing as generic text handler
-	// Store as default text handler (empty key means default)
-	b.textHandlers[""] = b.applyMiddleware(handler)
+// If text is empty string, it registers a default handler for any unmatched text
+func (b *Bot) HandleText(text string, handler HandlerFunc) {
+	b.textHandlers[text] = b.applyMiddleware(handler)
 }
 
 // RegisterCallback registers a type-safe callback handler
