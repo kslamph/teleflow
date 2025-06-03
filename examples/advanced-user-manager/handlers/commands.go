@@ -7,22 +7,26 @@ import (
 )
 
 // RegisterCommands registers all command handlers with the bot
-func RegisterCommands(bot *teleflow.Bot) {
+func RegisterCommands(bot *teleflow.Bot, accessManager *services.AccessManager) {
 	// Start command - shows welcome message
-	bot.HandleCommand("/start", handleStart)
+	bot.HandleCommand("/start", func(ctx *teleflow.Context) error {
+		return handleStart(ctx, accessManager)
+	})
 
 	// Help command - shows help information
-	bot.HandleCommand("/help", handleHelp)
+	bot.HandleCommand("/help", func(ctx *teleflow.Context) error {
+		return handleHelp(ctx, accessManager)
+	})
 
 	// Cancel command - cancels current operation
-	bot.HandleCommand("/cancel", handleCancel)
+	bot.HandleCommand("/cancel", func(ctx *teleflow.Context) error {
+		return handleCancel(ctx, accessManager)
+	})
 }
 
 // handleStart handles the /start command
-func handleStart(ctx *teleflow.Context) error {
+func handleStart(ctx *teleflow.Context, accessManager *services.AccessManager) error {
 	// Log access
-	accessManagerVal, _ := ctx.Get("accessManager")
-	accessManager := accessManagerVal.(*services.AccessManager)
 	accessManager.LogAccess(ctx, "start_command")
 
 	// Create main keyboard
@@ -32,10 +36,8 @@ func handleStart(ctx *teleflow.Context) error {
 }
 
 // handleHelp handles the /help command
-func handleHelp(ctx *teleflow.Context) error {
+func handleHelp(ctx *teleflow.Context, accessManager *services.AccessManager) error {
 	// Log access
-	accessManagerVal, _ := ctx.Get("accessManager")
-	accessManager := accessManagerVal.(*services.AccessManager)
 	accessManager.LogAccess(ctx, "help_command")
 
 	// Create main keyboard
@@ -45,10 +47,8 @@ func handleHelp(ctx *teleflow.Context) error {
 }
 
 // handleCancel handles the /cancel command
-func handleCancel(ctx *teleflow.Context) error {
+func handleCancel(ctx *teleflow.Context, accessManager *services.AccessManager) error {
 	// Log access
-	accessManagerVal, _ := ctx.Get("accessManager")
-	accessManager := accessManagerVal.(*services.AccessManager)
 	accessManager.LogAccess(ctx, "cancel_command")
 
 	// Cancel any active flow
@@ -63,17 +63,20 @@ func handleCancel(ctx *teleflow.Context) error {
 }
 
 // RegisterTextHandlers registers text message handlers
-func RegisterTextHandlers(bot *teleflow.Bot) {
+// RegisterTextHandlers registers text message handlers
+func RegisterTextHandlers(bot *teleflow.Bot, accessManager *services.AccessManager) {
 	// Register handlers for reply keyboard button presses
-	bot.HandleText("👥 User Manager", handleUserManagerButton)
-	bot.HandleText("❓ Help", handleHelpButton)
+	bot.HandleText("👥 User Manager", func(ctx *teleflow.Context) error {
+		return handleUserManagerButton(ctx, accessManager)
+	})
+	bot.HandleText("❓ Help", func(ctx *teleflow.Context) error {
+		return handleHelpButton(ctx, accessManager)
+	})
 }
 
 // handleUserManagerButton handles the User Manager button press
-func handleUserManagerButton(ctx *teleflow.Context) error {
+func handleUserManagerButton(ctx *teleflow.Context, accessManager *services.AccessManager) error {
 	// Check permissions
-	accessManagerVal, _ := ctx.Get("accessManager")
-	accessManager := accessManagerVal.(*services.AccessManager)
 	if !accessManager.CanManageUsers(ctx) {
 		return ctx.Reply("❌ You don't have permission to manage users.")
 	}
@@ -100,8 +103,8 @@ func handleUserManagerButton(ctx *teleflow.Context) error {
 }
 
 // handleHelpButton handles the Help button press
-func handleHelpButton(ctx *teleflow.Context) error {
-	return handleHelp(ctx)
+func handleHelpButton(ctx *teleflow.Context, accessManager *services.AccessManager) error {
+	return handleHelp(ctx, accessManager)
 }
 
 // createMainKeyboard creates the main reply keyboard

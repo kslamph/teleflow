@@ -101,19 +101,41 @@ func LoggingMiddleware() MiddlewareFunc {
 		return func(ctx *Context) error {
 			start := time.Now()
 
-			// Log incoming update
+			// Get debug and log level from context
+			debug := false
+			logLevel := "info"
+			if debugVal, exists := ctx.Get("debug"); exists {
+				if d, ok := debugVal.(bool); ok {
+					debug = d
+				}
+			}
+			if logLevelVal, exists := ctx.Get("logLevel"); exists {
+				if ll, ok := logLevelVal.(string); ok {
+					logLevel = ll
+				}
+			}
+
+			// Log incoming update based on log level
 			updateType := "unknown"
 			if ctx.Update.Message != nil {
 				if ctx.Update.Message.IsCommand() {
 					updateType = "command: " + ctx.Update.Message.Command()
 				} else {
 					updateType = "text: " + ctx.Update.Message.Text
+					if len(updateType) > 100 {
+						updateType = updateType[:100] + "..."
+					}
 				}
 			} else if ctx.Update.CallbackQuery != nil {
 				updateType = "callback: " + ctx.Update.CallbackQuery.Data
 			}
 
-			log.Printf("[%d] Processing %s", ctx.UserID(), updateType)
+			// Log based on level and debug settings
+			if debug || logLevel == "debug" {
+				log.Printf("[DEBUG][%d] Processing %s", ctx.UserID(), updateType)
+			} else if logLevel == "info" {
+				log.Printf("[INFO][%d] Processing %s", ctx.UserID(), updateType)
+			}
 
 			// Execute handler
 			err := next(ctx)
@@ -121,9 +143,9 @@ func LoggingMiddleware() MiddlewareFunc {
 			// Log execution time
 			duration := time.Since(start)
 			if err != nil {
-				log.Printf("[%d] Handler failed in %v: %v", ctx.UserID(), duration, err)
-			} else {
-				log.Printf("[%d] Handler completed in %v", ctx.UserID(), duration)
+				log.Printf("[ERROR][%d] Handler failed in %v: %v", ctx.UserID(), duration, err)
+			} else if debug || logLevel == "debug" {
+				log.Printf("[DEBUG][%d] Handler completed in %v", ctx.UserID(), duration)
 			}
 
 			return err

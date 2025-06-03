@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"os"
+	"strconv"
+	"strings"
 
 	teleflow "github.com/kslamph/teleflow/core"
 	"github.com/kslamph/teleflow/examples/advanced-user-manager/handlers"
@@ -15,6 +17,23 @@ func main() {
 	token := os.Getenv("BOT_TOKEN")
 	if token == "" {
 		log.Fatal("BOT_TOKEN environment variable is required")
+	}
+
+	// Configure debug and logging
+	debug := false
+	if debugStr := os.Getenv("DEBUG"); debugStr != "" {
+		if d, err := strconv.ParseBool(debugStr); err == nil {
+			debug = d
+		}
+	}
+
+	logLevel := strings.ToLower(os.Getenv("LOG_LEVEL"))
+	if logLevel == "" {
+		logLevel = "info"
+	}
+
+	if debug {
+		log.Printf("Debug mode enabled, Log level: %s", logLevel)
 	}
 
 	// Initialize services
@@ -41,23 +60,46 @@ func main() {
 	// Setup middleware to inject services into context
 	bot.Use(func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
 		return func(ctx *teleflow.Context) error {
-			// Inject services into context
+			// Inject services into context (NOT accessManager - it's used by AuthMiddleware)
 			ctx.Set("userService", userService)
+			ctx.Set("debug", debug)
+			ctx.Set("logLevel", logLevel)
 			return next(ctx)
 		}
 	})
 
 	// Register command handlers
-	handlers.RegisterCommands(bot)
+	handlers.RegisterCommands(bot, accessManager)
 
 	// Register text message handlers
-	handlers.RegisterTextHandlers(bot)
+	handlers.RegisterTextHandlers(bot, accessManager)
 
 	// Register callback handlers
-	handlers.RegisterCallbacks(bot)
+	handlers.RegisterCallbacks(bot, accessManager, userService)
 
 	// Register flow handlers
-	handlers.RegisterFlows(bot)
+	handlers.RegisterFlows(bot, userService)
+
+	// Add a default text handler for unrecognized messages
+	bot.HandleText("", func(ctx *teleflow.Context) error {
+		if debug {
+			log.Printf("Unrecognized message from user %d: %s", ctx.UserID(), ctx.Update.Message.Text)
+		}
+
+		// Create main keyboard
+		keyboard := &teleflow.ReplyKeyboard{
+			Keyboard: [][]teleflow.ReplyKeyboardButton{
+				{
+					{Text: "👥 User Manager"},
+					{Text: "❓ Help"},
+				},
+			},
+			ResizeKeyboard:  true,
+			OneTimeKeyboard: false,
+		}
+
+		return ctx.Reply("I didn't understand that. Please use the buttons below or type /help for assistance.", keyboard)
+	})
 
 	// Start the bot
 	log.Println("Starting Advanced User Manager Bot...")
