@@ -1,33 +1,84 @@
 # Teleflow Middleware Guide
 
-Middleware in Teleflow provides a powerful mechanism to process incoming updates before they reach your main [Handlers](handlers-guide.md) and to perform actions after handlers have executed. With the new type-specific middleware system, you can implement cross-cutting concerns like logging, authentication, rate limiting, and error recovery in a more tailored and type-safe manner for different categories of handlers.
+Middleware in Teleflow provides a powerful mechanism to process incoming updates before they reach your main [Handlers](handlers-guide.md) and to perform actions after handlers have executed. Teleflow supports both **general middleware** that applies to all handler types and **type-specific middleware** for more targeted control. This dual approach allows you to implement cross-cutting concerns like logging, authentication, rate limiting, and error recovery with maximum flexibility.
 
 ## Table of Contents
 
-- [What is Type-Specific Middleware?](#what-is-type-specific-middleware)
-- [Benefits of Type-Specific Middleware](#benefits-of-type-specific-middleware)
-- [Defining Middleware (New Signatures)](#defining-middleware-new-signatures)
-  - [`CommandMiddlewareFunc`](#commandmiddlewarefunc)
-  - [`TextMiddlewareFunc`](#textmiddlewarefunc)
-  - [`DefaultTextMiddlewareFunc`](#defaulttextmiddlewarefunc)
-  - [`CallbackMiddlewareFunc`](#callbackmiddlewarefunc)
+- [General Middleware System](#general-middleware-system)
+  - [`bot.Use()` - Universal Middleware](#botuse---universal-middleware)
+  - [General Middleware Benefits](#general-middleware-benefits)
+- [Type-Specific Middleware System](#type-specific-middleware-system)
+  - [What is Type-Specific Middleware?](#what-is-type-specific-middleware)
+  - [Benefits of Type-Specific Middleware](#benefits-of-type-specific-middleware)
+- [Defining Middleware](#defining-middleware)
+  - [General Middleware: `MiddlewareFunc`](#general-middleware-middlewarefunc)
+  - [Type-Specific Signatures](#type-specific-signatures)
+    - [`CommandMiddlewareFunc`](#commandmiddlewarefunc)
+    - [`TextMiddlewareFunc`](#textmiddlewarefunc)
+    - [`DefaultTextMiddlewareFunc`](#defaulttextmiddlewarefunc)
+    - [`CallbackMiddlewareFunc`](#callbackmiddlewarefunc)
+    - [`FlowStepInputMiddlewareFunc`](#flowstepinputmiddlewarefunc)
   - [The `next` Parameter](#the-next-parameter)
   - [Conceptual Example: Logging Middleware](#conceptual-example-logging-middleware)
 - [Registering Middleware](#registering-middleware)
+  - [`bot.Use()` - General Middleware](#botuse---general-middleware)
   - [`bot.UseCommandMiddleware()`](#botusecommandmiddleware)
   - [`bot.UseTextMiddleware()`](#botusetextmiddleware)
   - [`bot.UseDefaultTextMiddleware()`](#botusedefaulttextmiddleware)
   - [`bot.UseCallbackMiddleware()`](#botusecallbackmiddleware)
+  - [`bot.UseFlowStepInputMiddleware()`](#botuseflowstepinputmiddleware)
   - [Registration Example](#registration-example)
 - [Middleware Execution Order](#middleware-execution-order)
-- [Common Middleware Examples (Type-Specific)](#common-middleware-examples-type-specific)
+- [Common Middleware Examples](#common-middleware-examples)
+  - [General Middleware Examples](#general-middleware-examples)
+  - [Type-Specific Middleware Examples](#type-specific-middleware-examples)
   - [Recovery Middleware](#recovery-middleware)
   - [Authentication Middleware](#authentication-middleware)
 - [Middleware for Flow Handlers](#middleware-for-flow-handlers)
 - [Best Practices for Middleware](#best-practices-for-middleware)
 - [Next Steps](#next-steps)
 
-## What is Type-Specific Middleware?
+## General Middleware System
+
+### `bot.Use()` - Universal Middleware
+
+The general middleware system allows you to apply middleware to **all handler types** with a single method call. This is perfect for cross-cutting concerns that should apply universally across your bot.
+
+```go
+// General middleware that applies to ALL handler types
+func loggingMiddleware(next teleflow.HandlerFunc) teleflow.HandlerFunc {
+    return func(ctx *teleflow.Context) error {
+        start := time.Now()
+        log.Printf("Handler started: %s", ctx.Update.Message.Text)
+        
+        err := next(ctx)
+        
+        log.Printf("Handler completed in %v", time.Since(start))
+        return err
+    }
+}
+
+// Apply to all handler types at once
+bot.Use(loggingMiddleware)
+```
+
+When you use `bot.Use()`, Teleflow automatically converts your general middleware to the appropriate type-specific middleware and applies it to:
+- Command handlers
+- Text handlers
+- Default text handlers
+- Callback handlers
+- Flow step input handlers
+
+### General Middleware Benefits
+
+- **Simplicity**: One method call applies middleware everywhere
+- **Consistency**: Ensures the same behavior across all handler types
+- **Less Code**: No need to adapt middleware for each handler type manually
+- **Perfect for Cross-Cutting Concerns**: Logging, authentication, recovery, rate limiting
+
+## Type-Specific Middleware System
+
+### What is Type-Specific Middleware?
 
 Previously, Teleflow used a generic middleware signature. The new system introduces distinct middleware types for different handler categories: commands, specific text messages, default text messages, and callback queries. This means a middleware function is now designed explicitly for the kind of handler it will wrap.
 
@@ -43,9 +94,42 @@ Middleware functions are "interceptors" that sit between the raw Telegram update
 - **Clarity and Intent**: It's clearer what kind of processing a middleware is intended for.
 - **Reduced Boilerplate**: Less type assertion or casting might be needed within middleware, as the types are more specific.
 
-## Defining Middleware (New Signatures)
+## Defining Middleware
 
-Middleware in Teleflow is a function that takes the `next` handler (of a specific type) in the chain and returns a new handler (of the same specific type).
+Middleware in Teleflow can be defined in two ways: as general middleware that applies to all handler types, or as type-specific middleware for particular handler categories.
+
+### General Middleware: `MiddlewareFunc`
+
+General middleware uses the universal `MiddlewareFunc` signature and works with all handler types:
+
+```go
+// General middleware signature
+type MiddlewareFunc func(next HandlerFunc) HandlerFunc
+
+// Where HandlerFunc is the universal handler signature
+type HandlerFunc func(ctx *Context) error
+```
+
+**Example of general middleware:**
+```go
+func loggingMiddleware(next teleflow.HandlerFunc) teleflow.HandlerFunc {
+    return func(ctx *teleflow.Context) error {
+        log.Printf("Processing update from user %d", ctx.Update.Message.From.ID)
+        err := next(ctx)
+        if err != nil {
+            log.Printf("Handler error: %v", err)
+        }
+        return err
+    }
+}
+
+// Apply to all handler types
+bot.Use(loggingMiddleware)
+```
+
+### Type-Specific Signatures
+
+For more granular control, you can define middleware specific to particular handler types. Each type-specific middleware is aligned with the signature of the handlers it wraps.
 
 ### `CommandMiddlewareFunc`
 For middleware that processes commands.
@@ -126,7 +210,27 @@ A similar logging middleware could be created for `TextMiddlewareFunc`, `Default
 
 ## Registering Middleware
 
-The old generic `bot.Use()` method is replaced by category-specific registration methods on the `Bot` object. You register middleware for each handler category independently.
+Teleflow provides both universal and type-specific middleware registration methods, allowing you to choose the approach that best fits your needs.
+
+### `bot.Use()` - General Middleware
+
+The `bot.Use()` method applies middleware to **all handler types** automatically. This is the recommended approach for cross-cutting concerns.
+
+```go
+// Apply to all handler types at once
+bot.Use(loggingMiddleware)
+bot.Use(authMiddleware)
+bot.Use(recoveryMiddleware)
+```
+
+When you call `bot.Use()`, Teleflow automatically:
+1. Stores the general middleware in the bot's middleware chain
+2. Converts it to type-specific middleware using adapter functions
+3. Applies it to all handler types (commands, text, callbacks, flow steps)
+
+### Type-Specific Registration Methods
+
+For more granular control, you can register middleware for specific handler categories:
 
 ### `bot.UseCommandMiddleware()`
 Registers middleware specifically for command handlers.
@@ -152,15 +256,64 @@ Registers middleware specifically for callback query handlers.
 bot.UseCallbackMiddleware(m teleflow.CallbackMiddlewareFunc)
 ```
 
-### Registration Example
-Using the `LoggingCommandMiddleware` from the previous section:
+### `bot.UseFlowStepInputMiddleware()`
+Registers middleware specifically for flow step input handlers.
 ```go
-// Assuming 'bot' is your *teleflow.Bot instance
-bot.UseCommandMiddleware(LoggingCommandMiddleware())
+bot.UseFlowStepInputMiddleware(m teleflow.FlowStepInputMiddlewareFunc)
+```
 
-// If you had a LoggingTextMiddleware:
-// func LoggingTextMiddleware() teleflow.TextMiddlewareFunc { /* ... */ }
-// bot.UseTextMiddleware(LoggingTextMiddleware())
+### Registration Examples
+
+**General Middleware Approach (Recommended for Cross-Cutting Concerns):**
+```go
+// Define general middleware once
+func loggingMiddleware(next teleflow.HandlerFunc) teleflow.HandlerFunc {
+    return func(ctx *teleflow.Context) error {
+        start := time.Now()
+        log.Printf("Handler started")
+        err := next(ctx)
+        log.Printf("Handler completed in %v", time.Since(start))
+        return err
+    }
+}
+
+func authMiddleware(next teleflow.HandlerFunc) teleflow.HandlerFunc {
+    return func(ctx *teleflow.Context) error {
+        if !isAuthorized(ctx.Update.Message.From.ID) {
+            return ctx.Reply("Access denied")
+        }
+        return next(ctx)
+    }
+}
+
+// Apply to all handler types at once
+bot.Use(loggingMiddleware)
+bot.Use(authMiddleware)
+```
+
+**Type-Specific Middleware Approach:**
+```go
+// Define type-specific middleware for granular control
+func commandLoggingMiddleware(next teleflow.CommandHandlerFunc) teleflow.CommandHandlerFunc {
+    return func(ctx *teleflow.Context, command string, args string) error {
+        log.Printf("Command executed: %s %s", command, args)
+        return next(ctx, command, args)
+    }
+}
+
+// Apply only to command handlers
+bot.UseCommandMiddleware(commandLoggingMiddleware)
+```
+
+**Mixed Approach:**
+```go
+// Apply general middleware for common concerns
+bot.Use(recoveryMiddleware)      // Apply to all handlers
+bot.Use(loggingMiddleware)       // Apply to all handlers
+
+// Apply specific middleware for targeted functionality  
+bot.UseCommandMiddleware(commandRateLimitMiddleware)  // Only for commands
+bot.UseCallbackMiddleware(callbackValidationMiddleware) // Only for callbacks
 ```
 
 ## Middleware Execution Order
@@ -180,9 +333,83 @@ bot.UseCommandMiddleware(MiddlewareC) // CommandMiddlewareFunc
 The execution order for the "before `next`" part will be C -> B -> A -> Actual Command Handler.
 The "after `next`" part will execute in the order Actual Command Handler -> A -> B -> C.
 
-## Common Middleware Examples (Type-Specific)
+## Common Middleware Examples
 
-Previously global middleware examples need to be adapted to be type-specific.
+Here are practical examples of both general and type-specific middleware:
+
+### General Middleware Examples
+
+**Recovery Middleware (General):**
+```go
+func RecoveryMiddleware() teleflow.MiddlewareFunc {
+    return func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
+        return func(ctx *teleflow.Context) (err error) {
+            defer func() {
+                if r := recover(); r != nil {
+                    log.Printf("Panic recovered: %v\n%s", r, debug.Stack())
+                    err = ctx.Reply("Sorry, an internal error occurred.")
+                }
+            }()
+            return next(ctx)
+        }
+    }
+}
+
+// Apply to all handler types
+bot.Use(RecoveryMiddleware())
+```
+
+**Logging Middleware (General):**
+```go
+func LoggingMiddleware() teleflow.MiddlewareFunc {
+    return func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
+        return func(ctx *teleflow.Context) error {
+            start := time.Now()
+            userID := ctx.Update.Message.From.ID
+            
+            log.Printf("Handler started for user %d", userID)
+            err := next(ctx)
+            
+            duration := time.Since(start)
+            if err != nil {
+                log.Printf("Handler failed for user %d after %v: %v", userID, duration, err)
+            } else {
+                log.Printf("Handler completed for user %d in %v", userID, duration)
+            }
+            return err
+        }
+    }
+}
+
+// Apply to all handler types
+bot.Use(LoggingMiddleware())
+```
+
+**Authentication Middleware (General):**
+```go
+func AuthMiddleware(allowedUserIDs []int64) teleflow.MiddlewareFunc {
+    return func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
+        return func(ctx *teleflow.Context) error {
+            userID := ctx.Update.Message.From.ID
+            
+            for _, allowedID := range allowedUserIDs {
+                if userID == allowedID {
+                    return next(ctx) // User is authorized
+                }
+            }
+            
+            return ctx.Reply("Access denied. You are not authorized to use this bot.")
+        }
+    }
+}
+
+// Apply to all handler types
+bot.Use(AuthMiddleware([]int64{123456789, 987654321}))
+```
+
+### Type-Specific Middleware Examples
+
+For cases where you need different behavior for different handler types:
 
 ### Recovery Middleware
 This example shows a `RecoveryMiddleware` for `CommandMiddlewareFunc`. It catches panics, logs them, and returns an error to the user, preventing the bot from crashing.

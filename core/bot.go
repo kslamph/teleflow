@@ -137,12 +137,15 @@ type Bot struct {
 	stateManager            StateManager
 	flowManager             *FlowManager
 	templates               *template.Template
+	// General middleware system
+	middleware              []MiddlewareFunc
+	
+	// Type-specific middleware
 	commandMiddleware       []CommandMiddlewareFunc
 	textMiddleware          []TextMiddlewareFunc
 	defaultTextMiddleware   []DefaultTextMiddlewareFunc
 	callbackMiddleware      []CallbackMiddlewareFunc
 	flowStepInputMiddleware []FlowStepInputMiddlewareFunc
-	// middleware         []MiddlewareFunc // Old generic middleware
 
 	// Configuration
 	replyKeyboard *ReplyKeyboard
@@ -167,7 +170,7 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		stateManager:     NewInMemoryStateManager(),
 		flowManager:      NewFlowManager(NewInMemoryStateManager()),
 		templates:        template.New("botMessages"),
-		// middleware:       []MiddlewareFunc{}, // Old generic middleware
+		middleware:              make([]MiddlewareFunc, 0),
 		commandMiddleware:       make([]CommandMiddlewareFunc, 0),
 		textMiddleware:          make([]TextMiddlewareFunc, 0),
 		defaultTextMiddleware:   make([]DefaultTextMiddlewareFunc, 0),
@@ -227,6 +230,100 @@ func WithAccessManager(accessManager AccessManager) BotOption {
 	return func(b *Bot) {
 		b.accessManager = accessManager
 	}
+}
+
+// Adapter functions to convert general middleware to type-specific middleware
+
+// adaptGeneralToCommandMiddleware converts a general MiddlewareFunc to CommandMiddlewareFunc
+func adaptGeneralToCommandMiddleware(m MiddlewareFunc) CommandMiddlewareFunc {
+	return func(next CommandHandlerFunc) CommandHandlerFunc {
+		return func(ctx *Context, command string, args string) error {
+			// Convert CommandHandlerFunc to HandlerFunc for the general middleware
+			genericNext := func(ctx *Context) error {
+				return next(ctx, command, args)
+			}
+			// Apply general middleware and convert back
+			wrappedHandler := m(genericNext)
+			return wrappedHandler(ctx)
+		}
+	}
+}
+
+// adaptGeneralToTextMiddleware converts a general MiddlewareFunc to TextMiddlewareFunc
+func adaptGeneralToTextMiddleware(m MiddlewareFunc) TextMiddlewareFunc {
+	return func(next TextHandlerFunc) TextHandlerFunc {
+		return func(ctx *Context, text string) error {
+			// Convert TextHandlerFunc to HandlerFunc for the general middleware
+			genericNext := func(ctx *Context) error {
+				return next(ctx, text)
+			}
+			// Apply general middleware and convert back
+			wrappedHandler := m(genericNext)
+			return wrappedHandler(ctx)
+		}
+	}
+}
+
+// adaptGeneralToDefaultTextMiddleware converts a general MiddlewareFunc to DefaultTextMiddlewareFunc
+func adaptGeneralToDefaultTextMiddleware(m MiddlewareFunc) DefaultTextMiddlewareFunc {
+	return func(next DefaultTextHandlerFunc) DefaultTextHandlerFunc {
+		return func(ctx *Context, fullMessageText string) error {
+			// Convert DefaultTextHandlerFunc to HandlerFunc for the general middleware
+			genericNext := func(ctx *Context) error {
+				return next(ctx, fullMessageText)
+			}
+			// Apply general middleware and convert back
+			wrappedHandler := m(genericNext)
+			return wrappedHandler(ctx)
+		}
+	}
+}
+
+// adaptGeneralToCallbackMiddleware converts a general MiddlewareFunc to CallbackMiddlewareFunc
+func adaptGeneralToCallbackMiddleware(m MiddlewareFunc) CallbackMiddlewareFunc {
+	return func(next CallbackHandlerFunc) CallbackHandlerFunc {
+		return func(ctx *Context, fullCallbackData string, extractedData string) error {
+			// Convert CallbackHandlerFunc to HandlerFunc for the general middleware
+			genericNext := func(ctx *Context) error {
+				return next(ctx, fullCallbackData, extractedData)
+			}
+			// Apply general middleware and convert back
+			wrappedHandler := m(genericNext)
+			return wrappedHandler(ctx)
+		}
+	}
+}
+
+// adaptGeneralToFlowStepInputMiddleware converts a general MiddlewareFunc to FlowStepInputMiddlewareFunc
+func adaptGeneralToFlowStepInputMiddleware(m MiddlewareFunc) FlowStepInputMiddlewareFunc {
+	return func(next FlowStepInputHandlerFunc) FlowStepInputHandlerFunc {
+		return func(ctx *Context, input string) error {
+			// Convert FlowStepInputHandlerFunc to HandlerFunc for the general middleware
+			genericNext := func(ctx *Context) error {
+				return next(ctx, input)
+			}
+			// Apply general middleware and convert back
+			wrappedHandler := m(genericNext)
+			return wrappedHandler(ctx)
+		}
+	}
+}
+
+// Use adds a general middleware that will be applied to ALL handler types (commands, text, callbacks, flow steps).
+// This middleware is automatically converted to the appropriate type-specific middleware and applied to all handlers.
+// Middlewares are applied in the reverse order they are added.
+//
+// Parameters:
+//   - m: The MiddlewareFunc to add to all handler types.
+func (b *Bot) Use(m MiddlewareFunc) {
+	b.middleware = append(b.middleware, m)
+	
+	// Convert general middleware to type-specific middleware and add to all types
+	b.UseCommandMiddleware(adaptGeneralToCommandMiddleware(m))
+	b.UseTextMiddleware(adaptGeneralToTextMiddleware(m))
+	b.UseDefaultTextMiddleware(adaptGeneralToDefaultTextMiddleware(m))
+	b.UseCallbackMiddleware(adaptGeneralToCallbackMiddleware(m))
+	b.UseFlowStepInputMiddleware(adaptGeneralToFlowStepInputMiddleware(m))
 }
 
 // UseCommandMiddleware adds a middleware that will be applied to all command handlers.
