@@ -8,8 +8,8 @@ import (
 func createTestBot() *Bot {
 	return &Bot{
 		api:              nil, // No API needed for template tests
-		handlers:         make(map[string]HandlerFunc),
-		textHandlers:     make(map[string]HandlerFunc),
+		handlers:         make(map[string]CommandHandlerFunc),
+		textHandlers:     make(map[string]TextHandlerFunc),
 		callbackRegistry: NewCallbackRegistry(),
 		stateManager:     NewInMemoryStateManager(),
 		flowManager:      NewFlowManager(NewInMemoryStateManager()),

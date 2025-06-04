@@ -17,17 +17,17 @@ Teleflow's conversational flow system is a powerful feature for creating structu
     - [Step Types (`StepType*`)](#step-types-steptype)
     - [Step Prompts (Implicit)](#step-prompts-implicit)
   - [Configuring Steps (`FlowStepBuilder`)](#configuring-steps-flowstepbuilder)
-    - [`OnStart(handler HandlerFunc)`](#onstarthandler-handlerfunc)
-    - [`OnInput(handler HandlerFunc)`](#oninputhandler-handlerfunc)
-    - [`WithValidator(validator FlowValidatorFunc)`](#withvalidatorvalidator-flowvalidatorfunc)
+    - [`OnStart(handler teleflow.FlowStepStartHandlerFunc)`](#onstarthandler-teleflowflowstepstarthandlerfunc)
+    - [`OnInput(handler teleflow.FlowStepInputHandlerFunc)`](#oninputhandler-teleflowflowstepinputhandlerfunc)
+    - [`WithValidator(validator teleflow.FlowValidatorFunc)`](#withvalidatorvalidator-teleflowflowvalidatorfunc)
     - [`NextStep(stepName string)`](#nextstepstepname-string)
     - [`AddTransition(input, nextStep string)`](#addtransitioninput-nextstep-string)
     - [`WithStepType(stepType FlowStepType)`](#withsteptypesteptype-flowsteptype)
     - [`StayOnInvalidInput()`](#stayoninvalidinput)
     - [`WithTimeout(timeout time.Duration)`](#withtimeouttimeout-timeduration)
   - [Setting Flow Completion and Cancellation Handlers](#setting-flow-completion-and-cancellation-handlers)
-    - [`OnComplete(handler HandlerFunc)`](#oncompletehandler-handlerfunc)
-    - [`OnCancel(handler HandlerFunc)`](#oncancelhandler-handlerfunc)
+    - [`OnComplete(handler teleflow.FlowCompletionHandlerFunc)`](#oncompletehandler-teleflowflowcompletionhandlerfunc)
+    - [`OnCancel(handler teleflow.FlowCancellationHandlerFunc)`](#oncancelhandler-teleflowflowcancellationhandlerfunc)
   - [Building the Flow](#building-the-flow)
 - [Registering a Flow](#registering-a-flow)
 - [Starting a Flow](#starting-a-flow)
@@ -66,16 +66,16 @@ Refer to `core/flow.go` for the source.
 The main structure representing a conversational flow. It contains:
 - `Name`: A unique name for the flow.
 - `Steps`: An ordered slice of `FlowStep` pointers.
-- `OnComplete`: A `HandlerFunc` called when the flow successfully finishes.
-- `OnCancel`: A `HandlerFunc` called if the flow is cancelled.
+- `OnComplete`: A `teleflow.FlowCompletionHandlerFunc` called when the flow successfully finishes. Signature: `func(ctx *teleflow.Context, flowData map[string]interface{}) error`.
+- `OnCancel`: A `teleflow.FlowCancellationHandlerFunc` called if the flow is cancelled. Signature: `func(ctx *teleflow.Context, flowData map[string]interface{}) error`.
 - `Timeout`: A `time.Duration` for the entire flow (not yet fully implemented for automatic timeout).
 
 ### `FlowStep`
 Represents a single step within a flow. Key attributes:
 - `Name`: A unique name for the step within the flow.
-- `StartHandler`: A `HandlerFunc` executed when the user *enters* this step. Use this to send prompts or initial messages for the step.
-- `Handler`: A `HandlerFunc` executed when the user *provides input* while on this step.
-- `Validator`: A `FlowValidatorFunc` to validate user input for this step.
+- `StartHandler`: A `teleflow.FlowStepStartHandlerFunc` executed when the user *enters* this step. Use this to send prompts or initial messages for the step. Its signature is `func(ctx *teleflow.Context) error`.
+- `Handler`: A `teleflow.FlowStepInputHandlerFunc` executed when the user *provides input* while on this step (this is the handler set by `OnInput`). Its signature is `func(ctx *teleflow.Context, input string) error`.
+- `Validator`: A `teleflow.FlowValidatorFunc` to validate user input for this step. Its signature is `func(input string) (isValid bool, message string, validatedInput interface{}, err error)`.
 - `NextStep`: The name of the default next step if no other transition matches.
 - `Transitions`: A map `map[string]string` where keys are user inputs and values are the names of the next step to transition to.
 - `StepType`: A `FlowStepType` (e.g., `StepTypeText`, `StepTypeChoice`). Currently, this is more for informational purposes; UI automation based on type is a potential future enhancement.
@@ -140,40 +140,66 @@ While `WithPrompt` is a placeholder, the common pattern is to send the prompt me
 ### Configuring Steps (`FlowStepBuilder`)
 The `FlowStepBuilder` (returned by `flowBuilder.Step()`) offers methods to configure each step:
 
-#### `OnStart(handler HandlerFunc)`
-Sets a handler to be executed when the user enters this step. Ideal for sending the step's question or instructions.
+#### `OnStart(handler teleflow.FlowStepStartHandlerFunc)`
+Sets a handler (`func(ctx *teleflow.Context) error`) to be executed when the user enters this step. Ideal for sending the step's question or instructions.
 ```go
 .OnStart(func(ctx *teleflow.Context) error {
     return ctx.Reply("Please enter your email address:")
 })
 ```
 
-#### `OnInput(handler HandlerFunc)`
-Sets a handler to be executed when the user provides input for this step. This handler is called *after* validation (if any) and *before* transitioning to the next step. You can process the input here, save it to `ctx.data`, etc.
+#### `OnInput(handler teleflow.FlowStepInputHandlerFunc)`
+Sets a handler (`func(ctx *teleflow.Context, input string) error`) to be executed when the user provides input for this step. This handler is called *after* successful validation and *before* transitioning to the next step.
+The `input string` parameter to this handler is the raw text or callback data provided by the user if no `FlowValidatorFunc` was set or if the validator returned `nil` for `validatedInput`.
+If a `FlowValidatorFunc` was set and returned a non-nil `validatedInput` (e.g., a parsed number, a custom struct), you can access this richer, potentially type-converted, object using `ctx.Get("validated_input")`. The `input string` parameter will still be the original user input in this case.
+You can process the input (either the string parameter or the `validated_input` from context) here, save data using `ctx.Set()`, etc.
 ```go
 .OnInput(func(ctx *teleflow.Context) error {
-    email := ctx.Update.Message.Text
-    ctx.Set("user_email", email) // Save to flow data
-    log.Printf("User entered email: %s", email)
+.OnInput(func(ctx *teleflow.Context, input string) error {
+    // 'input' is the raw user input string.
+    // If a validator provided a richer object, access it:
+    var validatedData interface{}
+    if vInput, ok := ctx.Get("validated_input"); ok {
+        validatedData = vInput
+        // Example: if validator returned an int
+        // if age, ok := validatedData.(int); ok { ... }
+    } else {
+        // Fallback to raw input if no validated_input or if it's not needed
+        validatedData = input
+    }
+    ctx.Set("user_email", validatedData) // Save to flow data
+    log.Printf("User input: %s, Validated data: %v", input, validatedData)
     return nil
 })
 ```
 
-#### `WithValidator(validator FlowValidatorFunc)`
-Sets an input validator for the step. The `FlowValidatorFunc` has the signature `func(input string) (bool, string)`. It returns `true` if valid, or `false` and an error/help message if invalid.
+#### `WithValidator(validator teleflow.FlowValidatorFunc)`
+Sets an input validator for the step. The `teleflow.FlowValidatorFunc` has the signature:
+`func(input string) (isValid bool, message string, validatedInput interface{}, err error)`
+It returns:
+- `isValid bool`: `true` if the input is valid, `false` otherwise.
+- `message string`: A message to be sent to the user, especially if validation fails (e.g., "Please enter a valid email.").
+- `validatedInput interface{}`: The original input, potentially transformed or type-converted. This value can be accessed in the subsequent `FlowStepInputHandlerFunc`. If validation fails, this is typically `nil`.
+- `err error`: An optional error object if something went wrong during validation beyond simple invalid input (e.g., a database lookup failed). If `err` is not `nil`, the flow processing for the step typically stops, and the error might be logged.
 ```go
 import "net/mail"
 
-func isValidEmail(input string) (bool, string) {
-    _, err := mail.ParseAddress(input)
+func emailValidator(input string) (bool, string, interface{}, error) {
+    addr, err := mail.ParseAddress(input)
     if err != nil {
-        return false, "Please enter a valid email address (e.g., user@example.com)."
+        return false, "Please enter a valid email address (e.g., user@example.com).", nil, nil
     }
-    return true, ""
+    // Return the parsed address as validatedInput for potential use in OnInput
+    return true, "", addr, nil
 }
 
+// In OnInput, you could then access the mail.Address struct:
+// if validatedAddr, ok := ctx.Get("validated_input").(*mail.Address); ok {
+//     log.Printf("Validated email address object: %s", validatedAddr.Address)
+// }
+
 // ...
-.WithValidator(isValidEmail)
+.WithValidator(emailValidator)
 ```
 
 #### `NextStep(stepName string)`
@@ -212,25 +238,26 @@ Sets a timeout specific to this step (not yet fully implemented for automatic ti
 
 ### Setting Flow Completion and Cancellation Handlers
 
-#### `OnComplete(handler HandlerFunc)`
-Sets a handler that is executed when the entire flow completes successfully (i.e., after the last step that doesn't transition to another step).
+#### `OnComplete(handler teleflow.FlowCompletionHandlerFunc)`
+Sets a handler (`func(ctx *teleflow.Context, flowData map[string]interface{}) error`) that is executed when the entire flow completes successfully.
+The `flowData` parameter is a map containing all data collected during the flow (i.e., items set using `ctx.Set("key", value)` in various step handlers).
 ```go
-myFlow.OnComplete(func(ctx *teleflow.Context) error {
-    // Access all collected data from ctx.Get("key_from_step1"), ctx.Get("key_from_step2")
-    name := ctx.Get("user_name").(string) // Type assertion might be needed
-    email := ctx.Get("user_email").(string)
-    log.Printf("Flow completed. Name: %s, Email: %s", name, email)
+myFlow.OnComplete(func(ctx *teleflow.Context, flowData map[string]interface{}) error {
+    name, _ := flowData["user_name"].(string) // Type assertion might be needed
+    email, _ := flowData["user_email"].(string)
+    log.Printf("Flow completed. Name: %s, Email: %s. All data: %v", name, email, flowData)
     return ctx.Reply("Thank you for completing the registration!")
 })
 ```
 
-#### `OnCancel(handler HandlerFunc)`
-Sets a handler that is executed if the flow is explicitly cancelled (e.g., by `ctx.CancelFlow()` or an exit command).
+#### `OnCancel(handler teleflow.FlowCancellationHandlerFunc)`
+Sets a handler (`func(ctx *teleflow.Context, flowData map[string]interface{}) error`) that is executed if the flow is cancelled.
+The `flowData` parameter contains all data collected up to the point of cancellation.
 ```go
-myFlow.OnCancel(func(ctx *teleflow.Context) error {
-    log.Printf("Flow cancelled by user %d", ctx.UserID())
-    // Don't use ctx.Reply here if FlowConfig.ExitMessage is already handling it.
-    // This handler is for any additional cleanup or logging.
+myFlow.OnCancel(func(ctx *teleflow.Context, flowData map[string]interface{}) error {
+    log.Printf("Flow cancelled by user %d. Data collected: %v", ctx.UserID(), flowData)
+    // FlowConfig.ExitMessage handles user-facing messages for command-based cancellations.
+    // This handler is for cleanup, logging, or custom messages for programmatic cancellations.
     return nil
 })
 ```
@@ -267,21 +294,26 @@ When a user in a flow sends an update:
 1. The `FlowManager` retrieves the user's current flow state.
 2. The `StartHandler` of the current step (if not already processed for this entry) or the `Handler` (for input) is invoked.
 3. **Input Handling**: The user's input (text, callback data) is made available in `ctx.Update`.
-4. **Validation**: If a `Validator` is set for the current step, it's executed.
-   - If invalid and `StayOnInvalidInput` is true, the `InvalidInputMessage` or validator's message is sent, and the user stays on the current step.
-   - If invalid and `StayOnInvalidInput` is false (or if no specific handling), the flow might be implicitly stuck or require custom logic to proceed/cancel.
-5. **`OnInput` Handler**: If the step has an `OnInput` handler, it's called after successful validation. This is where you typically process and store the validated input using `ctx.Set("my_data_key", value)`.
+4. **Validation**: If a `teleflow.FlowValidatorFunc` is set for the current step, it's executed with the user's input.
+   - The validator returns `isValid bool`, `message string`, `validatedInput interface{}`, and `err error`.
+   - If `isValid` is `false`, the `message` from the validator is typically sent to the user as a reply, and the user stays on the current step (assuming `StayOnInvalidInput` behavior, which is common).
+   - If `err` is not `nil`, an error has occurred during validation, and the flow processing for this input usually stops. The error should be logged.
+   - The `validatedInput` (which can be the original input, a transformed version, or a richer type) is stored in the context under the key `"validated_input"` if `isValid` is `true` and `validatedInput` is not `nil`.
+5. **`OnInput` Handler**: If the step has a `teleflow.FlowStepInputHandlerFunc` (set via `OnInput`), it's called *after* successful validation (`isValid` was true and `err` was nil).
+   - The handler receives the original user input as its `input string` parameter.
+   - It can also access the `validatedInput` returned by the validator (if any) using `ctx.Get("validated_input")`. This is useful if the validator performed type conversion or returned a more complex object.
+   - This is where you typically process the input (either the raw `input` string or the richer `validated_input`) and store any necessary data using `ctx.Set("my_data_key", value)`.
 6. **Transitions**:
    - The `FlowManager` checks `Transitions` on the current step against the user's input.
    - If a match is found, the user moves to the specified next step.
    - Otherwise, the default `NextStep` for the current step is used.
    - If no `NextStep` and no matching transition, the flow is considered complete.
-7. **Data Management**: Data set via `ctx.Set()` during a step is persisted in `UserFlowState.Data` and is available in subsequent steps and in the `OnComplete` handler.
+7. **Data Management**: Data set via `ctx.Set("key", value)` during any step handler (`OnStart`, `OnInput`) is persisted in the `UserFlowState.Data` map. This data is available in subsequent step handlers (via `ctx.Get("key")`) and is passed as the `flowData map[string]interface{}` parameter to the flow's `OnComplete` and `OnCancel` handlers.
 
 ## Managing Flow State
 
 ### Accessing Flow Data in Handlers
-Within any step handler (`OnStart`, `OnInput`) or the flow's `OnComplete` handler, you can access data collected in previous steps using `ctx.Get(key)`:
+Within any step handler (`teleflow.FlowStepStartHandlerFunc`, `teleflow.FlowStepInputHandlerFunc`) you can access data collected in previous steps using `ctx.Get(key)`. The flow's `teleflow.FlowCompletionHandlerFunc` and `teleflow.FlowCancellationHandlerFunc` receive all collected data directly as a `flowData map[string]interface{}` parameter.
 ```go
 .OnInput(func(ctx *teleflow.Context) error {
     // Assuming "user_name" was collected in a previous step
@@ -358,16 +390,17 @@ import (
 	teleflow "github.com/kslamph/teleflow/core"
 )
 
-// Validator for age (simple number check)
-func ageValidator(input string) (bool, string) {
+// Validator for age
+func ageValidator(input string) (bool, string, interface{}, error) {
 	age, err := strconv.Atoi(input)
 	if err != nil {
-		return false, "Please enter a valid number for your age."
+		return false, "Please enter a valid number for your age.", nil, nil
 	}
 	if age <= 0 || age > 120 {
-		return false, "Please enter a realistic age."
+		return false, "Please enter a realistic age.", nil, nil
 	}
-	return true, ""
+	// Return the parsed int as validatedInput
+	return true, "", age, nil
 }
 
 func main() {
@@ -383,40 +416,49 @@ func main() {
 	// Define the registration flow
 	registrationFlow := teleflow.NewFlow("user_registration").
 		Step("get_name"). // Step 1: Get name
-		OnStart(func(ctx *teleflow.Context) error {
+		OnStart(func(ctx *teleflow.Context) error { // FlowStepStartHandlerFunc
 			return ctx.Reply("Welcome to registration! What's your full name?")
 		}).
-		OnInput(func(ctx *teleflow.Context) error {
-			ctx.Set("reg_name", ctx.Update.Message.Text) // Store name
+		OnInput(func(ctx *teleflow.Context, input string) error { // FlowStepInputHandlerFunc
+			ctx.Set("reg_name", input) // Store name
 			return nil
 		}).
 		NextStep("get_age"). // Default next step
 
 		Step("get_age"). // Step 2: Get age
-		OnStart(func(ctx *teleflow.Context) error {
+		OnStart(func(ctx *teleflow.Context) error { // FlowStepStartHandlerFunc
 			name, _ := ctx.Get("reg_name")
 			return ctx.Reply(fmt.Sprintf("Nice to meet you, %s! How old are you?", name.(string)))
 		}).
-		WithValidator(ageValidator).
-		OnInput(func(ctx *teleflow.Context) error {
-			ctx.Set("reg_age", ctx.Update.Message.Text) // Store age
+		WithValidator(ageValidator). // FlowValidatorFunc
+		OnInput(func(ctx *teleflow.Context, input string) error { // FlowStepInputHandlerFunc
+			// The 'input' string is the raw text.
+			// The validated age (int) is available from the validator via context.
+			validatedAge, ok := ctx.Get("validated_input").(int)
+			if !ok {
+				// Should not happen if validator succeeded and returned an int
+				log.Println("Error: validated_input for age is not an int")
+				// Fallback to raw input, though it might not be ideal
+				ctx.Set("reg_age_str", input)
+				return fmt.Errorf("age validation issue, stored raw input")
+			}
+			ctx.Set("reg_age", validatedAge) // Store validated age (int)
 			return nil
 		}).
 		NextStep("confirm_details"). // Default next step
 
 		Step("confirm_details"). // Step 3: Confirmation
 		WithStepType(teleflow.StepTypeConfirmation). // Informational
-		OnStart(func(ctx *teleflow.Context) error {
-			name, _ := ctx.Get("reg_name")
-			age, _ := ctx.Get("reg_age")
-			
-			// Create an inline keyboard for confirmation
+		OnStart(func(ctx *teleflow.Context) error { // FlowStepStartHandlerFunc
+			name, _ := ctx.Get("reg_name").(string)
+			age, _ := ctx.Get("reg_age").(int) // Age is now stored as int
+
 			kb := teleflow.NewInlineKeyboard().
 				AddButton("✅ Yes, looks good!", "reg_confirm_yes").
 				AddButton("❌ No, start over", "reg_confirm_no").AddRow()
-			
+
 			return ctx.Reply(
-				fmt.Sprintf("Please confirm your details:\nName: %s\nAge: %s", name.(string), age.(string)),
+				fmt.Sprintf("Please confirm your details:\nName: %s\nAge: %d", name, age), // Use %d for int
 				kb,
 			)
 		}).
@@ -426,25 +468,24 @@ func main() {
 		// No default NextStep here, relies on transitions. Or could loop to self.
 
 		Step("registration_complete_step"). // A dummy step to signify completion before OnComplete
-		OnStart(func(ctx *teleflow.Context) error {
-			// This step's OnStart will be called, then the flow's OnComplete
-			// We could also have put the final reply in OnComplete directly
-			// if this step had no specific action.
+		OnStart(func(ctx *teleflow.Context) error { // FlowStepStartHandlerFunc
+			// This step's OnStart will be called, then the flow's OnComplete.
+			// It's a good place for a "processing" message before the final OnComplete.
 			return ctx.Reply("Thanks! Processing your registration...")
 		}).
 		// No NextStep, so flow will complete after this.
 
-		OnComplete(func(ctx *teleflow.Context) error {
-			name, _ := ctx.Get("reg_name")
-			age, _ := ctx.Get("reg_age")
-			log.Printf("User %d completed registration. Name: %s, Age: %s", ctx.UserID(), name, age)
+		OnComplete(func(ctx *teleflow.Context, flowData map[string]interface{}) error { // FlowCompletionHandlerFunc
+			name, _ := flowData["reg_name"].(string)
+			age, _ := flowData["reg_age"].(int) // Age is int
+			log.Printf("User %d completed registration. Name: %s, Age: %d. Data: %v", ctx.UserID(), name, age, flowData)
 			// Here you would typically save to a database
-			return ctx.Reply(fmt.Sprintf("Registration successful for %s, age %s! Welcome!", name.(string), age.(string)))
+			return ctx.Reply(fmt.Sprintf("Registration successful for %s, age %d! Welcome!", name, age))
 		}).
-		OnCancel(func(ctx *teleflow.Context) error {
-			log.Printf("User %d cancelled registration.", ctx.UserID())
+		OnCancel(func(ctx *teleflow.Context, flowData map[string]interface{}) error { // FlowCancellationHandlerFunc
+			log.Printf("User %d cancelled registration. Data collected: %v", ctx.UserID(), flowData)
 			// ExitMessage from FlowConfig will be sent automatically if cancelled by command.
-			// If cancelled programmatically (ctx.CancelFlow()), you might send a message here.
+			// This handler is for additional cleanup or custom messages if needed.
 			return nil
 		}).
 		Build()

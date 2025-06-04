@@ -1,8 +1,11 @@
 package teleflow
 
 import (
+	// For FlowValidatorFunc new signature
+
 	"fmt"
 	"log"
+	"strconv" // For ChoiceValidator
 	"time"
 )
 
@@ -83,8 +86,70 @@ const (
 	StepTypeCustom
 )
 
-// FlowValidatorFunc defines the function signature for input validation
-type FlowValidatorFunc func(input string) (bool, string)
+// FlowValidatorFunc defines the function signature for input validation within a flow step.
+// It is called with the raw user input string.
+//
+// Parameters:
+//   - input: The raw string input from the user.
+//
+// Returns:
+//   - error: nil if the input is valid. If the input is invalid, it returns an error
+//     whose message (error.Error()) will be shown to the user.
+//     This error should not be used for internal validator processing errors;
+//     such errors should be logged within the validator and a user-friendly
+//     validation error message returned instead, or handle them in a way that
+//     doesn't expose internal details to the user.
+type FlowValidatorFunc func(input string) error
+
+// FlowStepStartHandlerFunc defines the function signature for handlers executed when a flow step begins.
+// This handler is called before prompting the user for input for the current step.
+// It can be used to send introductory messages, set up initial state for the step, or perform other preparatory actions.
+//
+// Parameters:
+//   - ctx: The context for the current update.
+//
+// Returns:
+//   - error: An error if processing failed, nil otherwise.
+type FlowStepStartHandlerFunc func(ctx *Context) error
+
+// FlowStepInputHandlerFunc defines the function signature for handlers that process user input for a flow step.
+// This handler is called after the user provides input for the current step and after any validator
+// associated with the step has successfully validated the input.
+//
+// Parameters:
+//   - ctx: The context for the current update.
+//   - input: The raw string input from the user. If a validator was configured for the step
+//     and ran, this input has been deemed valid by that validator.
+//     Transformations of input are no longer a direct return from validators;
+//     if needed, they should be handled within this input handler or a middleware,
+//     possibly by parsing the `input` string and setting derived values in `ctx`.
+//
+// Returns:
+//   - error: An error if processing failed, nil otherwise.
+type FlowStepInputHandlerFunc func(ctx *Context, input string) error
+
+// FlowCompletionHandlerFunc defines the function signature for handlers executed when a flow successfully completes.
+// This handler is called after the last step in the flow has been processed.
+//
+// Parameters:
+//   - ctx: The context for the current update.
+//   - flowData: A map containing all the data collected throughout the flow. Keys correspond
+//     to step names or keys set by validators/handlers (e.g., "validated_input").
+//
+// Returns:
+//   - error: An error if processing failed, nil otherwise.
+type FlowCompletionHandlerFunc func(ctx *Context, flowData map[string]interface{}) error
+
+// FlowCancellationHandlerFunc defines the function signature for handlers executed when a flow is cancelled.
+// This can happen if the user issues an exit command or if a step explicitly cancels the flow.
+//
+// Parameters:
+//   - ctx: The context for the current update.
+//   - flowData: A map containing data collected in the flow up to the point of cancellation.
+//
+// Returns:
+//   - error: An error if processing failed, nil otherwise.
+type FlowCancellationHandlerFunc func(ctx *Context, flowData map[string]interface{}) error
 
 // FlowTransition represents a transition between flow steps
 type FlowTransition struct {
@@ -141,16 +206,16 @@ type Flow struct {
 	Steps       []*FlowStep
 	stepMap     map[string]*FlowStep
 	transitions map[string][]string
-	OnComplete  HandlerFunc
-	OnCancel    HandlerFunc
+	OnComplete  FlowCompletionHandlerFunc
+	OnCancel    FlowCancellationHandlerFunc
 	Timeout     time.Duration
 }
 
 // FlowStep represents a single step in a flow
 type FlowStep struct {
 	Name                string
-	StartHandler        HandlerFunc // Called when entering the step
-	Handler             HandlerFunc // Called when receiving input
+	StartHandler        FlowStepStartHandlerFunc // Called when entering the step
+	Handler             FlowStepInputHandlerFunc // Called when receiving input
 	Validator           FlowValidatorFunc
 	NextStep            string
 	Transitions         map[string]string // input -> next step
@@ -214,14 +279,22 @@ func (fb *FlowBuilder) Step(name string) *FlowStepBuilder {
 	}
 }
 
-// OnComplete sets the completion handler
-func (fb *FlowBuilder) OnComplete(handler HandlerFunc) *FlowBuilder {
+// OnComplete sets the FlowCompletionHandlerFunc that is called when the flow successfully
+// finishes all its steps.
+//
+// Parameters:
+//   - handler: The FlowCompletionHandlerFunc to execute upon flow completion.
+func (fb *FlowBuilder) OnComplete(handler FlowCompletionHandlerFunc) *FlowBuilder {
 	fb.flow.OnComplete = handler
 	return fb
 }
 
-// OnCancel sets the cancellation handler
-func (fb *FlowBuilder) OnCancel(handler HandlerFunc) *FlowBuilder {
+// OnCancel sets the FlowCancellationHandlerFunc that is called if the flow is cancelled
+// before completion (e.g., by an exit command or programmatically).
+//
+// Parameters:
+//   - handler: The FlowCancellationHandlerFunc to execute upon flow cancellation.
+func (fb *FlowBuilder) OnCancel(handler FlowCancellationHandlerFunc) *FlowBuilder {
 	fb.flow.OnCancel = handler
 	return fb
 }
@@ -237,7 +310,11 @@ type FlowStepBuilder struct {
 	step        *FlowStep
 }
 
-// WithValidator adds input validation to the step
+// WithValidator sets a FlowValidatorFunc for the current step.
+// This function will be called to validate user input for this step before the OnInput handler.
+//
+// Parameters:
+//   - validator: The FlowValidatorFunc to use for input validation.
 func (fsb *FlowStepBuilder) WithValidator(validator FlowValidatorFunc) *FlowStepBuilder {
 	fsb.step.Validator = validator
 	return fsb
@@ -249,14 +326,23 @@ func (fsb *FlowStepBuilder) NextStep(stepName string) *FlowStepBuilder {
 	return fsb
 }
 
-// OnStart sets the step start handler (called when entering the step)
-func (fsb *FlowStepBuilder) OnStart(handler HandlerFunc) *FlowStepBuilder {
+// OnStart sets the FlowStepStartHandlerFunc for the current step.
+// This handler is executed when the flow transitions into this step, before prompting the user for input.
+//
+// Parameters:
+//   - handler: The FlowStepStartHandlerFunc to execute when the step starts.
+func (fsb *FlowStepBuilder) OnStart(handler FlowStepStartHandlerFunc) *FlowStepBuilder {
 	fsb.step.StartHandler = handler
 	return fsb
 }
 
-// OnInput sets the step input handler
-func (fsb *FlowStepBuilder) OnInput(handler HandlerFunc) *FlowStepBuilder {
+// OnInput sets the FlowStepInputHandlerFunc for the current step.
+// This handler is executed after the user provides input and (if configured) after the input
+// has been successfully validated by a FlowValidatorFunc.
+//
+// Parameters:
+//   - handler: The FlowStepInputHandlerFunc to process user input for this step.
+func (fsb *FlowStepBuilder) OnInput(handler FlowStepInputHandlerFunc) *FlowStepBuilder {
 	fsb.step.Handler = handler
 	return fsb
 }
@@ -290,13 +376,21 @@ func (fsb *FlowStepBuilder) Step(name string) *FlowStepBuilder {
 	return fsb.flowBuilder.Step(name)
 }
 
-// OnComplete sets the completion handler
-func (fsb *FlowStepBuilder) OnComplete(handler HandlerFunc) *FlowBuilder {
+// OnComplete sets the FlowCompletionHandlerFunc for the entire flow.
+// This is a convenience method that calls the underlying FlowBuilder's OnComplete.
+//
+// Parameters:
+//   - handler: The FlowCompletionHandlerFunc to execute upon flow completion.
+func (fsb *FlowStepBuilder) OnComplete(handler FlowCompletionHandlerFunc) *FlowBuilder {
 	return fsb.flowBuilder.OnComplete(handler)
 }
 
-// OnCancel sets the cancellation handler
-func (fsb *FlowStepBuilder) OnCancel(handler HandlerFunc) *FlowBuilder {
+// OnCancel sets the FlowCancellationHandlerFunc for the entire flow.
+// This is a convenience method that calls the underlying FlowBuilder's OnCancel.
+//
+// Parameters:
+//   - handler: The FlowCancellationHandlerFunc to execute upon flow cancellation.
+func (fsb *FlowStepBuilder) OnCancel(handler FlowCancellationHandlerFunc) *FlowBuilder {
 	return fsb.flowBuilder.OnCancel(handler)
 }
 
@@ -380,28 +474,67 @@ func (fm *FlowManager) HandleUpdate(ctx *Context) (bool, error) {
 	}
 
 	// Validate input if validator exists
+	// var validatedInput interface{} // To store the validated input for the handler
 	if currentStep.Validator != nil {
 		var inputToValidate string
 		if ctx.Update.Message != nil {
 			inputToValidate = ctx.Update.Message.Text
 		} else if ctx.Update.CallbackQuery != nil {
+			// For callbacks, data might not be suitable for direct validation by a text validator.
+			// This assumes validators are primarily for text or simple callback data.
 			inputToValidate = ctx.Update.CallbackQuery.Data
 		}
 
 		if inputToValidate != "" {
-			if valid, helpText := currentStep.Validator(inputToValidate); !valid {
+			validationErr := currentStep.Validator(inputToValidate)
+
+			if validationErr != nil {
 				exitHint := ""
 				if fm.botConfig != nil && len(fm.botConfig.ExitCommands) > 0 {
 					exitHint = fmt.Sprintf("\n\nType '%s' to cancel.", fm.botConfig.ExitCommands[0])
 				}
-				return true, ctx.Reply(fmt.Sprintf("❌ Invalid input.\n\n%s%s", helpText, exitHint))
+				replyMsg := validationErr.Error()
+				if replyMsg == "" {
+					replyMsg = "Invalid input." // Default message if validator returns empty
+				}
+				return true, ctx.Reply(fmt.Sprintf("❌ %s%s", replyMsg, exitHint))
 			}
+
+			ctx.Set("validated_input", inputToValidate) // Make it available in context
 		}
 	}
 
-	// Execute step handler
+	// Execute step input handler (OnInput)
 	if currentStep.Handler != nil {
-		if err := currentStep.Handler(ctx); err != nil {
+		var inputForHandler string
+		// Prefer validated input if available
+		if valInput, ok := ctx.Get("validated_input"); ok {
+			// The handler expects a string, so we need to decide how to pass validatedInput.
+			// If validatedInput is not a string, this might be an issue or require type assertion/conversion.
+			// For now, assuming validatedInput can be reasonably converted or the handler is flexible.
+			// This is a simplification; a more robust system might involve typed validated input.
+			if strVal, okStr := valInput.(string); okStr {
+				inputForHandler = strVal
+			} else {
+				// If validated_input is not a string, pass the original input or handle error
+				// For now, let's fall back to original input if validated_input isn't a string.
+				// This part might need refinement based on how FlowStepInputHandlerFunc is used with validated types.
+				if ctx.Update.Message != nil {
+					inputForHandler = ctx.Update.Message.Text
+				} else if ctx.Update.CallbackQuery != nil {
+					inputForHandler = ctx.Update.CallbackQuery.Data
+				}
+				log.Printf("Warning: validated_input for step %s was not a string, using original input for handler.", currentStep.Name)
+			}
+		} else { // No validated input, use raw input
+			if ctx.Update.Message != nil {
+				inputForHandler = ctx.Update.Message.Text
+			} else if ctx.Update.CallbackQuery != nil {
+				inputForHandler = ctx.Update.CallbackQuery.Data
+			}
+		}
+
+		if err := currentStep.Handler(ctx, inputForHandler); err != nil {
 			return true, err
 		}
 	}
@@ -429,14 +562,16 @@ func (fm *FlowManager) HandleUpdate(ctx *Context) (bool, error) {
 		// Flow completed
 		delete(fm.userFlows, ctx.UserID())
 		if flow.OnComplete != nil {
-			return true, flow.OnComplete(ctx)
+			// Pass the accumulated flow data to the OnComplete handler
+			return true, flow.OnComplete(ctx, userState.Data)
 		}
 		return true, nil
 	} else if nextStep == "_cancel_" {
 		// Flow cancelled
 		delete(fm.userFlows, ctx.UserID())
 		if flow.OnCancel != nil {
-			return true, flow.OnCancel(ctx)
+			// Pass the accumulated flow data to the OnCancel handler
+			return true, flow.OnCancel(ctx, userState.Data)
 		}
 		return true, nil
 	} else if nextStep == currentStep.Name {
@@ -465,13 +600,15 @@ func (fm *FlowManager) HandleUpdate(ctx *Context) (bool, error) {
 		}
 
 		// Execute start handler for the new step if it exists
-		newStep := flow.stepMap[nextStep]
-		if newStep != nil && newStep.StartHandler != nil {
-			// Update context with the new state data
-			for key, value := range userState.Data {
+		newStepConfiguration := flow.stepMap[nextStep]
+		if newStepConfiguration != nil && newStepConfiguration.StartHandler != nil {
+			// Update context with the potentially modified user state data before calling StartHandler
+			for key, value := range userState.Data { // userState.Data might have been updated by the previous step's handler
 				ctx.Set(key, value)
 			}
-			return true, newStep.StartHandler(ctx)
+			if err := newStepConfiguration.StartHandler(ctx); err != nil {
+				return true, err
+			}
 		}
 
 		return true, nil
@@ -512,42 +649,36 @@ func (fm *FlowManager) determineNextStep(userFlow *UserFlowState, input string) 
 
 // NumberValidator validates numeric input
 func NumberValidator() FlowValidatorFunc {
-	return func(input string) (bool, string) {
+	return func(input string) error {
 		if input == "" {
-			return false, "Please enter a number."
+			return fmt.Errorf("Please enter a number.")
 		}
-
-		// Simple numeric validation - check if input contains only digits, decimal point, and optional minus sign
-		for i, char := range input {
-			if char >= '0' && char <= '9' {
-				continue
+		_, parseErr := strconv.Atoi(input)
+		if parseErr != nil {
+			// Check if it's a float
+			_, floatParseErr := strconv.ParseFloat(input, 64)
+			if floatParseErr != nil {
+				return fmt.Errorf("Please enter a valid number (integer or decimal).")
 			}
-			if char == '.' {
-				continue
-			}
-			if char == '-' && i == 0 {
-				continue
-			}
-			return false, "Please enter a valid number."
+			return nil
 		}
-
-		return true, ""
+		return nil
 	}
 }
 
 // ChoiceValidator validates choice input against allowed options
 func ChoiceValidator(choices []string) FlowValidatorFunc {
-	return func(input string) (bool, string) {
+	return func(input string) error {
 		if input == "" {
-			return false, fmt.Sprintf("Please choose one of: %v", choices)
+			return fmt.Errorf("Please choose one of: %v", choices)
 		}
 
 		for _, choice := range choices {
 			if input == choice {
-				return true, ""
+				return nil
 			}
 		}
 
-		return false, fmt.Sprintf("Please choose one of: %v", choices)
+		return fmt.Errorf("Please choose one of: %v", choices)
 	}
 }
