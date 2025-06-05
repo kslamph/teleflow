@@ -54,3 +54,4 @@ logs/
 .roomodes
 .roo/
 generate_mcp_yaml.py
+memory-bank/
