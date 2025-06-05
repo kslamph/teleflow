@@ -144,10 +144,28 @@ Explore further in the [Middleware Guide](middleware-guide.md).
 For multi-step interactions like registrations or surveys, Teleflow provides a powerful Flow system.
 ```go
 registrationFlow := teleflow.NewFlow("register").
-    Step("name").WithPrompt("What's your name?").NextStep("email").
-    Step("email").WithPrompt("What's your email?").
-    OnComplete(func(ctx *teleflow.Context) error {
-        // Access flow data from ctx.Get("name"), ctx.Get("email")
+    Step("name").
+        OnStart(func(ctx *teleflow.Context) error {
+            return ctx.Reply("What's your name?")
+        }).
+        OnInput(func(ctx *teleflow.Context, input string) error {
+            ctx.Set("name", input)
+            return nil
+        }).
+        NextStep("email").
+    Step("email").
+        OnStart(func(ctx *teleflow.Context) error {
+            return ctx.Reply("What's your email?")
+        }).
+        OnInput(func(ctx *teleflow.Context, input string) error {
+            ctx.Set("email", input)
+            return nil
+        }).
+    OnComplete(func(ctx *teleflow.Context, flowData map[string]interface{}) error {
+        // Access flow data from flowData map
+        name := flowData["name"].(string)
+        email := flowData["email"].(string)
+        log.Printf("Registration complete for %s (%s)", name, email)
         return ctx.Reply("Registration complete!")
     }).Build()
 bot.RegisterFlow(registrationFlow)

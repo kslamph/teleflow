@@ -1,4 +1,3 @@
-
 // Menu Button System provides comprehensive menu button management for Telegram bots.
 // This system enables customization of the bot's menu button that appears next to the
 // text input field in Telegram chats.

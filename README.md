@@ -97,8 +97,8 @@ func main() {
 			OnStart(func(ctx *teleflow.Context) error {
 				return ctx.Reply("Let's register you! What's your name?")
 			}).
-			OnInput(func(ctx *teleflow.Context) error {
-				ctx.Set("name", ctx.Update.Message.Text) // Save name to flow data
+			OnInput(func(ctx *teleflow.Context, input string) error {
+				ctx.Set("name", input) // Save name to flow data
 				return nil
 			}).
 			NextStep("get_age").
@@ -107,16 +107,16 @@ func main() {
 				name, _ := ctx.Get("name")
 				return ctx.Reply(fmt.Sprintf("Nice, %s! How old are you?", name.(string)))
 			}).
-			OnInput(func(ctx *teleflow.Context) error {
-				ctx.Set("age", ctx.Update.Message.Text) // Save age to flow data
+			OnInput(func(ctx *teleflow.Context, input string) error {
+				ctx.Set("age", input) // Save age to flow data
 				return nil
 			}).
-		OnComplete(func(ctx *teleflow.Context) error {
-			name, _ := ctx.Get("name")
-			age, _ := ctx.Get("age")
+		OnComplete(func(ctx *teleflow.Context, flowData map[string]interface{}) error {
+			name, _ := flowData["name"].(string)
+			age, _ := flowData["age"].(string)
 			// Type assertions are important for data retrieved from flow context
 			return ctx.Reply(fmt.Sprintf("Registration complete! Welcome %s, aged %s.",
-				name.(string), age.(string)))
+				name, age))
 		}).
 		Build()
 

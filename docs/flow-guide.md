@@ -14,7 +14,6 @@ Teleflow's conversational flow system is a powerful feature for creating structu
   - [Creating a New Flow](#creating-a-new-flow)
   - [Defining Steps](#defining-steps)
     - [Basic Text Steps](#basic-text-steps)
-    - [Step Types (`StepType*`)](#step-types-steptype)
     - [Step Prompts (Implicit)](#step-prompts-implicit)
   - [Configuring Steps (`FlowStepBuilder`)](#configuring-steps-flowstepbuilder)
     - [`OnStart(handler teleflow.FlowStepStartHandlerFunc)`](#onstarthandler-teleflowflowstepstarthandlerfunc)
@@ -22,7 +21,6 @@ Teleflow's conversational flow system is a powerful feature for creating structu
     - [`WithValidator(validator teleflow.FlowValidatorFunc)`](#withvalidatorvalidator-teleflowflowvalidatorfunc)
     - [`NextStep(stepName string)`](#nextstepstepname-string)
     - [`AddTransition(input, nextStep string)`](#addtransitioninput-nextstep-string)
-    - [`WithStepType(stepType FlowStepType)`](#withsteptypesteptype-flowsteptype)
     - [`StayOnInvalidInput()`](#stayoninvalidinput)
     - [`WithTimeout(timeout time.Duration)`](#withtimeouttimeout-timeduration)
   - [Setting Flow Completion and Cancellation Handlers](#setting-flow-completion-and-cancellation-handlers)
@@ -44,7 +42,7 @@ Teleflow's conversational flow system is a powerful feature for creating structu
   - [User-Initiated Cancellation (Exit Commands)](#user-initiated-cancellation-exit-commands)
 - [Flow Configuration (`FlowConfig`)](#flow-configuration-flowconfig)
 - [Advanced Flow Concepts](#advanced-flow-concepts)
-  - [Step Types and UI Automation (Future Enhancement Idea)](#step-types-and-ui-automation-future-enhancement-idea)
+  - [UI Automation (Future Enhancement Idea)](#ui-automation-future-enhancement-idea)
   - [Conditional Logic within Steps](#conditional-logic-within-steps)
   - [Reusing Flows](#reusing-flows)
 - [Example: User Registration Flow](#example-user-registration-flow)
@@ -78,7 +76,6 @@ Represents a single step within a flow. Key attributes:
 - `Validator`: A `teleflow.FlowValidatorFunc` to validate user input for this step. Its signature is `func(input string) (isValid bool, message string, validatedInput interface{}, err error)`.
 - `NextStep`: The name of the default next step if no other transition matches.
 - `Transitions`: A map `map[string]string` where keys are user inputs and values are the names of the next step to transition to.
-- `StepType`: A `FlowStepType` (e.g., `StepTypeText`, `StepTypeChoice`). Currently, this is more for informational purposes; UI automation based on type is a potential future enhancement.
 - `InvalidInputMessage`: A message to send if validation fails and `StayOnInvalidInput` is true.
 
 ### `FlowManager`
@@ -120,7 +117,7 @@ feedbackFlow.
 If `NextStep` is not explicitly set on a step, the builder automatically links it to the subsequently defined step.
 
 #### Basic Text Steps
-By default, steps are of `StepTypeText`. You'll typically use the `OnStart` handler to prompt the user and the `OnInput` handler (or just rely on `NextStep`) to process their text response.
+All flow steps accept text input by default. You'll typically use the `OnStart` handler to prompt the user and the `OnInput` handler (or just rely on `NextStep`) to process their text response.
 
 The `FlowStepBuilder` has a `WithPrompt(message string)` method. **Currently, this method is a placeholder and does not automatically send the prompt.** You must use `OnStart` to send messages.
 ```go
@@ -130,9 +127,6 @@ The `FlowStepBuilder` has a `WithPrompt(message string)` method. **Currently, th
         return ctx.Reply("What's your name?")
     })
 ```
-
-#### Step Types (`StepType*`)
-Constants like `StepTypeText`, `StepTypeChoice`, `StepTypeConfirmation` are available. While they don't automate UI generation yet, they can be used for your own logic within step handlers.
 
 #### Step Prompts (Implicit)
 While `WithPrompt` is a placeholder, the common pattern is to send the prompt message within the `OnStart` handler of a step.
@@ -222,12 +216,6 @@ Defines a conditional transition. If the user's input for the current step exact
     AddTransition("Yes", "final_step").
     AddTransition("No", "cancelled_step").
     NextStep("confirm_choice") // Stay on step if input is neither "Yes" nor "No"
-```
-
-#### `WithStepType(stepType FlowStepType)`
-Sets the `FlowStepType` (e.g., `teleflow.StepTypeConfirmation`).
-```go
-.WithStepType(teleflow.StepTypeConfirmation)
 ```
 
 #### `StayOnInvalidInput()`
@@ -367,8 +355,8 @@ bot, err := teleflow.NewBot(token,
 
 ## Advanced Flow Concepts
 
-### Step Types and UI Automation (Future Enhancement Idea)
-As noted in `improvement-recommendations.md`, `StepTypeChoice` and `StepTypeConfirmation` currently don't automatically generate UI (keyboards). This is a potential area for future enhancement. For now, you would implement the UI (e.g., sending a keyboard) within the `OnStart` handler of such steps and use `AddTransition` or `OnInput` to handle the response.
+### UI Automation (Future Enhancement Idea)
+As noted in `improvement-recommendations.md`, automatic UI generation for choice and confirmation steps is a potential area for future enhancement. Currently, you would implement the UI (e.g., sending a keyboard) within the `OnStart` handler of such steps and use `AddTransition` or `OnInput` to handle the response.
 
 ### Conditional Logic within Steps
 While `AddTransition` provides input-based branching, more complex conditional logic (e.g., based on previously collected data) can be implemented within `OnInput` or `OnStart` handlers. These handlers can then programmatically decide the next step by setting a specific value in `ctx.data` that a subsequent `OnInput` or a custom transition logic (not directly supported by `AddTransition` for dynamic values) could use, or by directly calling `ctx.StartFlow()` to a different sub-flow or restarting a step (though direct step jumping isn't a built-in feature, you'd manage it by structuring your flow transitions).
@@ -448,7 +436,6 @@ func main() {
 		NextStep("confirm_details"). // Default next step
 
 		Step("confirm_details"). // Step 3: Confirmation
-		WithStepType(teleflow.StepTypeConfirmation). // Informational
 		OnStart(func(ctx *teleflow.Context) error { // FlowStepStartHandlerFunc
 			name, _ := ctx.Get("reg_name").(string)
 			age, _ := ctx.Get("reg_age").(int) // Age is now stored as int

@@ -77,7 +77,7 @@ The `core` package contains all the fundamental types and functions for building
 
 ### Helper Functions and Constants
 
-The `core` package also includes various helper functions (e.g., for creating specific middleware, validators) and constants (e.g., `ParseModeMarkdownV2`, `StepTypeText`). These are best explored using `godoc` or by reading the respective source files.
+The `core` package also includes various helper functions (e.g., for creating specific middleware, validators) and constants (e.g., `ParseModeMarkdownV2`). These are best explored using `godoc` or by reading the respective source files.
 
 ## Further Exploration
 

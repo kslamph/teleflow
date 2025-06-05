@@ -1,11 +1,11 @@
-// Middleware Type System provides type-specific middleware function signatures 
+// Middleware Type System provides type-specific middleware function signatures
 // for Teleflow's handler system. This enables granular middleware application
 // to specific handler types rather than applying middleware globally.
 //
 // The type-specific middleware system offers:
 //   - Command-specific middleware for command handlers only
 //   - Text-specific middleware for text message handlers
-//   - Callback-specific middleware for callback query handlers  
+//   - Callback-specific middleware for callback query handlers
 //   - Flow step input middleware for flow input handlers
 //   - Type-safe middleware chaining with proper signatures
 //
