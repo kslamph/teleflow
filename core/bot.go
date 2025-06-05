@@ -12,9 +12,12 @@
 //
 // Basic Usage:
 //
-//	bot := teleflow.NewBot("YOUR_BOT_TOKEN")
+//	bot, err := teleflow.NewBot("YOUR_BOT_TOKEN")
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 //
-//	bot.HandleCommand("/start", func(ctx *teleflow.Context) error {
+//	bot.HandleCommand("start", func(ctx *teleflow.Context, command string, args string) error {
 //		return ctx.Reply("Hello! Welcome to Teleflow!")
 //	})
 //
@@ -23,18 +26,36 @@
 // Flow-based Conversations:
 //
 //	flow := teleflow.NewFlow("registration").
-//		AddStep("name", teleflow.StepTypeText, "What's your name?").
-//		AddStep("age", teleflow.StepTypeText, "How old are you?")
+//		Step("name").
+//		OnStart(func(ctx *teleflow.Context) error {
+//			return ctx.Reply("What's your name?")
+//		}).
+//		OnInput(func(ctx *teleflow.Context, input string) error {
+//			ctx.Set("name", input)
+//			return nil
+//		}).
+//		Step("age").
+//		OnStart(func(ctx *teleflow.Context) error {
+//			return ctx.Reply("How old are you?")
+//		}).
+//		OnInput(func(ctx *teleflow.Context, input string) error {
+//			ctx.Set("age", input)
+//			return nil
+//		}).
+//		OnComplete(func(ctx *teleflow.Context, flowData map[string]interface{}) error {
+//			name, _ := flowData["name"].(string)
+//			age, _ := flowData["age"].(string)
+//			return ctx.Reply(fmt.Sprintf("Welcome %s, age %s!", name, age))
+//		}).
+//		Build()
 //
-//	bot.RegisterFlow(flow, func(ctx *teleflow.Context, result map[string]string) error {
-//		return ctx.Reply(fmt.Sprintf("Welcome %s, age %s!", result["name"], result["age"]))
-//	})
+//	bot.RegisterFlow(flow)
 //
 // Middleware Integration:
 //
-//	bot.Use(teleflow.LoggingMiddleware())
-//	bot.Use(teleflow.AuthMiddleware(authChecker))
-//	bot.Use(teleflow.RateLimitMiddleware(10, time.Minute))
+//	bot.UseCommandMiddleware(adaptToCommandMiddleware(teleflow.LoggingMiddleware()))
+//	bot.UseCommandMiddleware(adaptAuthToCommandMiddleware(teleflow.AuthMiddleware, authChecker))
+//	bot.UseCommandMiddleware(adaptToCommandMiddleware(teleflow.RecoveryMiddleware()))
 //
 // For comprehensive examples and documentation, see the examples/ directory
 // and the documentation at docs/.
@@ -129,17 +150,17 @@ type AccessManager interface {
 
 // Bot is the main application structure
 type Bot struct {
-	api                     *tgbotapi.BotAPI
-	handlers                map[string]CommandHandlerFunc
-	textHandlers            map[string]TextHandlerFunc
-	defaultTextHandler      DefaultTextHandlerFunc // Field for the default text handler
-	callbackRegistry        *CallbackRegistry
-	stateManager            StateManager
-	flowManager             *FlowManager
-	templates               *template.Template
+	api                *tgbotapi.BotAPI
+	handlers           map[string]CommandHandlerFunc
+	textHandlers       map[string]TextHandlerFunc
+	defaultTextHandler DefaultTextHandlerFunc // Field for the default text handler
+	callbackRegistry   *CallbackRegistry
+	stateManager       StateManager
+	flowManager        *FlowManager
+	templates          *template.Template
 	// General middleware system
-	middleware              []MiddlewareFunc
-	
+	middleware []MiddlewareFunc
+
 	// Type-specific middleware
 	commandMiddleware       []CommandMiddlewareFunc
 	textMiddleware          []TextMiddlewareFunc
@@ -166,10 +187,10 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		handlers:     make(map[string]CommandHandlerFunc),
 		textHandlers: make(map[string]TextHandlerFunc),
 		// defaultTextHandler will be initialized as nil by default
-		callbackRegistry: NewCallbackRegistry(make([]CallbackMiddlewareFunc, 0)...), // Pass empty slice initially
-		stateManager:     NewInMemoryStateManager(),
-		flowManager:      NewFlowManager(NewInMemoryStateManager()),
-		templates:        template.New("botMessages"),
+		callbackRegistry:        NewCallbackRegistry(make([]CallbackMiddlewareFunc, 0)...), // Pass empty slice initially
+		stateManager:            NewInMemoryStateManager(),
+		flowManager:             NewFlowManager(NewInMemoryStateManager()),
+		templates:               template.New("botMessages"),
 		middleware:              make([]MiddlewareFunc, 0),
 		commandMiddleware:       make([]CommandMiddlewareFunc, 0),
 		textMiddleware:          make([]TextMiddlewareFunc, 0),
@@ -317,7 +338,7 @@ func adaptGeneralToFlowStepInputMiddleware(m MiddlewareFunc) FlowStepInputMiddle
 //   - m: The MiddlewareFunc to add to all handler types.
 func (b *Bot) Use(m MiddlewareFunc) {
 	b.middleware = append(b.middleware, m)
-	
+
 	// Convert general middleware to type-specific middleware and add to all types
 	b.UseCommandMiddleware(adaptGeneralToCommandMiddleware(m))
 	b.UseTextMiddleware(adaptGeneralToTextMiddleware(m))

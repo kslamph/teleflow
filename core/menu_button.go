@@ -1,3 +1,62 @@
+
+// Menu Button System provides comprehensive menu button management for Telegram bots.
+// This system enables customization of the bot's menu button that appears next to the
+// text input field in Telegram chats.
+//
+// Menu Button Types:
+//   - Commands: Displays registered bot commands in a native menu
+//   - WebApp: Opens a web application when clicked
+//   - Default: Uses Telegram's default menu button behavior
+//
+// Basic Usage:
+//
+//	// Create a commands menu button with bot commands
+//	menuButton := &teleflow.MenuButtonConfig{
+//		Type: teleflow.MenuButtonTypeCommands,
+//		Items: []teleflow.MenuButtonItem{
+//			{Text: "📖 Help", Command: "/help"},
+//			{Text: "⚙️ Settings", Command: "/settings"},
+//		},
+//	}
+//
+//	// Apply to bot using functional options
+//	bot, err := teleflow.NewBot(token, teleflow.WithMenuButton(menuButton))
+//
+//	// Or set after bot creation
+//	bot.WithMenuButton(menuButton)
+//
+// Helper Functions:
+//
+//	// Create different menu button types
+//	commandsButton := teleflow.NewCommandsMenuButton()
+//	commandsButton.AddCommand("Help", "/help").AddCommand("Status", "/status")
+//
+//	webAppButton := teleflow.NewWebAppMenuButton("Open App", "https://example.com")
+//	defaultButton := teleflow.NewDefaultMenuButton()
+//
+// Advanced Usage with AccessManager:
+//
+//	// Dynamic menu buttons based on user permissions
+//	type MyAccessManager struct{}
+//
+//	func (m *MyAccessManager) GetMenuButton(ctx *teleflow.MenuContext) *teleflow.MenuButtonConfig {
+//		if ctx.UserID == adminID {
+//			return &teleflow.MenuButtonConfig{
+//				Type: teleflow.MenuButtonTypeCommands,
+//				Items: []teleflow.MenuButtonItem{
+//					{Text: "👤 Admin Panel", Command: "/admin"},
+//					{Text: "📊 Analytics", Command: "/stats"},
+//				},
+//			}
+//		}
+//		return teleflow.NewDefaultMenuButton()
+//	}
+//
+// The menu button system automatically:
+//   - Registers commands with Telegram when using Commands type
+//   - Handles menu button initialization during bot startup
+//   - Supports per-chat and global menu button configurations
+//   - Integrates with the AccessManager for permission-based UI
 package teleflow
 
 import (

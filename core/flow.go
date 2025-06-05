@@ -15,76 +15,135 @@ import (
 // maintaining conversation context and handling various input types.
 //
 // The flow system supports:
-//   - Multiple step types (text input, choices, confirmations, custom)
+//   - Fluent builder interface for step definition and configuration
 //   - Input validation with custom validator functions
 //   - Conditional branching and dynamic step transitions
 //   - Automatic state management and progress tracking
 //   - Timeout handling and flow cancellation
 //   - Custom step handlers for complex interactions
+//   - Step start and input handlers for fine-grained control
 //
 // Basic Flow Creation:
 //
 //	flow := teleflow.NewFlow("user_registration").
-//		AddStep("name", teleflow.StepTypeText, "What's your name?").
-//		AddStep("age", teleflow.StepTypeText, "How old are you?").
-//		AddStep("confirm", teleflow.StepTypeConfirmation, "Is this information correct?")
+//		Step("name").
+//		OnStart(func(ctx *teleflow.Context) error {
+//			return ctx.Reply("What's your name?")
+//		}).
+//		OnInput(func(ctx *teleflow.Context, input string) error {
+//			ctx.Set("user_name", input)
+//			return nil
+//		}).
+//		Step("age").
+//		OnStart(func(ctx *teleflow.Context) error {
+//			return ctx.Reply("How old are you?")
+//		}).
+//		OnInput(func(ctx *teleflow.Context, input string) error {
+//			ctx.Set("user_age", input)
+//			return nil
+//		}).
+//		OnComplete(func(ctx *teleflow.Context, flowData map[string]interface{}) error {
+//			// Handle completed flow
+//			name, _ := flowData["user_name"].(string)
+//			age, _ := flowData["user_age"].(string)
+//			return saveUserData(name, age)
+//		}).
+//		Build()
 //
-//	bot.RegisterFlow(flow, func(ctx *teleflow.Context, result map[string]string) error {
-//		// Handle completed flow
-//		return saveUserData(result["name"], result["age"])
-//	})
+//	bot.RegisterFlow(flow)
 //
 // Advanced Flow with Validation:
 //
 //	flow := teleflow.NewFlow("order_processing").
-//		AddStepWithValidator("email", teleflow.StepTypeText, "Enter your email:",
-//			func(input string) (bool, string) {
-//				if !isValidEmail(input) {
-//					return false, "Please enter a valid email address"
-//				}
-//				return true, ""
-//			}).
-//		AddChoiceStep("shipping", "Choose shipping method:",
-//			[]string{"Standard", "Express", "Overnight"}).
-//		AddStep("address", teleflow.StepTypeText, "Enter shipping address:")
+//		Step("email").
+//		OnStart(func(ctx *teleflow.Context) error {
+//			return ctx.Reply("Enter your email:")
+//		}).
+//		WithValidator(func(input string) error {
+//			if !isValidEmail(input) {
+//				return fmt.Errorf("Please enter a valid email address")
+//			}
+//			return nil
+//		}).
+//		OnInput(func(ctx *teleflow.Context, input string) error {
+//			ctx.Set("email", input)
+//			return nil
+//		}).
+//		Step("shipping").
+//		OnStart(func(ctx *teleflow.Context) error {
+//			keyboard := teleflow.NewInlineKeyboard().
+//				AddRow(teleflow.NewInlineButton("Standard", "Standard")).
+//				AddRow(teleflow.NewInlineButton("Express", "Express")).
+//				AddRow(teleflow.NewInlineButton("Overnight", "Overnight"))
+//			return ctx.ReplyWithInlineKeyboard("Choose shipping method:", keyboard)
+//		}).
+//		WithValidator(teleflow.ChoiceValidator([]string{"Standard", "Express", "Overnight"})).
+//		OnInput(func(ctx *teleflow.Context, input string) error {
+//			ctx.Set("shipping", input)
+//			return nil
+//		}).
+//		Step("address").
+//		OnStart(func(ctx *teleflow.Context) error {
+//			return ctx.Reply("Enter shipping address:")
+//		}).
+//		OnInput(func(ctx *teleflow.Context, input string) error {
+//			ctx.Set("address", input)
+//			return nil
+//		}).
+//		Build()
 //
-// Flow Branching:
+// Flow Branching with Transitions:
 //
-//	flow.AddConditionalStep("premium_options", func(ctx *teleflow.Context, answers map[string]string) bool {
-//		return answers["shipping"] == "Express" || answers["shipping"] == "Overnight"
-//	}, teleflow.StepTypeChoice, "Select premium options:")
+//	flow := teleflow.NewFlow("conditional_flow").
+//		Step("choice").
+//		OnStart(func(ctx *teleflow.Context) error {
+//			keyboard := teleflow.NewInlineKeyboard().
+//				AddRow(teleflow.NewInlineButton("Express", "express")).
+//				AddRow(teleflow.NewInlineButton("Standard", "standard"))
+//			return ctx.ReplyWithInlineKeyboard("Select shipping:", keyboard)
+//		}).
+//		AddTransition("express", "premium_options").
+//		AddTransition("standard", "basic_options").
+//		Step("premium_options").
+//		OnStart(func(ctx *teleflow.Context) error {
+//			return ctx.Reply("Select premium options:")
+//		}).
+//		Step("basic_options").
+//		OnStart(func(ctx *teleflow.Context) error {
+//			return ctx.Reply("Select basic options:")
+//		}).
+//		Build()
 //
 // Flow Control:
 //
 //	// Start a flow
-//	bot.HandleCommand("/register", func(ctx *teleflow.Context) error {
-//		return bot.StartFlow(ctx, "user_registration")
+//	bot.HandleCommand("/register", func(ctx *teleflow.Context, command string, args string) error {
+//		return ctx.StartFlow("user_registration")
 //	})
 //
 //	// Cancel current flow
-//	bot.HandleCommand("/cancel", func(ctx *teleflow.Context) error {
-//		return bot.CancelFlow(ctx)
+//	bot.HandleCommand("/cancel", func(ctx *teleflow.Context, command string, args string) error {
+//		return ctx.CancelFlow()
 //	})
 //
 //	// Check flow status
-//	if bot.IsInFlow(ctx) {
-//		currentStep := bot.GetCurrentFlowStep(ctx)
+//	if ctx.IsInFlow() {
 //		// Handle flow-specific logic
 //	}
 
 // FlowStepType represents different types of flow steps
-type FlowStepType int
+// type FlowStepType int
 
-const (
-	// StepTypeText represents a text input step
-	StepTypeText FlowStepType = iota
-	// StepTypeChoice represents a choice/button step
-	StepTypeChoice
-	// StepTypeConfirmation represents a yes/no confirmation step
-	StepTypeConfirmation
-	// StepTypeCustom represents a custom step type
-	StepTypeCustom
-)
+// const (
+// 	// StepTypeText represents a text input step
+// 	StepTypeText FlowStepType = iota
+// 	// StepTypeChoice represents a choice/button step
+// 	StepTypeChoice
+// 	// StepTypeConfirmation represents a yes/no confirmation step
+// 	StepTypeConfirmation
+// 	// StepTypeCustom represents a custom step type
+// 	StepTypeCustom
+// )
 
 // FlowValidatorFunc defines the function signature for input validation within a flow step.
 // It is called with the raw user input string.
@@ -213,15 +272,15 @@ type Flow struct {
 
 // FlowStep represents a single step in a flow
 type FlowStep struct {
-	Name                string
-	StartHandler        FlowStepStartHandlerFunc // Called when entering the step
-	Handler             FlowStepInputHandlerFunc // Called when receiving input
-	Validator           FlowValidatorFunc
-	NextStep            string
-	Transitions         map[string]string // input -> next step
-	Timeout             time.Duration
-	StayOnInvalidInput  bool // Stay in step (true) or cancel flow (false) on invalid input
-	StepType            FlowStepType
+	Name               string
+	StartHandler       FlowStepStartHandlerFunc // Called when entering the step
+	Handler            FlowStepInputHandlerFunc // Called when receiving input
+	Validator          FlowValidatorFunc
+	NextStep           string
+	Transitions        map[string]string // input -> next step
+	Timeout            time.Duration
+	StayOnInvalidInput bool // Stay in step (true) or cancel flow (false) on invalid input
+	// StepType            FlowStepType
 	InvalidInputMessage string
 }
 
@@ -259,7 +318,7 @@ func (fb *FlowBuilder) Step(name string) *FlowStepBuilder {
 		Transitions:        make(map[string]string),
 		Timeout:            5 * time.Minute,
 		StayOnInvalidInput: true, // Default: stay on invalid input for better UX
-		StepType:           StepTypeText,
+		// StepType:           StepTypeText,
 	}
 
 	fb.flow.Steps = append(fb.flow.Steps, step)
@@ -360,10 +419,10 @@ func (fsb *FlowStepBuilder) StayOnInvalidInput() *FlowStepBuilder {
 }
 
 // WithStepType sets the type of the step
-func (fsb *FlowStepBuilder) WithStepType(stepType FlowStepType) *FlowStepBuilder {
-	fsb.step.StepType = stepType
-	return fsb
-}
+// func (fsb *FlowStepBuilder) WithStepType(stepType FlowStepType) *FlowStepBuilder {
+// 	fsb.step.StepType = stepType
+// 	return fsb
+// }
 
 // AddTransition adds an input-based transition to another step
 func (fsb *FlowStepBuilder) AddTransition(input, nextStep string) *FlowStepBuilder {
