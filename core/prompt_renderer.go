@@ -6,51 +6,51 @@ import (
 	"strings"
 )
 
-// PromptRenderer handles the rendering of PromptConfig objects into Telegram messages
-type PromptRenderer struct {
+// promptRenderer handles the rendering of PromptConfig objects into Telegram messages
+type promptRenderer struct {
 	bot             *Bot
-	messageRenderer *MessageRenderer
-	imageHandler    *ImageHandler
-	keyboardBuilder *KeyboardBuilder
+	messageRenderer *messageRenderer
+	imageHandler    *imageHandler
+	keyboardBuilder *inlineKeyboardBuilder
 }
 
-// RenderContext provides context for rendering a prompt
-type RenderContext struct {
+// renderContext provides context for rendering a prompt
+type renderContext struct {
 	ctx          *Context
 	promptConfig *PromptConfig
 	stepName     string
 	flowName     string
 }
 
-// NewPromptRenderer creates a new prompt renderer
-func NewPromptRenderer(bot *Bot) *PromptRenderer {
-	return &PromptRenderer{
+// newPromptRenderer creates a new prompt renderer
+func newPromptRenderer(bot *Bot) *promptRenderer {
+	return &promptRenderer{
 		bot:             bot,
-		messageRenderer: NewMessageRenderer(),
-		imageHandler:    NewImageHandler(),
-		keyboardBuilder: NewKeyboardBuilder(),
+		messageRenderer: newMessageRenderer(),
+		imageHandler:    newImageHandler(),
+		keyboardBuilder: newInlineKeyboardBuilder(),
 	}
 }
 
-// Render processes a PromptConfig and sends the appropriate Telegram message
-func (pr *PromptRenderer) Render(renderCtx *RenderContext) error {
+// render processes a PromptConfig and sends the appropriate Telegram message
+func (pr *promptRenderer) render(renderCtx *renderContext) error {
 	// Validate PromptConfig
 	if err := pr.validatePromptConfig(renderCtx.promptConfig); err != nil {
 		return fmt.Errorf("invalid PromptConfig in step %s: %w", renderCtx.stepName, err)
 	}
 
 	// Render components
-	message, err := pr.messageRenderer.RenderMessage(renderCtx.promptConfig, renderCtx.ctx)
+	message, err := pr.messageRenderer.renderMessage(renderCtx.promptConfig, renderCtx.ctx)
 	if err != nil {
 		return pr.logFriendlyError("message rendering", renderCtx, err)
 	}
 
-	image, err := pr.imageHandler.ProcessImage(renderCtx.promptConfig.Image, renderCtx.ctx)
+	image, err := pr.imageHandler.processImage(renderCtx.promptConfig.Image, renderCtx.ctx)
 	if err != nil {
 		return pr.logFriendlyError("image processing", renderCtx, err)
 	}
 
-	keyboard, err := pr.keyboardBuilder.BuildKeyboard(renderCtx.promptConfig.Keyboard, renderCtx.ctx)
+	keyboard, err := pr.keyboardBuilder.buildInlineKeyboard(renderCtx.promptConfig.Keyboard, renderCtx.ctx)
 	if err != nil {
 		return pr.logFriendlyError("keyboard generation", renderCtx, err)
 	}
@@ -60,7 +60,7 @@ func (pr *PromptRenderer) Render(renderCtx *RenderContext) error {
 }
 
 // validatePromptConfig ensures the PromptConfig has at least one non-nil field
-func (pr *PromptRenderer) validatePromptConfig(config *PromptConfig) error {
+func (pr *promptRenderer) validatePromptConfig(config *PromptConfig) error {
 	if config.Message == nil && config.Image == nil && config.Keyboard == nil {
 		return fmt.Errorf("PromptConfig cannot have all fields nil - at least one of Message, Image, or Keyboard must be specified")
 	}
@@ -68,7 +68,7 @@ func (pr *PromptRenderer) validatePromptConfig(config *PromptConfig) error {
 }
 
 // sendMessage determines the appropriate message type and sends it
-func (pr *PromptRenderer) sendMessage(ctx *Context, message string, image *ProcessedImage, keyboard interface{}) error {
+func (pr *promptRenderer) sendMessage(ctx *Context, message string, image *processedImage, keyboard interface{}) error {
 	// Determine message type and content
 	if image != nil {
 		// Photo message with caption
@@ -89,13 +89,13 @@ func (pr *PromptRenderer) sendMessage(ctx *Context, message string, image *Proce
 }
 
 // sendPhotoMessage sends a photo with optional caption and keyboard
-func (pr *PromptRenderer) sendPhotoMessage(ctx *Context, caption string, image *ProcessedImage, keyboard interface{}) error {
+func (pr *promptRenderer) sendPhotoMessage(ctx *Context, caption string, image *processedImage, keyboard interface{}) error {
 	// Use the new SendPhoto method from Context
 	return ctx.SendPhoto(image, caption, keyboard)
 }
 
 // sendTextMessage sends a text message with optional keyboard
-func (pr *PromptRenderer) sendTextMessage(ctx *Context, message string, keyboard interface{}) error {
+func (pr *promptRenderer) sendTextMessage(ctx *Context, message string, keyboard interface{}) error {
 	if keyboard != nil {
 		return ctx.Reply(message, keyboard)
 	}
@@ -103,14 +103,14 @@ func (pr *PromptRenderer) sendTextMessage(ctx *Context, message string, keyboard
 }
 
 // sendInvisibleMessage sends a keyboard-only message using zero-width space
-func (pr *PromptRenderer) sendInvisibleMessage(ctx *Context, keyboard interface{}) error {
+func (pr *promptRenderer) sendInvisibleMessage(ctx *Context, keyboard interface{}) error {
 	// Zero-width space character (invisible)
 	invisibleText := "\u200B"
 	return ctx.Reply(invisibleText, keyboard)
 }
 
 // logFriendlyError logs developer-friendly error messages with suggestions
-func (pr *PromptRenderer) logFriendlyError(component string, renderCtx *RenderContext, err error) error {
+func (pr *promptRenderer) logFriendlyError(component string, renderCtx *renderContext, err error) error {
 	suggestions := pr.getSuggestions(component)
 
 	log.Printf("🚨 TeleFlow Rendering Error in Flow '%s', Step '%s' (User %d):\n"+
@@ -125,7 +125,7 @@ func (pr *PromptRenderer) logFriendlyError(component string, renderCtx *RenderCo
 }
 
 // getSuggestions returns component-specific error suggestions
-func (pr *PromptRenderer) getSuggestions(component string) []string {
+func (pr *promptRenderer) getSuggestions(component string) []string {
 	switch component {
 	case "message rendering":
 		return []string{

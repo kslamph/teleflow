@@ -4,16 +4,16 @@ import (
 	"fmt"
 )
 
-// MessageRenderer handles rendering of MessageSpec into string messages
-type MessageRenderer struct{}
+// messageRenderer handles rendering of MessageSpec into string messages
+type messageRenderer struct{}
 
-// NewMessageRenderer creates a new message renderer
-func NewMessageRenderer() *MessageRenderer {
-	return &MessageRenderer{}
+// newMessageRenderer creates a new message renderer
+func newMessageRenderer() *messageRenderer {
+	return &messageRenderer{}
 }
 
-// RenderMessage processes a MessageSpec and returns the final message string
-func (mr *MessageRenderer) RenderMessage(config *PromptConfig, ctx *Context) (string, error) {
+// renderMessage processes a MessageSpec and returns the final message string
+func (mr *messageRenderer) renderMessage(config *PromptConfig, ctx *Context) (string, error) {
 	if config.Message == nil {
 		return "", nil // No message specified
 	}

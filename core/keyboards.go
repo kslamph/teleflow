@@ -61,7 +61,7 @@ type ReplyKeyboardButton struct {
 	Text            string      `json:"text"`
 	RequestContact  bool        `json:"request_contact,omitempty"`
 	RequestLocation bool        `json:"request_location,omitempty"`
-	WebApp          *WebAppInfo `json:"web_app,omitempty"`
+	WebApp          *webAppInfo `json:"web_app,omitempty"`
 }
 
 // ReplyKeyboard represents a custom reply keyboard
@@ -79,7 +79,7 @@ type InlineKeyboardButton struct {
 	Text                         string      `json:"text"`
 	URL                          string      `json:"url,omitempty"`
 	CallbackData                 string      `json:"callback_data,omitempty"`
-	WebApp                       *WebAppInfo `json:"web_app,omitempty"`
+	WebApp                       *webAppInfo `json:"web_app,omitempty"`
 	SwitchInlineQuery            string      `json:"switch_inline_query,omitempty"`
 	SwitchInlineQueryCurrentChat string      `json:"switch_inline_query_current_chat,omitempty"`
 }
@@ -90,44 +90,73 @@ type InlineKeyboard struct {
 	currentRow     []InlineKeyboardButton
 }
 
-// MenuButtonType represents the type of native menu button
-type MenuButtonType string
+// menuButtonType represents the type of native menu button
+type menuButtonType string
 
 const (
-	MenuButtonTypeCommands MenuButtonType = "commands"
-	MenuButtonTypeWebApp   MenuButtonType = "web_app"
-	MenuButtonTypeDefault  MenuButtonType = "default"
+	menuButtonTypeCommands menuButtonType = "commands"
+	menuButtonTypeWebApp   menuButtonType = "web_app"
+	menuButtonTypeDefault  menuButtonType = "default"
 )
 
-// MenuButtonItem represents a command item for menu buttons
-type MenuButtonItem struct {
-	Text    string `json:"text"`
-	Command string `json:"command"`
+// menuButtonItem represents a command item for menu buttons
+type menuButtonItem struct {
+	text    string
+	command string
 }
 
 // MenuButtonConfig represents the configuration for Telegram's native menu button
 type MenuButtonConfig struct {
-	Type   MenuButtonType   `json:"type"`
+	Type   menuButtonType   `json:"type"`
 	Text   string           `json:"text,omitempty"`    // For web_app type
-	WebApp *WebAppInfo      `json:"web_app,omitempty"` // For web_app type
-	Items  []MenuButtonItem `json:"items,omitempty"`   // For commands type (not sent to API, used internally)
+	WebApp *webAppInfo      `json:"web_app,omitempty"` // For web_app type
+	Items  []menuButtonItem `json:"items,omitempty"`   // For commands type (not sent to API, used internally)
 }
 
-// WebAppInfo represents a web app
-type WebAppInfo struct {
+// webAppInfo represents a web app
+type webAppInfo struct {
 	URL string `json:"url"`
 }
 
-// NewReplyKeyboard creates a new reply keyboard
+// BuildMenuButton creates a menu button configuration from a map of commands to text
 //
-// Reply keyboards appear below the message input field and are used for persistent
-// navigation menus, main menu options, and other UI elements that should remain
-// available to the user. They work with the AccessManager.GetReplyKeyboard() method
-// to provide context-aware keyboard layouts.
+// This is the primary method for creating menu buttons. The map keys are the commands
+// (without leading slash) and the values are the display text for each command.
 //
-// This is different from inline keyboards used in flow steps - those use the new
-// map-based approach in the Step-Prompt-Process API.
-func NewReplyKeyboard(rows ...[]ReplyKeyboardButton) *ReplyKeyboard {
+// Example usage:
+//
+//	menuButton := teleflow.BuildMenuButton(map[string]string{
+//		"help":     "📖 Help",
+//		"settings": "⚙️ Settings",
+//		"about":    "ℹ️ About",
+//	})
+func BuildMenuButton(commandMap map[string]string) *MenuButtonConfig {
+	if len(commandMap) == 0 {
+		return &MenuButtonConfig{Type: menuButtonTypeDefault}
+	}
+
+	config := &MenuButtonConfig{
+		Type:  menuButtonTypeCommands,
+		Items: make([]menuButtonItem, 0, len(commandMap)),
+	}
+
+	for command, text := range commandMap {
+		// Ensure command starts with /
+		if len(command) > 0 && command[0] != '/' {
+			command = "/" + command
+		}
+
+		config.Items = append(config.Items, menuButtonItem{
+			text:    text,
+			command: command,
+		})
+	}
+
+	return config
+}
+
+// newReplyKeyboard creates a new reply keyboard (internal use)
+func newReplyKeyboard(rows ...[]ReplyKeyboardButton) *ReplyKeyboard {
 	kb := &ReplyKeyboard{
 		Keyboard:   make([][]ReplyKeyboardButton, 0),
 		currentRow: make([]ReplyKeyboardButton, 0),
@@ -138,67 +167,49 @@ func NewReplyKeyboard(rows ...[]ReplyKeyboardButton) *ReplyKeyboard {
 	return kb
 }
 
-// NewReplyButton creates a new reply keyboard button with the given text
-func NewReplyButton(text string) *ReplyKeyboardButton {
-	return &ReplyKeyboardButton{
-		Text: text,
+// BuildReplyKeyboard creates a reply keyboard with custom buttons per row
+//
+// This function allows you to specify how many buttons should appear in each row.
+// This provides more control over the keyboard layout compared to BuildReplyKeyboard.
+//
+// Parameters:
+//   - buttons: slice of button texts
+//   - buttonsPerRow: number of buttons to place in each row (must be > 0)
+//
+// Example usage:
+//
+//	// Create a keyboard with 3 buttons per row
+//	keyboard := teleflow.BuildReplyKeyboard(
+//		[]string{"A", "B", "C", "D", "E", "F", "G"}, 3)
+//	// Results in: [A B C] [D E F] [G]
+//
+//	keyboard.Resize().OneTime()
+func BuildReplyKeyboard(buttons []string, buttonsPerRow int) *ReplyKeyboard {
+	if len(buttons) == 0 {
+		return newReplyKeyboard()
 	}
-}
 
-// SetRequestContact sets the button to request contact information
-func (btn *ReplyKeyboardButton) SetRequestContact() *ReplyKeyboardButton {
-	btn.RequestContact = true
-	return btn
-}
+	if buttonsPerRow <= 0 {
+		buttonsPerRow = 1 // Default to 1 button per row if invalid value
+	}
 
-// SetRequestLocation sets the button to request location information
-func (btn *ReplyKeyboardButton) SetRequestLocation() *ReplyKeyboardButton {
-	btn.RequestLocation = true
-	return btn
-}
+	kb := &ReplyKeyboard{
+		Keyboard:   make([][]ReplyKeyboardButton, 0),
+		currentRow: make([]ReplyKeyboardButton, 0),
+	}
 
-// WithWebApp sets the button as a web app button
-func (btn *ReplyKeyboardButton) WithWebApp(url string) *ReplyKeyboardButton {
-	btn.WebApp = &WebAppInfo{URL: url}
-	return btn
-}
+	// Split buttons into rows based on buttonsPerRow
+	for i := 0; i < len(buttons); i += buttonsPerRow {
+		var row []ReplyKeyboardButton
 
-// AddRow adds a new row of buttons to the keyboard
-func (kb *ReplyKeyboard) AddRow(buttons ...*ReplyKeyboardButton) *ReplyKeyboard {
-	// Convert pointers to values for the row
-	var row []ReplyKeyboardButton
-	for _, btn := range buttons {
-		if btn != nil {
-			row = append(row, *btn)
+		// Add up to buttonsPerRow buttons to current row
+		for j := 0; j < buttonsPerRow && i+j < len(buttons); j++ {
+			row = append(row, ReplyKeyboardButton{Text: buttons[i+j]})
 		}
-	}
-	if len(row) > 0 {
+
 		kb.Keyboard = append(kb.Keyboard, row)
 	}
-	return kb
-}
 
-// AddButton adds a button to the current row
-func (kb *ReplyKeyboard) AddButton(text string) *ReplyKeyboard {
-	kb.currentRow = append(kb.currentRow, ReplyKeyboardButton{Text: text})
-	return kb
-}
-
-// AddRequestContact adds a contact request button to the current row
-func (kb *ReplyKeyboard) AddRequestContact() *ReplyKeyboard {
-	kb.currentRow = append(kb.currentRow, ReplyKeyboardButton{
-		Text:           "Share Contact",
-		RequestContact: true,
-	})
-	return kb
-}
-
-// AddRequestLocation adds a location request button to the current row
-func (kb *ReplyKeyboard) AddRequestLocation() *ReplyKeyboard {
-	kb.currentRow = append(kb.currentRow, ReplyKeyboardButton{
-		Text:            "Share Location",
-		RequestLocation: true,
-	})
 	return kb
 }
 

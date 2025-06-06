@@ -1,4 +1,4 @@
-package teleflow
+package tests
 
 import (
 	"bytes"

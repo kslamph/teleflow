@@ -80,17 +80,17 @@ func LoggingMiddleware() MiddlewareFunc {
 
 			// Log incoming update based on log level
 			updateType := "unknown"
-			if ctx.Update.Message != nil {
-				if ctx.Update.Message.IsCommand() {
-					updateType = "command: " + ctx.Update.Message.Command()
+			if ctx.update.Message != nil {
+				if ctx.update.Message.IsCommand() {
+					updateType = "command: " + ctx.update.Message.Command()
 				} else {
-					updateType = "text: " + ctx.Update.Message.Text
+					updateType = "text: " + ctx.update.Message.Text
 					if len(updateType) > 100 {
 						updateType = updateType[:100] + "..."
 					}
 				}
-			} else if ctx.Update.CallbackQuery != nil {
-				updateType = "callback: " + ctx.Update.CallbackQuery.Data
+			} else if ctx.update.CallbackQuery != nil {
+				updateType = "callback: " + ctx.update.CallbackQuery.Data
 			}
 
 			// Log based on level and debug settings
@@ -121,27 +121,23 @@ func AuthMiddleware(accessManager AccessManager) MiddlewareFunc {
 	return func(next HandlerFunc) HandlerFunc {
 		return func(ctx *Context) error {
 			// Create permission context
-			permCtx := &PermissionContext{
-				UserID: ctx.UserID(),
-				ChatID: ctx.ChatID(),
-				Update: &ctx.Update,
-			}
+			permCtx := ctx.getPermissionContext()
 
 			// Extract command and arguments if available
-			if ctx.Update.Message != nil && ctx.Update.Message.IsCommand() {
-				permCtx.Command = ctx.Update.Message.Command()
-				if args := ctx.Update.Message.CommandArguments(); args != "" {
+			if ctx.update.Message != nil && ctx.update.Message.IsCommand() {
+				permCtx.Command = ctx.update.Message.Command()
+				if args := ctx.update.Message.CommandArguments(); args != "" {
 					permCtx.Arguments = []string{args}
 				}
 			}
 
 			// Check if it's a group chat
-			if ctx.Update.Message != nil {
-				permCtx.IsGroup = ctx.Update.Message.Chat.IsGroup() || ctx.Update.Message.Chat.IsSuperGroup()
-				permCtx.MessageID = ctx.Update.Message.MessageID
-			} else if ctx.Update.CallbackQuery != nil && ctx.Update.CallbackQuery.Message != nil {
-				permCtx.IsGroup = ctx.Update.CallbackQuery.Message.Chat.IsGroup() || ctx.Update.CallbackQuery.Message.Chat.IsSuperGroup()
-				permCtx.MessageID = ctx.Update.CallbackQuery.Message.MessageID
+			if ctx.update.Message != nil {
+				permCtx.IsGroup = ctx.update.Message.Chat.IsGroup() || ctx.update.Message.Chat.IsSuperGroup()
+				permCtx.MessageID = ctx.update.Message.MessageID
+			} else if ctx.update.CallbackQuery != nil && ctx.update.CallbackQuery.Message != nil {
+				permCtx.IsGroup = ctx.update.CallbackQuery.Message.Chat.IsGroup() || ctx.update.CallbackQuery.Message.Chat.IsSuperGroup()
+				permCtx.MessageID = ctx.update.CallbackQuery.Message.MessageID
 			}
 
 			if err := accessManager.CheckPermission(permCtx); err != nil {

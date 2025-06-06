@@ -51,23 +51,23 @@ type StateManager interface {
 	ClearState(userID int64) error
 }
 
-// InMemoryStateManager is a thread-safe in-memory implementation of StateManager
+// inMemoryStateManager is a thread-safe in-memory implementation of StateManager
 // that persists data across handler calls within the same bot session
-type InMemoryStateManager struct {
+type inMemoryStateManager struct {
 	mu   sync.RWMutex
 	data map[int64]map[string]interface{} // userID -> key -> value mapping
 }
 
 // NewInMemoryStateManager creates and returns a new StateManager implementation
 func NewInMemoryStateManager() StateManager {
-	return &InMemoryStateManager{
+	return &inMemoryStateManager{
 		data: make(map[int64]map[string]interface{}),
 	}
 }
 
 // SetState stores a key-value pair for a specific user
 // This method is thread-safe and handles concurrent access from multiple users
-func (m *InMemoryStateManager) SetState(userID int64, key string, value interface{}) error {
+func (m *inMemoryStateManager) SetState(userID int64, key string, value interface{}) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -84,7 +84,7 @@ func (m *InMemoryStateManager) SetState(userID int64, key string, value interfac
 
 // GetState retrieves a value for a specific user and key
 // Returns the value and a boolean indicating if the key was found
-func (m *InMemoryStateManager) GetState(userID int64, key string) (interface{}, bool) {
+func (m *inMemoryStateManager) GetState(userID int64, key string) (interface{}, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -101,7 +101,7 @@ func (m *InMemoryStateManager) GetState(userID int64, key string) (interface{}, 
 
 // ClearState removes all state data for a specific user
 // This method is thread-safe and handles concurrent access
-func (m *InMemoryStateManager) ClearState(userID int64) error {
+func (m *inMemoryStateManager) ClearState(userID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

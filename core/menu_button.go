@@ -72,7 +72,7 @@ func (b *Bot) SetMenuButton(chatID int64, config *MenuButtonConfig) error {
 	}
 
 	switch config.Type {
-	case MenuButtonTypeCommands:
+	case menuButtonTypeCommands:
 		// For commands type, register the commands with Telegram - this is what makes them appear!
 		if len(config.Items) > 0 {
 			if err := b.setMyCommands(config.Items); err != nil {
@@ -83,14 +83,14 @@ func (b *Bot) SetMenuButton(chatID int64, config *MenuButtonConfig) error {
 		log.Printf("✅ Commands menu button set for chat %d", chatID)
 		return nil
 
-	case MenuButtonTypeWebApp:
+	case menuButtonTypeWebApp:
 		if config.WebApp == nil {
 			return fmt.Errorf("web app config is required for web_app menu button type")
 		}
 		log.Printf("ℹ️ WebApp menu button not yet supported, but config saved")
 		return nil
 
-	case MenuButtonTypeDefault:
+	case menuButtonTypeDefault:
 		log.Printf("✅ Default menu button set for chat %d", chatID)
 		return nil
 
@@ -110,7 +110,7 @@ func (b *Bot) SetDefaultMenuButton() error {
 }
 
 // setMyCommands registers bot commands with Telegram using the native telegram-bot-api
-func (b *Bot) setMyCommands(items []MenuButtonItem) error {
+func (b *Bot) setMyCommands(items []menuButtonItem) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -119,14 +119,14 @@ func (b *Bot) setMyCommands(items []MenuButtonItem) error {
 	var commands []tgbotapi.BotCommand
 	for _, item := range items {
 		// Remove leading slash if present
-		command := item.Command
+		command := item.command
 		if len(command) > 0 && command[0] == '/' {
 			command = command[1:]
 		}
 
 		commands = append(commands, tgbotapi.BotCommand{
 			Command:     command,
-			Description: item.Text,
+			Description: item.text,
 		})
 	}
 
@@ -148,8 +148,8 @@ func (b *Bot) setMyCommands(items []MenuButtonItem) error {
 	return nil
 }
 
-// InitializeMenuButton sets up the menu button when the bot starts
-func (b *Bot) InitializeMenuButton() {
+// initializeMenuButton sets up the menu button when the bot starts
+func (b *Bot) initializeMenuButton() {
 	if b.menuButton != nil {
 		log.Printf("🔧 Setting up menu button: %s", b.menuButton.Type)
 
@@ -161,10 +161,10 @@ func (b *Bot) InitializeMenuButton() {
 		}
 
 		// Log available commands for commands type
-		if b.menuButton.Type == MenuButtonTypeCommands && len(b.menuButton.Items) > 0 {
+		if b.menuButton.Type == menuButtonTypeCommands && len(b.menuButton.Items) > 0 {
 			log.Printf("📋 Bot commands available:")
 			for _, item := range b.menuButton.Items {
-				log.Printf("   %s - %s", item.Text, item.Command)
+				log.Printf("   %s - %s", item.text, item.command)
 			}
 		}
 	}
@@ -175,16 +175,16 @@ func (b *Bot) InitializeMenuButton() {
 // NewCommandsMenuButton creates a menu button that shows bot commands
 func NewCommandsMenuButton() *MenuButtonConfig {
 	return &MenuButtonConfig{
-		Type: MenuButtonTypeCommands,
+		Type: menuButtonTypeCommands,
 	}
 }
 
 // NewWebAppMenuButton creates a menu button that opens a web app
 func NewWebAppMenuButton(text, url string) *MenuButtonConfig {
 	return &MenuButtonConfig{
-		Type: MenuButtonTypeWebApp,
+		Type: menuButtonTypeWebApp,
 		Text: text,
-		WebApp: &WebAppInfo{
+		WebApp: &webAppInfo{
 			URL: url,
 		},
 	}
@@ -193,19 +193,19 @@ func NewWebAppMenuButton(text, url string) *MenuButtonConfig {
 // NewDefaultMenuButton creates a default menu button
 func NewDefaultMenuButton() *MenuButtonConfig {
 	return &MenuButtonConfig{
-		Type: MenuButtonTypeDefault,
+		Type: menuButtonTypeDefault,
 	}
 }
 
 // AddCommandToMenuButton adds a command to a commands-type menu button
 func (config *MenuButtonConfig) AddCommand(text, command string) *MenuButtonConfig {
-	if config.Type != MenuButtonTypeCommands {
+	if config.Type != menuButtonTypeCommands {
 		return config // Only works for commands type
 	}
 
-	config.Items = append(config.Items, MenuButtonItem{
-		Text:    text,
-		Command: command,
+	config.Items = append(config.Items, menuButtonItem{
+		text:    text,
+		command: command,
 	})
 
 	return config

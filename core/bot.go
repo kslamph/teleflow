@@ -108,7 +108,7 @@ type CommandHandlerFunc func(ctx *Context, command string, args string) error
 //   - error: An error if processing failed, nil otherwise.
 type TextHandlerFunc func(ctx *Context, text string) error
 
-// DefaultTextHandlerFunc defines the function signature for the default text message handler.
+// DefaultHandlerFunc defines the function signature for the default text message handler.
 // It is called for any text message that is not a command and does not match any specific TextHandlerFunc.
 //
 // Parameters:
@@ -117,7 +117,7 @@ type TextHandlerFunc func(ctx *Context, text string) error
 //
 // Returns:
 //   - error: An error if processing failed, nil otherwise.
-type DefaultTextHandlerFunc func(ctx *Context, text string) error
+type DefaultHandlerFunc func(ctx *Context, text string) error
 
 // BotOption defines functional options for Bot configuration
 type BotOption func(*Bot)
@@ -144,11 +144,11 @@ type AccessManager interface {
 
 	// GetReplyKeyboard returns the reply keyboard for the user based on context
 	// This keyboard will be automatically applied to reply messages
-	GetReplyKeyboard(ctx *MenuContext) *ReplyKeyboard
+	GetReplyKeyboard(ctx *PermissionContext) *ReplyKeyboard
 
 	// GetMenuButton returns the menu button configuration for the user based on context
 	// This menu button will be automatically set for the chat
-	GetMenuButton(ctx *MenuContext) *MenuButtonConfig
+	GetMenuButton(ctx *PermissionContext) *MenuButtonConfig
 }
 
 // Bot is the main application structure
@@ -159,7 +159,7 @@ type Bot struct {
 	defaultTextHandler HandlerFunc // Field for the default text handler
 	callbackRegistry   *callbackRegistry
 	stateManager       StateManager
-	flowManager        *FlowManager
+	flowManager        *flowManager
 	templates          *template.Template
 	// Unified middleware system - intercepts all message types
 	middleware []MiddlewareFunc
@@ -184,7 +184,7 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		textHandlers:     make(map[string]HandlerFunc),
 		callbackRegistry: newCallbackRegistry(),
 		stateManager:     NewInMemoryStateManager(),
-		flowManager:      NewFlowManager(NewInMemoryStateManager()),
+		flowManager:      newFlowManager(NewInMemoryStateManager()),
 		templates:        template.New("botMessages"),
 		middleware:       make([]MiddlewareFunc, 0),
 		flowConfig: FlowConfig{
@@ -210,11 +210,6 @@ func WithMenuButton(config *MenuButtonConfig) BotOption {
 	return func(b *Bot) {
 		b.menuButton = config
 	}
-}
-
-// WithMenuButton sets the menu button configuration (method style)
-func (b *Bot) WithMenuButton(config *MenuButtonConfig) {
-	b.menuButton = config
 }
 
 // WithFlowConfig sets the flow configuration
@@ -273,8 +268,8 @@ func (b *Bot) HandleCommand(commandName string, handler CommandHandlerFunc) {
 		// Extract command and args from the update
 		command := commandName
 		args := ""
-		if ctx.Update.Message != nil && len(ctx.Update.Message.Text) > len(command)+1 {
-			args = ctx.Update.Message.Text[len(command)+1:]
+		if ctx.update.Message != nil && len(ctx.update.Message.Text) > len(command)+1 {
+			args = ctx.update.Message.Text[len(command)+1:]
 		}
 		return handler(ctx, command, args)
 	}
@@ -295,19 +290,19 @@ func (b *Bot) HandleText(textToMatch string, handler TextHandlerFunc) {
 	b.textHandlers[textToMatch] = b.applyMiddleware(wrappedHandler)
 }
 
-// SetDefaultTextHandler registers a DefaultTextHandlerFunc to be called for any text message
+// DefaultHandler registers a DefaultTextHandlerFunc to be called for any text message
 // that is not a command and does not match any handler registered with HandleText.
 // Only one default text handler can be set; subsequent calls will overwrite the previous one.
 // Any registered unified middleware will be applied to the handler.
 //
 // Parameters:
 //   - handler: The DefaultTextHandlerFunc to execute.
-func (b *Bot) SetDefaultTextHandler(handler DefaultTextHandlerFunc) {
+func (b *Bot) DefaultHandler(handler DefaultHandlerFunc) {
 	// Convert DefaultTextHandlerFunc to HandlerFunc and apply unified middleware
 	wrappedHandler := func(ctx *Context) error {
 		var text string
-		if ctx.Update.Message != nil {
-			text = ctx.Update.Message.Text
+		if ctx.update.Message != nil {
+			text = ctx.update.Message.Text
 		}
 		return handler(ctx, text)
 	}
@@ -315,7 +310,7 @@ func (b *Bot) SetDefaultTextHandler(handler DefaultTextHandlerFunc) {
 }
 
 // RegisterFlow registers a flow with the flow manager
-func (b *Bot) RegisterFlow(flow *Flow) {
+func (b *Bot) RegisterFlow(flow *flow) {
 	b.flowManager.registerFlow(flow)
 }
 
@@ -334,16 +329,16 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 	var err error
 
 	// Check for global flow exit commands first
-	if b.flowManager.IsUserInFlow(ctx.UserID()) {
-		if ctx.Update.Message != nil && b.isGlobalExitCommand(ctx.Update.Message.Text) {
-			b.flowManager.CancelFlow(ctx.UserID()) // Consider if OnCancel should be triggered
+	if b.flowManager.isUserInFlow(ctx.UserID()) {
+		if ctx.update.Message != nil && b.isGlobalExitCommand(ctx.update.Message.Text) {
+			b.flowManager.cancelFlow(ctx.UserID()) // Consider if OnCancel should be triggered
 			err = ctx.Reply(b.flowConfig.ExitMessage)
 			if err != nil {
 				log.Printf("Error sending flow exit message: %v", err)
 			}
 			return // Exit command processed
-		} else if b.flowConfig.AllowGlobalCommands && ctx.Update.Message != nil && ctx.Update.Message.IsCommand() {
-			commandName := ctx.Update.Message.Command()
+		} else if b.flowConfig.AllowGlobalCommands && ctx.update.Message != nil && ctx.update.Message.IsCommand() {
+			commandName := ctx.update.Message.Command()
 			if cmdHandler := b.resolveGlobalCommandHandler(commandName); cmdHandler != nil {
 				// Middleware already applied at registration
 				err = cmdHandler(ctx)
@@ -455,7 +450,7 @@ func (b *Bot) Start() error {
 	log.Printf("Authorized on account %s", b.api.Self.UserName)
 
 	// Initialize menu button if configured
-	b.InitializeMenuButton()
+	b.initializeMenuButton()
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60

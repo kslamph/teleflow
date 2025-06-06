@@ -6,16 +6,16 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// KeyboardBuilder handles building keyboards from KeyboardFunc
-type KeyboardBuilder struct{}
+// inlineKeyboardBuilder handles building keyboards from KeyboardFunc
+type inlineKeyboardBuilder struct{}
 
-// NewKeyboardBuilder creates a new keyboard builder
-func NewKeyboardBuilder() *KeyboardBuilder {
-	return &KeyboardBuilder{}
+// newInlineKeyboardBuilder creates a new keyboard builder
+func newInlineKeyboardBuilder() *inlineKeyboardBuilder {
+	return &inlineKeyboardBuilder{}
 }
 
-// BuildKeyboard processes a KeyboardFunc and returns the appropriate keyboard structure
-func (kb *KeyboardBuilder) BuildKeyboard(keyboardFunc KeyboardFunc, ctx *Context) (interface{}, error) {
+// buildInlineKeyboard processes a KeyboardFunc and returns the appropriate keyboard structure
+func (kb *inlineKeyboardBuilder) buildInlineKeyboard(keyboardFunc KeyboardFunc, ctx *Context) (interface{}, error) {
 	if keyboardFunc == nil {
 		return nil, nil // No keyboard specified
 	}
@@ -31,7 +31,7 @@ func (kb *KeyboardBuilder) BuildKeyboard(keyboardFunc KeyboardFunc, ctx *Context
 }
 
 // convertMapToInlineKeyboard converts a map[string]interface{} to an inline keyboard
-func (kb *KeyboardBuilder) convertMapToInlineKeyboard(keyboardMap map[string]interface{}) (interface{}, error) {
+func (kb *inlineKeyboardBuilder) convertMapToInlineKeyboard(keyboardMap map[string]interface{}) (interface{}, error) {
 	if len(keyboardMap) == 0 {
 		return nil, nil
 	}

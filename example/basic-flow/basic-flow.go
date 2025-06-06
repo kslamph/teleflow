@@ -19,22 +19,19 @@ func (m *MyAccessManager) CheckPermission(ctx *teleflow.PermissionContext) error
 }
 
 // GetReplyKeyboard returns appropriate keyboard based on context
-func (m *MyAccessManager) GetReplyKeyboard(ctx *teleflow.MenuContext) *teleflow.ReplyKeyboard {
+func (m *MyAccessManager) GetReplyKeyboard(ctx *teleflow.PermissionContext) *teleflow.ReplyKeyboard {
 	// Return main menu keyboard for all users
 	return m.mainMenu
 }
 
 // GetMenuButton returns menu button configuration with bot commands
-func (m *MyAccessManager) GetMenuButton(ctx *teleflow.MenuContext) *teleflow.MenuButtonConfig {
-	return &teleflow.MenuButtonConfig{
-		Type: teleflow.MenuButtonTypeCommands, // Show bot commands in menu
-		Items: []teleflow.MenuButtonItem{
-			{Text: "🚀 Start Registration", Command: "/start"},
-			{Text: "📸 Photo Demo", Command: "/demo"},
-			{Text: "❓ Help", Command: "/help"},
-			{Text: "❌ Cancel", Command: "/cancel"},
-		},
-	}
+func (m *MyAccessManager) GetMenuButton(ctx *teleflow.PermissionContext) *teleflow.MenuButtonConfig {
+	return teleflow.BuildMenuButton(map[string]string{
+		"start":  "🚀 Start Registration",
+		"demo":   "📸 Photo Demo",
+		"help":   "❓ Help",
+		"cancel": "❌ Cancel",
+	})
 }
 
 func main() {
@@ -45,13 +42,14 @@ func main() {
 	}
 
 	// Create keyboards using proper API
-	// Commands (/start, /demo, /help, /cancel) are now in menu button
 	// Reply keyboard only contains non-command actions
-	mainMenuKeyboard := teleflow.NewReplyKeyboard(
-		[]teleflow.ReplyKeyboardButton{
-			{Text: "📝 Register"}, // Main action for registration
-		},
-	).Resize()
+	// mainMenuKeyboard := teleflow.NewReplyKeyboard(
+	// 	[]teleflow.ReplyKeyboardButton{
+	// 		{Text: "📝 Register"}, // Main action for registration
+	// 	},
+	// ).Resize()
+
+	mainMenuKeyboard := teleflow.BuildReplyKeyboard([]string{"📝 Register", "🏠 Home", "⚙️ Settings", "❓ Help"}, 3).Resize()
 
 	// Initialize AccessManager
 	accessManager := &MyAccessManager{
@@ -82,7 +80,7 @@ func main() {
 	// The framework automatically applies the optimal middleware stack for security and performance
 	// Create a user registration flow using the new Step-Prompt-Process API with photo capabilities
 	registrationFlow, err := teleflow.NewFlow("user_registration").
-		OnError(teleflow.OnErrorIgnore()).
+		OnError(teleflow.OnErrorCancel()).
 		Step("welcome").
 		Prompt(
 			"👋 Welcome! Let's get you registered. What's your name?",
@@ -91,7 +89,7 @@ func main() {
 		).
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			if input == "" {
-				return teleflow.RetryWithPrompt(&teleflow.PromptConfig{
+				return teleflow.Retry().WithPrompt(&teleflow.PromptConfig{
 					Message: "Please enter your name:",
 					Image:   "https://via.placeholder.com/300x150/FF9800/white?text=Name+Required",
 				})
@@ -120,7 +118,7 @@ func main() {
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			// Simple age validation
 			if len(input) == 0 || len(input) > 3 {
-				return teleflow.RetryWithPrompt(&teleflow.PromptConfig{
+				return teleflow.Retry().WithPrompt(&teleflow.PromptConfig{
 					Message: "Please enter a valid age (1-3 digits):",
 					Image:   "https://via.placeholder.com/300x150/F44336/white?text=Invalid+Age",
 				})
@@ -165,7 +163,7 @@ func main() {
 					Message: "🔄 No problem! Let's start over...",
 				})
 			default:
-				return teleflow.RetryWithPrompt(&teleflow.PromptConfig{
+				return teleflow.Retry().WithPrompt(&teleflow.PromptConfig{
 					Message: "Please click one of the buttons above.",
 				})
 			}
@@ -215,7 +213,13 @@ func main() {
 		})
 	})
 
+	bot.DefaultHandler(func(ctx *teleflow.Context, text string) error {
+		return ctx.SendPrompt(&teleflow.PromptConfig{
+			Message: "❓ I didn't understand that. Please use one of the commands or buttons.",
+		})
+	})
+
 	// Start the bot
 	log.Println("🤖 Bot starting with new Step-Prompt-Process API...")
-	bot.Start()
+	log.Fatal(bot.Start())
 }

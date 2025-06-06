@@ -8,32 +8,32 @@ import (
 	"strings"
 )
 
-// ImageType represents the type of image for Telegram
-type ImageType int
+// imageType represents the type of image for Telegram
+type imageType int
 
 const (
-	ImageTypePhoto ImageType = iota
-	ImageTypeDocument
+	imageTypePhoto imageType = iota
+	imageTypeDocument
 )
 
-// ProcessedImage contains processed image data ready for sending
-type ProcessedImage struct {
-	Data     []byte
-	Type     ImageType
-	IsBase64 bool
-	FilePath string
+// processedImage contains processed image data ready for sending
+type processedImage struct {
+	data     []byte
+	imgType  imageType
+	isBase64 bool
+	filePath string
 }
 
-// ImageHandler processes ImageSpec into ProcessedImage
-type ImageHandler struct{}
+// imageHandler processes ImageSpec into ProcessedImage
+type imageHandler struct{}
 
-// NewImageHandler creates a new image handler
-func NewImageHandler() *ImageHandler {
-	return &ImageHandler{}
+// newImageHandler creates a new image handler
+func newImageHandler() *imageHandler {
+	return &imageHandler{}
 }
 
-// ProcessImage processes an ImageSpec and returns ProcessedImage or nil if no image
-func (ih *ImageHandler) ProcessImage(imageSpec ImageSpec, ctx *Context) (*ProcessedImage, error) {
+// processImage processes an ImageSpec and returns ProcessedImage or nil if no image
+func (ih *imageHandler) processImage(imageSpec ImageSpec, ctx *Context) (*processedImage, error) {
 	if imageSpec == nil {
 		return nil, nil // No image specified
 	}
@@ -57,7 +57,7 @@ func (ih *ImageHandler) ProcessImage(imageSpec ImageSpec, ctx *Context) (*Proces
 }
 
 // processStaticImage processes a static image string (path, URL, or base64)
-func (ih *ImageHandler) processStaticImage(imageStr string) (*ProcessedImage, error) {
+func (ih *imageHandler) processStaticImage(imageStr string) (*processedImage, error) {
 	// Check if it's base64 encoded
 	if strings.HasPrefix(imageStr, "data:image/") {
 		return ih.processBase64Image(imageStr)
@@ -73,7 +73,7 @@ func (ih *ImageHandler) processStaticImage(imageStr string) (*ProcessedImage, er
 }
 
 // processBase64Image processes base64 encoded image data
-func (ih *ImageHandler) processBase64Image(base64Str string) (*ProcessedImage, error) {
+func (ih *imageHandler) processBase64Image(base64Str string) (*processedImage, error) {
 	// Extract base64 data (skip data:image/type;base64, prefix)
 	parts := strings.Split(base64Str, ",")
 	if len(parts) != 2 {
@@ -85,15 +85,15 @@ func (ih *ImageHandler) processBase64Image(base64Str string) (*ProcessedImage, e
 		return nil, fmt.Errorf("failed to decode base64 image: %w", err)
 	}
 
-	return &ProcessedImage{
-		Data:     data,
-		Type:     ImageTypePhoto,
-		IsBase64: true,
+	return &processedImage{
+		data:     data,
+		imgType:  imageTypePhoto,
+		isBase64: true,
 	}, nil
 }
 
 // processFileImage processes a local file path
-func (ih *ImageHandler) processFileImage(filePath string) (*ProcessedImage, error) {
+func (ih *imageHandler) processFileImage(filePath string) (*processedImage, error) {
 	// Validate file exists
 	info, err := os.Stat(filePath)
 	if err != nil {
@@ -126,23 +126,23 @@ func (ih *ImageHandler) processFileImage(filePath string) (*ProcessedImage, erro
 		return nil, fmt.Errorf("failed to read image file: %w", err)
 	}
 
-	return &ProcessedImage{
-		Data:     data,
-		Type:     ImageTypePhoto,
-		IsBase64: false,
-		FilePath: filePath,
+	return &processedImage{
+		data:     data,
+		imgType:  imageTypePhoto,
+		isBase64: false,
+		filePath: filePath,
 	}, nil
 }
 
 // processURLImage processes a URL or external image reference
-func (ih *ImageHandler) processURLImage(imageURL string) (*ProcessedImage, error) {
+func (ih *imageHandler) processURLImage(imageURL string) (*processedImage, error) {
 	// For URLs, we'll store the path and let Telegram handle it
 	// This is a simplified implementation - in production you might want to
 	// validate URLs, download and cache images, etc.
 
-	return &ProcessedImage{
-		FilePath: imageURL,
-		Type:     ImageTypePhoto,
-		IsBase64: false,
+	return &processedImage{
+		filePath: imageURL,
+		imgType:  imageTypePhoto,
+		isBase64: false,
 	}, nil
 }

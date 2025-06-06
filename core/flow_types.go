@@ -58,7 +58,7 @@ type ButtonClick struct {
 // ProcessResult specifies the outcome of a ProcessFunc execution.
 // It dictates the next action in the flow and can optionally provide a new prompt.
 type ProcessResult struct {
-	Action     ProcessAction
+	Action     processAction
 	TargetStep string        // Name of the step to go to, if Action is ActionGoToStep.
 	Prompt     *PromptConfig // Optional prompt to display before taking the action or on retry.
 }
@@ -70,47 +70,41 @@ func (pr ProcessResult) WithPrompt(prompt *PromptConfig) ProcessResult {
 	return pr
 }
 
-// ProcessAction defines the type of action to be taken after a step's ProcessFunc completes.
-type ProcessAction int
+// processAction defines the type of action to be taken after a step's ProcessFunc completes.
+type processAction int
 
 // Defines the possible actions that can be taken by a ProcessFunc.
 const (
-	ActionNextStep     ProcessAction = iota // Proceed to the next step in sequence.
-	ActionGoToStep                          // Jump to a specific step by name.
-	ActionRetry                             // Retry the current step, optionally with a new prompt.
-	ActionCompleteFlow                      // Mark the entire flow as completed.
-	ActionCancelFlow                        // Cancel the current flow.
+	actionNextStep     processAction = iota // Proceed to the next step in sequence.
+	actionGoToStep                          // Jump to a specific step by name.
+	actionRetryStep                         // Retry the current step, optionally with a new prompt.
+	actionCompleteFlow                      // Mark the entire flow as completed.
+	actionCancelFlow                        // Cancel the current flow.
 )
 
 // Helper functions for creating ProcessResult instances.
 
 // NextStep creates a ProcessResult that directs the flow to the next sequential step.
 func NextStep() ProcessResult {
-	return ProcessResult{Action: ActionNextStep}
+	return ProcessResult{Action: actionNextStep}
 }
 
 // GoToStep creates a ProcessResult that directs the flow to a specific step by name.
 func GoToStep(stepName string) ProcessResult {
-	return ProcessResult{Action: ActionGoToStep, TargetStep: stepName}
-}
-
-// RetryWithPrompt creates a ProcessResult that retries the current step,
-// optionally displaying a new prompt. If prompt is nil, the original step prompt may be reshown.
-func RetryWithPrompt(prompt *PromptConfig) ProcessResult {
-	return ProcessResult{Action: ActionRetry, Prompt: prompt}
+	return ProcessResult{Action: actionGoToStep, TargetStep: stepName}
 }
 
 // Retry creates a ProcessResult that retries the current step (re-renders original prompt).
 func Retry() ProcessResult {
-	return ProcessResult{Action: ActionRetry}
+	return ProcessResult{Action: actionRetryStep}
 }
 
 // CompleteFlow creates a ProcessResult that marks the current flow as completed.
 func CompleteFlow() ProcessResult {
-	return ProcessResult{Action: ActionCompleteFlow}
+	return ProcessResult{Action: actionCompleteFlow}
 }
 
 // CancelFlow creates a ProcessResult that cancels the current flow.
 func CancelFlow() ProcessResult {
-	return ProcessResult{Action: ActionCancelFlow}
+	return ProcessResult{Action: actionCancelFlow}
 }

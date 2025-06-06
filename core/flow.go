@@ -14,18 +14,18 @@ import (
 //   - Simplified developer experience with zero learning curve
 //   - Built-in error handling with configurable recovery strategies
 
-// ErrorAction defines how to handle runtime errors during flow execution
-type ErrorAction int
+// errorStrategy defines how to handle runtime errors during flow execution
+type errorStrategy int
 
 const (
-	ErrorActionCancel ErrorAction = iota // Cancel flow (default)
-	ErrorActionRetry                     // Retry current step
-	ErrorActionIgnore                    // Continue with flow
+	errorStrategyCancel errorStrategy = iota // Cancel flow (default)
+	errorStrategyRetry                       // Retry current step
+	errorStrategyIgnore                      // Continue with flow
 )
 
 // ErrorConfig defines error handling behavior for flows
 type ErrorConfig struct {
-	Action  ErrorAction
+	Action  errorStrategy
 	Message string // Custom message or ON_ERROR_SILENT for silent operation
 }
 
@@ -41,7 +41,7 @@ func OnErrorCancel(message ...string) *ErrorConfig {
 		msg = message[0]
 	}
 	return &ErrorConfig{
-		Action:  ErrorActionCancel,
+		Action:  errorStrategyCancel,
 		Message: msg,
 	}
 }
@@ -53,7 +53,7 @@ func OnErrorRetry(message ...string) *ErrorConfig {
 		msg = message[0]
 	}
 	return &ErrorConfig{
-		Action:  ErrorActionRetry,
+		Action:  errorStrategyRetry,
 		Message: msg,
 	}
 }
@@ -65,7 +65,7 @@ func OnErrorIgnore(message ...string) *ErrorConfig {
 		msg = message[0]
 	}
 	return &ErrorConfig{
-		Action:  ErrorActionIgnore,
+		Action:  errorStrategyIgnore,
 		Message: msg,
 	}
 }
@@ -78,20 +78,20 @@ type FlowConfig struct {
 	HelpCommands        []string
 }
 
-// FlowManager manages all flows and user flow states
-type FlowManager struct {
-	flows          map[string]*Flow
-	userFlows      map[int64]*UserFlowState
+// flowManager manages all flows and user flow states
+type flowManager struct {
+	flows          map[string]*flow
+	userFlows      map[int64]*userFlowState
 	stateManager   StateManager
 	botConfig      *FlowConfig
-	promptRenderer *PromptRenderer
+	promptRenderer *promptRenderer
 }
 
-// NewFlowManager creates a new flow manager
-func NewFlowManager(stateManager StateManager) *FlowManager {
-	return &FlowManager{
-		flows:        make(map[string]*Flow),
-		userFlows:    make(map[int64]*UserFlowState),
+// newFlowManager creates a new flow manager
+func newFlowManager(stateManager StateManager) *flowManager {
+	return &flowManager{
+		flows:        make(map[string]*flow),
+		userFlows:    make(map[int64]*userFlowState),
 		stateManager: stateManager,
 	}
 }
@@ -106,34 +106,34 @@ func NewFlowManager(stateManager StateManager) *FlowManager {
 // 	fm.botConfig = &config
 // }
 
-func (fm *FlowManager) initialize(bot *Bot) {
-	fm.promptRenderer = NewPromptRenderer(bot)
+func (fm *flowManager) initialize(bot *Bot) {
+	fm.promptRenderer = newPromptRenderer(bot)
 	fm.botConfig = &bot.flowConfig
 }
 
-// IsUserInFlow checks if a user is currently in a flow
-func (fm *FlowManager) IsUserInFlow(userID int64) bool {
+// isUserInFlow checks if a user is currently in a flow
+func (fm *flowManager) isUserInFlow(userID int64) bool {
 	_, exists := fm.userFlows[userID]
 	return exists
 }
 
-// CancelFlow cancels the current flow for a user
-func (fm *FlowManager) CancelFlow(userID int64) {
+// cancelFlow cancels the current flow for a user
+func (fm *flowManager) cancelFlow(userID int64) {
 	delete(fm.userFlows, userID)
 }
 
-// Flow represents a structured multi-step conversation using the new Step-Prompt-Process API
-type Flow struct {
+// flow represents a structured multi-step conversation using the new Step-Prompt-Process API
+type flow struct {
 	Name       string
-	Steps      map[string]*FlowStep // Map for easier lookup by step name
+	Steps      map[string]*flowStep // Map for easier lookup by step name
 	Order      []string             // Maintains step execution order
 	OnComplete func(*Context) error // Simplified completion handler
 	OnError    *ErrorConfig         // Flow-level error handling configuration
 	Timeout    time.Duration
 }
 
-// FlowStep represents a single step in a flow using the new API
-type FlowStep struct {
+// flowStep represents a single step in a flow using the new API
+type flowStep struct {
 	Name         string
 	PromptConfig *PromptConfig        // New: declarative prompt specification
 	ProcessFunc  ProcessFunc          // New: unified input processing
@@ -141,8 +141,8 @@ type FlowStep struct {
 	Timeout      time.Duration
 }
 
-// UserFlowState tracks a user's current position in a flow
-type UserFlowState struct {
+// userFlowState tracks a user's current position in a flow
+type userFlowState struct {
 	FlowName    string
 	CurrentStep string
 	Data        map[string]interface{}
@@ -151,12 +151,12 @@ type UserFlowState struct {
 }
 
 // registerFlow registers a flow with the manager
-func (fm *FlowManager) registerFlow(flow *Flow) {
+func (fm *flowManager) registerFlow(flow *flow) {
 	fm.flows[flow.Name] = flow
 }
 
 // startFlow starts a flow for a user
-func (fm *FlowManager) startFlow(userID int64, flowName string, ctx *Context) error {
+func (fm *flowManager) startFlow(userID int64, flowName string, ctx *Context) error {
 	flow, exists := fm.flows[flowName]
 	if !exists {
 		return fmt.Errorf("flow %s not found", flowName)
@@ -174,7 +174,7 @@ func (fm *FlowManager) startFlow(userID int64, flowName string, ctx *Context) er
 		}
 	}
 
-	userState := &UserFlowState{
+	userState := &userFlowState{
 		FlowName:    flowName,
 		CurrentStep: flow.Order[0], // First step in order
 		Data:        initialData,
@@ -193,7 +193,7 @@ func (fm *FlowManager) startFlow(userID int64, flowName string, ctx *Context) er
 }
 
 // renderStepPrompt renders the prompt for a given step
-func (fm *FlowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName string, userState *UserFlowState) error {
+func (fm *flowManager) renderStepPrompt(ctx *Context, flow *flow, stepName string, userState *userFlowState) error {
 	step := flow.Steps[stepName]
 	if step == nil {
 		return fmt.Errorf("step %s not found", stepName)
@@ -213,7 +213,7 @@ func (fm *FlowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName strin
 		return fmt.Errorf("PromptRenderer not initialized - call SetBot() on FlowManager")
 	}
 
-	renderCtx := &RenderContext{
+	renderCtx := &renderContext{
 		ctx:          ctx,
 		promptConfig: step.PromptConfig,
 		stepName:     stepName,
@@ -221,7 +221,7 @@ func (fm *FlowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName strin
 	}
 
 	// Attempt to render with error handling
-	err := fm.promptRenderer.Render(renderCtx)
+	err := fm.promptRenderer.render(renderCtx)
 	if err != nil {
 		return fm.handleRenderError(ctx, err, flow, stepName, userState)
 	}
@@ -230,7 +230,7 @@ func (fm *FlowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName strin
 }
 
 // HandleUpdate processes an update for a user in a flow using the new API
-func (fm *FlowManager) HandleUpdate(ctx *Context) (bool, error) {
+func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 	userID := ctx.UserID()
 	userState, exists := fm.userFlows[userID]
 	if !exists {
@@ -286,19 +286,19 @@ func (fm *FlowManager) HandleUpdate(ctx *Context) (bool, error) {
 }
 
 // extractInputData extracts input text and button click information from the update
-func (fm *FlowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
+func (fm *flowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
 	var input string
 	var buttonClick *ButtonClick
 
-	if ctx.Update.Message != nil {
-		input = ctx.Update.Message.Text
-	} else if ctx.Update.CallbackQuery != nil {
-		input = ctx.Update.CallbackQuery.Data
+	if ctx.update.Message != nil {
+		input = ctx.update.Message.Text
+	} else if ctx.update.CallbackQuery != nil {
+		input = ctx.update.CallbackQuery.Data
 		buttonClick = &ButtonClick{
-			Data:     ctx.Update.CallbackQuery.Data,
-			Text:     ctx.Update.CallbackQuery.Message.Text,
+			Data:     ctx.update.CallbackQuery.Data,
+			Text:     ctx.update.CallbackQuery.Message.Text,
 			UserID:   ctx.UserID(),
-			ChatID:   ctx.Update.CallbackQuery.Message.Chat.ID,
+			ChatID:   ctx.update.CallbackQuery.Message.Chat.ID,
 			Metadata: make(map[string]interface{}),
 		}
 	}
@@ -307,7 +307,7 @@ func (fm *FlowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
 }
 
 // handleProcessResult processes the result from a ProcessFunc
-func (fm *FlowManager) handleProcessResult(ctx *Context, result ProcessResult, userState *UserFlowState, flow *Flow) (bool, error) {
+func (fm *flowManager) handleProcessResult(ctx *Context, result ProcessResult, userState *userFlowState, flow *flow) (bool, error) {
 	// Show custom prompt if specified (informational only, no keyboard)
 	if result.Prompt != nil {
 		if err := fm.renderInformationalPrompt(ctx, result.Prompt); err != nil {
@@ -318,13 +318,13 @@ func (fm *FlowManager) handleProcessResult(ctx *Context, result ProcessResult, u
 
 	// Execute action
 	switch result.Action {
-	case ActionNextStep:
+	case actionNextStep:
 		return fm.advanceToNextStep(ctx, userState, flow)
 
-	case ActionGoToStep:
+	case actionGoToStep:
 		return fm.goToSpecificStep(ctx, userState, flow, result.TargetStep)
 
-	case ActionRetry:
+	case actionRetryStep:
 		// Stay on current step, optionally re-render prompt
 		if result.Prompt == nil {
 			currentStep := flow.Steps[userState.CurrentStep]
@@ -334,11 +334,11 @@ func (fm *FlowManager) handleProcessResult(ctx *Context, result ProcessResult, u
 		}
 		return true, nil
 
-	case ActionCompleteFlow:
+	case actionCompleteFlow:
 		return fm.completeFlow(ctx, flow)
 
-	case ActionCancelFlow:
-		return fm.cancelFlow(ctx)
+	case actionCancelFlow:
+		return fm.cancelFlowAction(ctx)
 
 	default:
 		return true, fmt.Errorf("unknown ProcessAction: %d", result.Action)
@@ -346,7 +346,7 @@ func (fm *FlowManager) handleProcessResult(ctx *Context, result ProcessResult, u
 }
 
 // renderInformationalPrompt renders a prompt without keyboard for informational messages
-func (fm *FlowManager) renderInformationalPrompt(ctx *Context, config *PromptConfig) error {
+func (fm *flowManager) renderInformationalPrompt(ctx *Context, config *PromptConfig) error {
 	if fm.promptRenderer == nil {
 		return fmt.Errorf("PromptRenderer not initialized - call SetBot() on FlowManager")
 	}
@@ -358,18 +358,18 @@ func (fm *FlowManager) renderInformationalPrompt(ctx *Context, config *PromptCon
 		// Keyboard is intentionally omitted for informational messages
 	}
 
-	renderCtx := &RenderContext{
+	renderCtx := &renderContext{
 		ctx:          ctx,
 		promptConfig: infoPrompt,
 		stepName:     "info",
 		flowName:     "system",
 	}
 
-	return fm.promptRenderer.Render(renderCtx)
+	return fm.promptRenderer.render(renderCtx)
 }
 
 // advanceToNextStep moves to the next step in sequence
-func (fm *FlowManager) advanceToNextStep(ctx *Context, userState *UserFlowState, flow *Flow) (bool, error) {
+func (fm *flowManager) advanceToNextStep(ctx *Context, userState *userFlowState, flow *flow) (bool, error) {
 	// Find current step index
 	currentIndex := -1
 	for i, stepName := range flow.Order {
@@ -398,7 +398,7 @@ func (fm *FlowManager) advanceToNextStep(ctx *Context, userState *UserFlowState,
 }
 
 // goToSpecificStep jumps to a named step
-func (fm *FlowManager) goToSpecificStep(ctx *Context, userState *UserFlowState, flow *Flow, targetStep string) (bool, error) {
+func (fm *flowManager) goToSpecificStep(ctx *Context, userState *userFlowState, flow *flow, targetStep string) (bool, error) {
 	if _, exists := flow.Steps[targetStep]; !exists {
 		return true, fmt.Errorf("target step %s not found in flow", targetStep)
 	}
@@ -408,7 +408,7 @@ func (fm *FlowManager) goToSpecificStep(ctx *Context, userState *UserFlowState, 
 }
 
 // completeFlow handles flow completion
-func (fm *FlowManager) completeFlow(ctx *Context, flow *Flow) (bool, error) {
+func (fm *flowManager) completeFlow(ctx *Context, flow *flow) (bool, error) {
 	// Execute completion handler if it exists
 	if flow.OnComplete != nil {
 		if err := flow.OnComplete(ctx); err != nil {
@@ -423,12 +423,12 @@ func (fm *FlowManager) completeFlow(ctx *Context, flow *Flow) (bool, error) {
 }
 
 // handleRenderError handles errors that occur during prompt rendering
-func (fm *FlowManager) handleRenderError(ctx *Context, renderErr error, flow *Flow, stepName string, userState *UserFlowState) error {
+func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *flow, stepName string, userState *userFlowState) error {
 	// Always log the technical error with full context
 	fm.logRenderError(renderErr, stepName, flow.Name, ctx.UserID())
 
 	// Determine error handling strategy
-	action := ErrorActionCancel // default behavior
+	action := errorStrategyCancel // default behavior
 	message := "❗ A technical error occurred. Flow has been cancelled."
 
 	if flow.OnError != nil {
@@ -444,17 +444,17 @@ func (fm *FlowManager) handleRenderError(ctx *Context, renderErr error, flow *Fl
 
 	// Execute the configured action
 	switch action {
-	case ErrorActionCancel:
+	case errorStrategyCancel:
 		fm.notifyUserIfNeeded(ctx, message)
 		delete(fm.userFlows, ctx.UserID())
 		return nil
 
-	case ErrorActionRetry:
+	case errorStrategyRetry:
 		fm.notifyUserIfNeeded(ctx, message)
 		// Stay on current step - next update will retry the render
 		return nil
 
-	case ErrorActionIgnore:
+	case errorStrategyIgnore:
 		fm.notifyUserIfNeeded(ctx, message)
 		// Try to render the step again without the problematic image
 		step := flow.Steps[stepName]
@@ -466,7 +466,7 @@ func (fm *FlowManager) handleRenderError(ctx *Context, renderErr error, flow *Fl
 				// Image is intentionally omitted to avoid repeated render errors
 			}
 
-			renderCtx := &RenderContext{
+			renderCtx := &renderContext{
 				ctx:          ctx,
 				promptConfig: fallbackPrompt,
 				stepName:     stepName,
@@ -474,7 +474,7 @@ func (fm *FlowManager) handleRenderError(ctx *Context, renderErr error, flow *Fl
 			}
 
 			// Try to render without image - if this fails, we'll advance to next step
-			if err := fm.promptRenderer.Render(renderCtx); err != nil {
+			if err := fm.promptRenderer.render(renderCtx); err != nil {
 				// If even the fallback fails, advance to next step
 				_, err := fm.advanceToNextStep(ctx, userState, flow)
 				return err
@@ -491,13 +491,13 @@ func (fm *FlowManager) handleRenderError(ctx *Context, renderErr error, flow *Fl
 }
 
 // logRenderError logs detailed information about rendering errors
-func (fm *FlowManager) logRenderError(err error, stepName, flowName string, userID int64) {
+func (fm *flowManager) logRenderError(err error, stepName, flowName string, userID int64) {
 	log.Printf("[FLOW_RENDER_ERROR] Flow: %s, Step: %s, User: %d, Error: %v",
 		flowName, stepName, userID, err)
 }
 
 // notifyUserIfNeeded sends a notification to the user unless silent mode is enabled
-func (fm *FlowManager) notifyUserIfNeeded(ctx *Context, message string) {
+func (fm *flowManager) notifyUserIfNeeded(ctx *Context, message string) {
 	if message == ON_ERROR_SILENT {
 		return
 	}
@@ -509,21 +509,21 @@ func (fm *FlowManager) notifyUserIfNeeded(ctx *Context, message string) {
 }
 
 // getActionName returns a human-readable name for the error action (for logging)
-func (fm *FlowManager) getActionName(action ErrorAction) string {
+func (fm *flowManager) getActionName(action errorStrategy) string {
 	switch action {
-	case ErrorActionCancel:
+	case errorStrategyCancel:
 		return "CANCEL"
-	case ErrorActionRetry:
+	case errorStrategyRetry:
 		return "RETRY"
-	case ErrorActionIgnore:
+	case errorStrategyIgnore:
 		return "IGNORE"
 	default:
 		return "UNKNOWN"
 	}
 }
 
-// cancelFlow handles flow cancellation
-func (fm *FlowManager) cancelFlow(ctx *Context) (bool, error) {
+// cancelFlowAction handles flow cancellation
+func (fm *flowManager) cancelFlowAction(ctx *Context) (bool, error) {
 	// Remove user from flow
 	delete(fm.userFlows, ctx.UserID())
 	return true, nil
