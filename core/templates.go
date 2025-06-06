@@ -12,80 +12,51 @@ import (
 	"golang.org/x/text/language"
 )
 
-// Template system provides powerful message templating capabilities using
-// Go's built-in text/template engine. The system enables dynamic content
-// generation, message personalization, and complex formatting with support
-// for conditional logic, loops, and custom functions.
+// Template system provides simple message templating capabilities for dynamic content.
+// The system focuses on ease of use and integrates seamlessly with the new
+// Step-Prompt-Process API for zero learning curve message generation.
 //
 // Templates support:
-//   - Dynamic variable substitution
-//   - Conditional rendering with if/else statements
-//   - Iterative content generation with range loops
-//   - Custom template functions for advanced formatting
-//   - Template inheritance and composition
-//   - Automatic HTML/Markdown escaping for security
-//   - Template caching for improved performance
+//   - Simple variable substitution with {{.VariableName}}
+//   - Basic conditional rendering with {{if .Condition}}
+//   - List iteration with {{range .Items}}
+//   - Built-in formatting functions (title, upper, lower)
+//   - Automatic escaping for security
 //
-// Basic Template Usage:
+// Basic Template Usage with PromptConfig:
 //
-//	// Register a template
-//	bot.AddTemplate("welcome", `
-//	Hello {{.Name}}!
-//	Welcome to our service. You have {{.MessageCount}} unread messages.
-//	{{if gt .MessageCount 0}}
-//	Would you like to read them now?
-//	{{end}}`)
+//	// Register a simple template
+//	bot.AddTemplate("welcome", `Hello {{.Name}}! Welcome to our service.`, teleflow.ParseModeNone)
 //
-//	// Use template in handlers
-//	bot.HandleCommand("/welcome", func(ctx *teleflow.Context) error {
-//		data := map[string]interface{}{
-//			"Name":         ctx.User().FirstName,
-//			"MessageCount": getUserMessageCount(ctx.UserID()),
-//		}
+//	// Use in flow steps with PromptConfig
+//	.Prompt(
+//		"template:welcome",
+//		map[string]interface{}{"Name": "John"},
+//		nil, // no keyboard
+//	)
+//
+// Template in Traditional Handlers:
+//
+//	bot.HandleCommand("/welcome", func(ctx *teleflow.Context, command string, args string) error {
+//		data := map[string]interface{}{"Name": "User"}
 //		return ctx.ReplyTemplate("welcome", data)
 //	})
 //
-// Advanced Template with Loops:
+// Simple List Template:
 //
-//	bot.AddTemplate("user_list", `
-//	📋 Active Users:
-//	{{range .Users}}
-//	• {{.Name}} - {{.Status}}
-//	{{end}}
-//	{{if eq (len .Users) 0}}
-//	No active users found.
-//	{{end}}`)
+//	bot.AddTemplate("simple_list", `
+//	📋 Items:
+//	{{range .Items}}• {{.}}
+//	{{end}}`, teleflow.ParseModeNone)
 //
-// Template Functions:
+// PromptConfig Integration:
 //
-//	// Templates support custom functions
-//	bot.AddTemplate("formatted_date", `
-//	Today is {{formatDate .Date "2006-01-02"}}
-//	Welcome {{title .Username}}!`)
-//
-// Complex Template Example:
-//
-//	bot.AddTemplate("order_summary", `
-//	🛒 Order Summary
-//	Order #{{.OrderID}}
-//	Date: {{formatDate .Date "Jan 2, 2006"}}
-//
-//	Items:
-//	{{range .Items}}
-//	• {{.Name}} x{{.Quantity}} - ${{printf "%.2f" .Price}}
-//	{{end}}
-//
-//	{{if .Discount}}
-//	Discount: -${{printf "%.2f" .Discount}}
-//	{{end}}
-//
-//	Total: ${{printf "%.2f" .Total}}
-//
-//	{{if eq .Status "pending"}}
-//	⏳ Payment pending
-//	{{else if eq .Status "paid"}}
-//	✅ Payment confirmed
-//	{{end}}`)
+//	// Templates work seamlessly with PromptConfig messages
+//	prompt := &teleflow.PromptConfig{
+//		Message: "template:welcome",
+//		Data:    map[string]interface{}{"Name": userName},
+//	}
+//	return teleflow.RetryWithPrompt(prompt)
 //
 // ParseMode represents different Telegram parsing modes
 type ParseMode string
@@ -113,18 +84,18 @@ var templateRegistry = make(map[string]*TemplateInfo)
 
 // AddTemplate registers a template with the given name, template text, and parse mode
 func (b *Bot) AddTemplate(name, templateText string, parseMode ParseMode) error {
-	return b.addTemplateInternal(name, templateText, parseMode, false)
+	return b.addTemplateInternal(name, templateText, parseMode)
 }
 
 // MustAddTemplate registers a template and panics if it fails
 func (b *Bot) MustAddTemplate(name, templateText string, parseMode ParseMode) {
-	if err := b.addTemplateInternal(name, templateText, parseMode, true); err != nil {
+	if err := b.addTemplateInternal(name, templateText, parseMode); err != nil {
 		log.Fatalf("Failed to add template '%s': %v", name, err)
 	}
 }
 
 // addTemplateInternal is the internal implementation for adding templates
-func (b *Bot) addTemplateInternal(name, templateText string, parseMode ParseMode, mustAdd bool) error {
+func (b *Bot) addTemplateInternal(name, templateText string, parseMode ParseMode) error {
 	if name == "" {
 		return fmt.Errorf("template name cannot be empty")
 	}
@@ -354,6 +325,7 @@ func isSelfClosingTag(tag string) bool {
 
 // getTemplateFuncs returns template functions for the given parse mode
 func getTemplateFuncs(parseMode ParseMode) template.FuncMap {
+	titleCaser := cases.Title(language.Und)
 	baseFuncs := template.FuncMap{
 		"escape": func(s string) string {
 			switch parseMode {
@@ -372,7 +344,7 @@ func getTemplateFuncs(parseMode ParseMode) template.FuncMap {
 			return s
 		},
 		"title": func(s string) string {
-			return strings.Title(s)
+			return titleCaser.String(s)
 		},
 		"upper": func(s string) string {
 			return strings.ToUpper(s)

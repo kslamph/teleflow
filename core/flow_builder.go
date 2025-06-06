@@ -41,6 +41,13 @@ func (fb *FlowBuilder) OnComplete(handler func(*Context) error) *FlowBuilder {
 	return fb
 }
 
+// OnError sets the error handling configuration for the flow.
+// This defines how the flow should behave when rendering errors occur.
+func (fb *FlowBuilder) OnError(config *ErrorConfig) *FlowBuilder {
+	fb.onError = config
+	return fb
+}
+
 // Build creates the final Flow object from the builder.
 // This converts the new API structure to the internal Flow representation.
 func (fb *FlowBuilder) Build() (*Flow, error) {
@@ -53,6 +60,7 @@ func (fb *FlowBuilder) Build() (*Flow, error) {
 		Name:    fb.name,
 		Steps:   make(map[string]*FlowStep),
 		Order:   fb.order,
+		OnError: fb.onError,       // Set flow-level error handling
 		Timeout: 30 * time.Minute, // Default timeout
 	}
 

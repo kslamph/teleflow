@@ -38,9 +38,3 @@ type MiddlewareFunc func(next HandlerFunc) HandlerFunc
 
 // Internal middleware types (not exposed to users)
 // These are used internally for callback and flow system operations
-
-// callbackHandlerFunc defines internal callback handling (lowercase = private)
-type callbackHandlerFunc func(ctx *Context, fullCallbackData string, extractedData string) error
-
-// callbackMiddlewareFunc defines internal callback middleware (lowercase = private)
-type callbackMiddlewareFunc func(next callbackHandlerFunc) callbackHandlerFunc

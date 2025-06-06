@@ -6,94 +6,57 @@ import (
 	"time"
 )
 
-// Middleware system provides a powerful and flexible way to intercept,
-// modify, and extend bot request processing. Middleware functions execute
-// in a chain pattern, allowing for cross-cutting concerns like authentication,
-// logging, rate limiting, error handling, and custom business logic.
+// Middleware system provides a simple way to add cross-cutting functionality
+// like authentication, logging, and rate limiting to your bot. Middleware
+// functions execute in a chain pattern before your handlers run.
 //
-// The middleware system supports:
-//   - Request/response interception and modification
+// Supported middleware:
 //   - Authentication and authorization
-//   - Rate limiting and throttling
 //   - Request logging and monitoring
+//   - Rate limiting and throttling
 //   - Error handling and recovery
-//   - Custom business logic injection
-//   - Conditional middleware execution
-//   - Middleware composition and chaining
+//   - Custom business logic
 //
-// Basic Middleware Usage:
+// Basic Usage:
 //
 //	// Apply middleware globally to all handlers
-//	bot.Use(teleflow.LoggingMiddleware())
-//	bot.Use(teleflow.AuthMiddleware(authChecker))
-//	bot.Use(teleflow.RateLimitMiddleware(10, time.Minute))
+//	bot.UseMiddleware(teleflow.LoggingMiddleware())
+//	bot.UseMiddleware(teleflow.AuthMiddleware(authChecker))
+//	bot.UseMiddleware(teleflow.RateLimitMiddleware(10))
 //
-//	// Apply middleware to specific handlers
-//	bot.HandleCommand("/admin", adminHandler, teleflow.RequireAdmin())
-//
-// Custom Middleware Creation:
+// Custom Middleware:
 //
 //	func CustomMiddleware() teleflow.MiddlewareFunc {
 //		return func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
 //			return func(ctx *teleflow.Context) error {
-//				// Pre-processing logic
+//				// Pre-processing
 //				log.Printf("Request from user %d", ctx.UserID())
 //
 //				// Call next handler
 //				err := next(ctx)
 //
-//				// Post-processing logic
+//				// Post-processing
 //				if err != nil {
 //					log.Printf("Handler error: %v", err)
 //				}
-//
 //				return err
 //			}
 //		}
 //	}
 //
-// Authentication Middleware:
+// Built-in Middleware Examples:
 //
-//	func AuthMiddleware(checker UserPermissionChecker) teleflow.MiddlewareFunc {
-//		return func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
-//			return func(ctx *teleflow.Context) error {
-//				if !checker.CanExecute(ctx.UserID(), "access") {
-//					return ctx.Reply("🚫 Access denied")
-//				}
-//				return next(ctx)
-//			}
-//		}
-//	}
+//	// Authentication
+//	bot.UseMiddleware(teleflow.AuthMiddleware(accessManager))
 //
-// Rate Limiting Middleware:
+//	// Rate limiting (10 requests per minute)
+//	bot.UseMiddleware(teleflow.RateLimitMiddleware(10))
 //
-//	func RateLimitMiddleware(limit int, window time.Duration) teleflow.MiddlewareFunc {
-//		limiter := NewRateLimiter(limit, window)
-//		return func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
-//			return func(ctx *teleflow.Context) error {
-//				if !limiter.Allow(ctx.UserID()) {
-//					return ctx.Reply("⏰ Rate limit exceeded. Please try again later.")
-//				}
-//				return next(ctx)
-//			}
-//		}
-//	}
+//	// Error recovery
+//	bot.UseMiddleware(teleflow.RecoveryMiddleware())
 //
-// Error Recovery Middleware:
-//
-//	func RecoveryMiddleware() teleflow.MiddlewareFunc {
-//		return func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
-//			return func(ctx *teleflow.Context) (err error) {
-//				defer func() {
-//					if r := recover(); r != nil {
-//						log.Printf("Panic recovered: %v", r)
-//						err = ctx.Reply("❌ An error occurred. Please try again.")
-//					}
-//				}()
-//				return next(ctx)
-//			}
-//		}
-//	}
+//	// Request logging
+//	bot.UseMiddleware(teleflow.LoggingMiddleware())
 
 // LoggingMiddleware logs all incoming updates and handler execution time
 func LoggingMiddleware() MiddlewareFunc {

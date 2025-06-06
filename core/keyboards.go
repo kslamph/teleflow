@@ -5,9 +5,8 @@ import (
 )
 
 // Keyboard system provides intuitive abstractions for creating and managing
-// Telegram reply keyboards and inline keyboards. The system supports both
-// simple text-based keyboards and complex interactive keyboards with callbacks,
-// web apps, and special request buttons.
+// Telegram reply keyboards and inline keyboards. The Step-Prompt-Process API
+// greatly simplifies keyboard creation using map-based approaches for common use cases.
 //
 // Reply Keyboards appear below the message input field and send their text
 // as regular messages when pressed. They're ideal for main menus, options
@@ -17,37 +16,42 @@ import (
 // They support callback data, URLs, web apps, and other interactive elements
 // without sending text messages.
 //
-// Example - Reply Keyboard:
+// Simple Map-based Keyboards :
 //
-//	keyboard := teleflow.NewReplyKeyboard().
-//		AddRow("🏠 Home", "📊 Stats").
-//		AddRow("⚙️ Settings").
-//		SetResizable(true).
-//		SetOneTime(false)
-//
-//	ctx.ReplyWithKeyboard("Choose an option:", keyboard)
-//
-// Example - Inline Keyboard (New Step-Prompt-Process API):
-//
-//	// Inline keyboards now use simple map-based approach in flow steps
+//	// In flow steps, use simple map syntax for inline keyboards
 //	.Prompt(
-//		"Please review:",
-//		nil,
+//		"Please choose an option:",
+//		nil, // optional image
 //		func(ctx *teleflow.Context) map[string]interface{} {
 //			return map[string]interface{}{
 //				"✅ Approve": "approve_123",
 //				"❌ Reject":  "reject_123",
+//				"ℹ️ More Info": "info_123",
 //			}
 //		},
 //	)
 //
-// Special Button Types:
+//	// Handle button clicks in Process function
+//	.Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
+//		if buttonClick != nil {
+//			switch buttonClick.Data {
+//			case "approve_123":
+//				return teleflow.CompleteFlow()
+//			case "reject_123":
+//				return teleflow.RetryWithPrompt(&teleflow.PromptConfig{Message: "Please provide reason:"})
+//			}
+//		}
+//		return teleflow.NextStep()
+//	})
+//
+
+// Special Button Types (Still supported for complex use cases):
 //
 //	// Request contact information
-//	keyboard.AddRow(teleflow.NewReplyButton("📱 Share Contact").RequestContact())
+//	keyboard.AddRow(teleflow.NewReplyButton("📱 Share Contact").SetRequestContact())
 //
 //	// Request location
-//	keyboard.AddRow(teleflow.NewReplyButton("📍 Share Location").RequestLocation())
+//	keyboard.AddRow(teleflow.NewReplyButton("📍 Share Location").SetRequestLocation())
 //
 //	// Web app integration
 //	keyboard.AddRow(teleflow.NewReplyButton("🌐 Open App").WithWebApp("https://app.example.com"))
@@ -115,6 +119,14 @@ type WebAppInfo struct {
 }
 
 // NewReplyKeyboard creates a new reply keyboard
+//
+// Reply keyboards appear below the message input field and are used for persistent
+// navigation menus, main menu options, and other UI elements that should remain
+// available to the user. They work with the AccessManager.GetReplyKeyboard() method
+// to provide context-aware keyboard layouts.
+//
+// This is different from inline keyboards used in flow steps - those use the new
+// map-based approach in the Step-Prompt-Process API.
 func NewReplyKeyboard(rows ...[]ReplyKeyboardButton) *ReplyKeyboard {
 	kb := &ReplyKeyboard{
 		Keyboard:   make([][]ReplyKeyboardButton, 0),
@@ -126,20 +138,49 @@ func NewReplyKeyboard(rows ...[]ReplyKeyboardButton) *ReplyKeyboard {
 	return kb
 }
 
-// AddRow adds a new row to the reply keyboard
-func (kb *ReplyKeyboard) AddRow() *ReplyKeyboard {
-	if len(kb.currentRow) > 0 {
-		kb.Keyboard = append(kb.Keyboard, kb.currentRow)
-		kb.currentRow = make([]ReplyKeyboardButton, 0)
+// NewReplyButton creates a new reply keyboard button with the given text
+func NewReplyButton(text string) *ReplyKeyboardButton {
+	return &ReplyKeyboardButton{
+		Text: text,
+	}
+}
+
+// SetRequestContact sets the button to request contact information
+func (btn *ReplyKeyboardButton) SetRequestContact() *ReplyKeyboardButton {
+	btn.RequestContact = true
+	return btn
+}
+
+// SetRequestLocation sets the button to request location information
+func (btn *ReplyKeyboardButton) SetRequestLocation() *ReplyKeyboardButton {
+	btn.RequestLocation = true
+	return btn
+}
+
+// WithWebApp sets the button as a web app button
+func (btn *ReplyKeyboardButton) WithWebApp(url string) *ReplyKeyboardButton {
+	btn.WebApp = &WebAppInfo{URL: url}
+	return btn
+}
+
+// AddRow adds a new row of buttons to the keyboard
+func (kb *ReplyKeyboard) AddRow(buttons ...*ReplyKeyboardButton) *ReplyKeyboard {
+	// Convert pointers to values for the row
+	var row []ReplyKeyboardButton
+	for _, btn := range buttons {
+		if btn != nil {
+			row = append(row, *btn)
+		}
+	}
+	if len(row) > 0 {
+		kb.Keyboard = append(kb.Keyboard, row)
 	}
 	return kb
 }
 
-// AddButton adds a button to the current row of the reply keyboard
+// AddButton adds a button to the current row
 func (kb *ReplyKeyboard) AddButton(text string) *ReplyKeyboard {
-	kb.currentRow = append(kb.currentRow, ReplyKeyboardButton{
-		Text: text,
-	})
+	kb.currentRow = append(kb.currentRow, ReplyKeyboardButton{Text: text})
 	return kb
 }
 

@@ -17,30 +17,35 @@
 //		log.Fatal(err)
 //	}
 //
+//	// Initialize the flow system before using flows
+//	bot.InitializeFlowSystem()
+//
 //	bot.HandleCommand("start", func(ctx *teleflow.Context, command string, args string) error {
 //		return ctx.Reply("Hello! Welcome to Teleflow!")
 //	})
 //
 //	log.Fatal(bot.Start())
 //
-// Flow-based Conversations:
+// Flow-based Conversations (New Step-Prompt-Process API):
 //
 //	flow := teleflow.NewFlow("registration").
 //		Step("name").
-//		OnStart(func(ctx *teleflow.Context) error {
-//			return ctx.Reply("What's your name?")
-//		}).
-//		OnInput(func(ctx *teleflow.Context, input string) error {
+//		Prompt("What's your name?", nil, nil).
+//		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
+//			if input == "" {
+//				return teleflow.RetryWithPrompt(&teleflow.PromptConfig{Message: "Please enter your name:"})
+//			}
 //			ctx.Set("name", input)
-//			return nil
+//			return teleflow.NextStep()
 //		}).
 //		Step("age").
-//		OnStart(func(ctx *teleflow.Context) error {
-//			return ctx.Reply("How old are you?")
-//		}).
-//		OnInput(func(ctx *teleflow.Context, input string) error {
+//		Prompt("How old are you?", nil, nil).
+//		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
+//			if input == "" {
+//				return teleflow.RetryWithPrompt(&teleflow.PromptConfig{Message: "Please enter your age:"})
+//			}
 //			ctx.Set("age", input)
-//			return nil
+//			return teleflow.NextStep()
 //		}).
 //		OnComplete(func(ctx *teleflow.Context, flowData map[string]interface{}) error {
 //			name, _ := flowData["name"].(string)
@@ -53,9 +58,9 @@
 //
 // Middleware Integration:
 //
-//	bot.UseCommandMiddleware(adaptToCommandMiddleware(teleflow.LoggingMiddleware()))
-//	bot.UseCommandMiddleware(adaptAuthToCommandMiddleware(teleflow.AuthMiddleware, authChecker))
-//	bot.UseCommandMiddleware(adaptToCommandMiddleware(teleflow.RecoveryMiddleware()))
+//	bot.UseMiddleware(teleflow.LoggingMiddleware())
+//	bot.UseMiddleware(teleflow.AuthMiddleware(authChecker))
+//	bot.UseMiddleware(teleflow.RecoveryMiddleware())
 //
 // For comprehensive examples and documentation, see the examples/ directory
 // and the documentation at docs/.
@@ -150,7 +155,7 @@ type Bot struct {
 	handlers           map[string]HandlerFunc
 	textHandlers       map[string]HandlerFunc
 	defaultTextHandler HandlerFunc // Field for the default text handler
-	callbackRegistry   *CallbackRegistry
+	callbackRegistry   *callbackRegistry
 	stateManager       StateManager
 	flowManager        *FlowManager
 	templates          *template.Template
@@ -175,7 +180,7 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		api:              api,
 		handlers:         make(map[string]HandlerFunc),
 		textHandlers:     make(map[string]HandlerFunc),
-		callbackRegistry: NewCallbackRegistry(),
+		callbackRegistry: newCallbackRegistry(),
 		stateManager:     NewInMemoryStateManager(),
 		flowManager:      NewFlowManager(NewInMemoryStateManager()),
 		templates:        template.New("botMessages"),
@@ -192,6 +197,10 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 	for _, opt := range options {
 		opt(b)
 	}
+
+	// Automatically initialize the flow system
+	b.flowManager.SetBot(b)
+	b.flowManager.SetBotConfig(b.flowConfig)
 
 	return b, nil
 }
@@ -249,9 +258,10 @@ func (b *Bot) UseMiddleware(m MiddlewareFunc) {
 }
 
 // InitializeFlowSystem initializes the flow system with the bot instance.
-// This must be called before using any flow features with the new Step-Prompt-Process API.
+// This is now called automatically during bot creation - manual call is no longer required.
+// Deprecated: This method is now a no-op as initialization happens automatically.
 func (b *Bot) InitializeFlowSystem() {
-	b.flowManager.SetBot(b)
+	// No-op - initialization now happens automatically in NewBot()
 }
 
 // HandleCommand registers a CommandHandlerFunc for a specific command.
@@ -434,7 +444,7 @@ func (b *Bot) resolveCallbackHandler(callbackData string) HandlerFunc {
 	// The CallbackRegistry's Handle method already returns a HandlerFunc
 	// which, when executed, calls the specific CallbackHandler.Handle method
 	// with the correct arguments (ctx, fullCallbackData, extractedData).
-	return b.callbackRegistry.Handle(callbackData)
+	return b.callbackRegistry.handle(callbackData)
 }
 
 // Note: resolveHandler is largely integrated into processUpdate now.

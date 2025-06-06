@@ -5,47 +5,35 @@ import (
 )
 
 // State management system provides persistent storage of user data across
-// bot interactions, conversations, and sessions. The system supports both
-// in-memory storage for development and testing, and can be extended with
-// custom storage backends for production deployments.
+// bot interactions and conversation flows. The system includes an in-memory
+// implementation for development and can be extended with custom storage
+// backends for production use.
 //
-// The state system enables:
+// State features:
 //   - User-specific data persistence across conversations
-//   - Conversation flow state tracking
-//   - Temporary data storage for multi-step interactions
-//   - Session management and user preferences
-//   - Custom storage backend integration
+//   - Automatic flow state tracking
+//   - Simple key-value storage interface
+//   - Custom storage backend support
 //
-// Basic State Operations:
+// Basic Usage (handled automatically in flows):
 //
-//	// Store user data
-//	ctx.SetState("username", "john_doe")
-//	ctx.SetState("registration_step", 2)
+//	// In Process functions, use context methods
+//	ctx.Set("username", "john_doe")  // Store in current context
 //
-//	// Retrieve user data
-//	if username, exists := ctx.GetState("username"); exists {
-//		ctx.Reply("Hello " + username.(string))
-//	}
+//	// Access previous step data automatically
+//	name, exists := ctx.Get("name")  // Get from current flow context
 //
-//	// Clear user state
-//	ctx.ClearState()
+// Flow State Management:
 //
-// Flow Integration:
-//
-//	// State is automatically managed during flows
-//	flow := teleflow.NewFlow("user_onboarding").
-//		AddStep("name", teleflow.StepTypeText, "What's your name?").
-//		AddStep("email", teleflow.StepTypeText, "What's your email?")
-//
-//	// Flow progress is tracked in state automatically
-//	bot.RegisterFlow(flow, func(ctx *teleflow.Context, result map[string]string) error {
-//		// Save final results to persistent storage
-//		return saveUserProfile(ctx.UserID(), result)
+//	// Flow progress and data are tracked automatically
+//	.Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
+//		ctx.Set("user_choice", input)  // Stored for this flow
+//		return teleflow.NextStep()
 //	})
 //
 // Custom Storage Backend:
 //
-//	// Implement StateManager interface for custom storage
+//	// Implement StateManager interface for production storage
 //	type RedisStateManager struct {
 //		client *redis.Client
 //	}

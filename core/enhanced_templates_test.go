@@ -10,7 +10,7 @@ func createTestBot() *Bot {
 		api:              nil, // No API needed for template tests
 		handlers:         make(map[string]HandlerFunc),
 		textHandlers:     make(map[string]HandlerFunc),
-		callbackRegistry: NewCallbackRegistry(),
+		callbackRegistry: newCallbackRegistry(),
 		stateManager:     NewInMemoryStateManager(),
 		flowManager:      NewFlowManager(NewInMemoryStateManager()),
 		templates:        nil, // Will be initialized when first template is added

@@ -6,18 +6,18 @@ import (
 )
 
 // Callback system provides internal handling of inline keyboard button
-// interactions for the new Step-Prompt-Process API. This system is used
+// interactions for the Step-Prompt-Process API. This system is used
 // internally by the flow system and is not exposed to end users.
 //
-// In the new API, callback complexity is completely abstracted away.
-// Users define keyboards using simple maps and handle input through
-// unified ProcessFunc functions without ever dealing with callbacks directly.
+// With the API, callback complexity is completely abstracted away.
+// Users define keyboards using simple maps in Prompt() functions and handle
+// all input (both text and button clicks) through unified ProcessFunc functions.
 //
-// This system handles:
-//   - Automatic callback registration for flow keyboards
-//   - Pattern matching for callback data routing
-//   - Internal callback query processing
+// Internal responsibilities:
+//   - Automatic callback registration for flow-generated keyboards
+//   - Pattern matching and routing of callback data
 //   - Integration with the unified input processing system
+//   - Transparent handling of button interactions
 
 // callbackHandler defines the interface for handling callback queries (internal use only).
 // This interface is used internally by the flow system and should not be used directly by users.
@@ -29,34 +29,24 @@ type callbackHandler interface {
 	handle(ctx *Context, fullCallbackData string, extractedData string) error
 }
 
-// CallbackRegistry manages type-safe callback handlers (internal use only)
-type CallbackRegistry struct {
+// callbackRegistry manages type-safe callback handlers (internal use only)
+type callbackRegistry struct {
 	mu       sync.RWMutex
 	handlers map[string]callbackHandler
 	patterns []string
 }
 
-// NewCallbackRegistry creates a new callback registry (internal use only)
-func NewCallbackRegistry() *CallbackRegistry {
-	return &CallbackRegistry{
+// newCallbackRegistry creates a new callback registry (internal use only)
+func newCallbackRegistry() *callbackRegistry {
+	return &callbackRegistry{
 		handlers: make(map[string]callbackHandler),
 		patterns: []string{},
 	}
 }
 
-// register registers a callback handler (internal use only)
-func (r *CallbackRegistry) register(handler callbackHandler) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	pattern := handler.pattern()
-	r.handlers[pattern] = handler
-	r.patterns = append(r.patterns, pattern)
-}
-
-// Handle finds and executes the appropriate callback handler.
-// It returns a generic HandlerFunc which wraps the call to the specific CallbackHandler.Handle method.
-func (r *CallbackRegistry) Handle(callbackData string) HandlerFunc { // Keep existing signature for now, apply middleware internally
+// handle finds and executes the appropriate callback handler.
+// It returns a generic HandlerFunc which wraps the call to the specific CallbackHandler.handle method.
+func (r *callbackRegistry) handle(callbackData string) HandlerFunc { // Keep existing signature for now, apply middleware internally
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -84,7 +74,7 @@ func (r *CallbackRegistry) Handle(callbackData string) HandlerFunc { // Keep exi
 }
 
 // matchPattern checks if callback data matches pattern and extracts data
-func (r *CallbackRegistry) matchPattern(pattern, callbackData string) string {
+func (r *callbackRegistry) matchPattern(pattern, callbackData string) string {
 	if strings.HasSuffix(pattern, "*") {
 		prefix := pattern[:len(pattern)-1]
 		if strings.HasPrefix(callbackData, prefix) {

@@ -8,7 +8,7 @@ type FlowBuilder struct {
 	steps       map[string]*StepBuilder
 	order       []string
 	onComplete  func(*Context) error
-	initialData map[string]interface{}
+	onError     *ErrorConfig // Flow-level error handling
 	currentStep *StepBuilder // Helper for fluent API
 }
 

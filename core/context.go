@@ -1,7 +1,6 @@
 package teleflow
 
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"strings"
@@ -20,7 +19,6 @@ import (
 //   - User and chat identification
 //   - Key-value data storage for request-scoped information
 //   - Helper methods for replying, keyboard management, and state operations
-//
 // Example usage in handlers:
 //
 //	bot.HandleCommand("/start", func(ctx *teleflow.Context, command string, args string) error {
@@ -28,15 +26,29 @@ import (
 //		return ctx.StartFlow("registration")
 //	})
 //
-//	// In flow steps, use unified ProcessFunc instead of separate callback handlers
-//	.Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
-//		// Handle both text input and button clicks in one function
-//		if buttonClick != nil {
-//			// Button was clicked
+//	// Modern flow definition with Step-Prompt-Process API:
+//	flow := teleflow.NewFlow("registration").
+//		Step("name").
+//		Prompt("What's your name?", nil, nil).
+//		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
+//			// Handle both text input and button clicks in one unified function
+//			if buttonClick != nil {
+//				// Button was clicked
+//				return teleflow.NextStep()
+//			}
+//			// Text input validation
+//			if len(input) < 2 {
+//				return teleflow.RetryWithPrompt(&teleflow.PromptConfig{Message: "Name must be at least 2 characters"})
+//			}
+//			ctx.Set("name", input)
 //			return teleflow.NextStep()
-//		}
-//		// Text was typed
-//		return teleflow.RetryWithPrompt(&teleflow.PromptConfig{Message: "Please use the buttons"})
+//		})
+//
+//	// Use SendPrompt for informational messages with PromptConfig rendering:
+//	ctx.SendPrompt(&teleflow.PromptConfig{
+//		Message: "Welcome to our service!",
+//		Image:   nil, // Optional image
+//	})
 //	})
 
 // Context provides information and helpers for the current interaction
@@ -101,52 +113,6 @@ func (c *Context) Reply(text string, keyboard ...interface{}) error {
 	return c.send(text, keyboard...)
 }
 
-// ReplyTemplate sends a text message using a template
-func (c *Context) ReplyTemplate(templateName string, data interface{}, keyboard ...interface{}) error {
-	text, parseMode, err := c.executeTemplate(templateName, data)
-	if err != nil {
-		return err
-	}
-	return c.sendWithParseMode(text, parseMode, keyboard...)
-}
-
-// EditOrReplyTemplate attempts to edit current message using template or sends new one
-func (c *Context) EditOrReplyTemplate(templateName string, data interface{}, keyboard ...interface{}) error {
-	text, parseMode, err := c.executeTemplate(templateName, data)
-	if err != nil {
-		return err
-	}
-	return c.editOrReplyWithParseMode(text, parseMode, keyboard...)
-}
-
-// EditOrReply attempts to edit current message or sends new one
-func (c *Context) EditOrReply(text string, keyboard ...interface{}) error {
-	if c.Update.CallbackQuery != nil && c.Update.CallbackQuery.Message != nil {
-		msg := tgbotapi.NewEditMessageText(
-			c.ChatID(),
-			c.Update.CallbackQuery.Message.MessageID,
-			text,
-		)
-
-		if len(keyboard) > 0 && keyboard[0] != nil {
-			switch kb := keyboard[0].(type) {
-			case *InlineKeyboard:
-				markup := kb.ToTgbotapi()
-				msg.ReplyMarkup = &markup
-			case tgbotapi.InlineKeyboardMarkup:
-				msg.ReplyMarkup = &kb
-			}
-		}
-
-		if _, err := c.Bot.api.Send(msg); err == nil {
-			cb := tgbotapi.NewCallback(c.Update.CallbackQuery.ID, "")
-			c.Bot.api.Request(cb)
-			return nil
-		}
-	}
-	return c.Reply(text, keyboard...)
-}
-
 // StartFlow initiates a new flow for the user
 func (c *Context) StartFlow(flowName string) error {
 	// StartFlow now takes a Context parameter instead of initialData
@@ -169,7 +135,7 @@ func (c *Context) CancelFlow() {
 // as flow prompts but don't require user interaction.
 func (c *Context) SendPrompt(prompt *PromptConfig) error {
 	if c.Bot.flowManager.promptRenderer == nil {
-		return fmt.Errorf("PromptRenderer not initialized - call InitializeFlowSystem() first")
+		return fmt.Errorf("PromptRenderer not initialized - this should not happen as initialization is automatic")
 	}
 
 	// Create a copy of the prompt without keyboard for informational use
@@ -269,122 +235,6 @@ func (c *Context) send(text string, keyboard ...interface{}) error {
 
 	_, err := c.Bot.api.Send(msg)
 	return err
-}
-
-// executeTemplate executes a template and returns the result with parse mode
-func (c *Context) executeTemplate(templateName string, data interface{}) (string, ParseMode, error) {
-	// Get template info to determine parse mode first
-	templateInfo := templateRegistry[templateName]
-	parseMode := ParseModeNone
-	if templateInfo != nil {
-		parseMode = templateInfo.ParseMode
-	}
-
-	// Create a template with the correct functions for this parse mode
-	tmpl := c.Bot.templates.Lookup(templateName)
-	if tmpl == nil {
-		return "", parseMode, fmt.Errorf("template %s not found", templateName)
-	}
-
-	// Clone the template and add the correct functions
-	clonedTmpl, err := tmpl.Clone()
-	if err != nil {
-		return "", parseMode, fmt.Errorf("failed to clone template %s: %w", templateName, err)
-	}
-
-	// Add parse mode specific functions
-	clonedTmpl = clonedTmpl.Funcs(getTemplateFuncs(parseMode))
-
-	var buf bytes.Buffer
-	if err := clonedTmpl.Execute(&buf, data); err != nil {
-		return "", parseMode, fmt.Errorf("executing template %s: %w", templateName, err)
-	}
-
-	return buf.String(), parseMode, nil
-}
-
-// sendWithParseMode sends a message with the specified parse mode and automatic UI management
-func (c *Context) sendWithParseMode(text string, parseMode ParseMode, keyboard ...interface{}) error {
-	msg := tgbotapi.NewMessage(c.ChatID(), text)
-
-	// Set parse mode if specified
-	if parseMode != ParseModeNone {
-		msg.ParseMode = string(parseMode)
-	}
-
-	// Automatic menu button management
-	c.applyAutomaticMenuButton()
-
-	// Apply keyboard markup
-	if len(keyboard) > 0 && keyboard[0] != nil {
-		switch kb := keyboard[0].(type) {
-		case *ReplyKeyboard:
-			msg.ReplyMarkup = kb.ToTgbotapi()
-		case *InlineKeyboard:
-			msg.ReplyMarkup = kb.ToTgbotapi()
-		case tgbotapi.ReplyKeyboardRemove:
-			msg.ReplyMarkup = kb
-		case tgbotapi.ReplyKeyboardMarkup:
-			msg.ReplyMarkup = kb
-		case tgbotapi.InlineKeyboardMarkup:
-			msg.ReplyMarkup = kb
-		}
-	} else {
-		// Apply user-specific reply keyboard automatically
-		if c.Bot.accessManager != nil {
-			menuContext := &MenuContext{
-				UserID:    c.UserID(),
-				ChatID:    c.ChatID(),
-				IsGroup:   c.Update.Message != nil && (c.Update.Message.Chat.IsGroup() || c.Update.Message.Chat.IsSuperGroup()),
-				IsChannel: c.Update.Message != nil && c.Update.Message.Chat.IsChannel(),
-			}
-			if userMenu := c.Bot.accessManager.GetReplyKeyboard(menuContext); userMenu != nil {
-				msg.ReplyMarkup = userMenu.ToTgbotapi()
-			}
-		} else if c.Bot.replyKeyboard != nil {
-			msg.ReplyMarkup = c.Bot.replyKeyboard.ToTgbotapi()
-		}
-	}
-
-	_, err := c.Bot.api.Send(msg)
-	return err
-}
-
-// editOrReplyWithParseMode attempts to edit current message with parse mode or sends new one
-func (c *Context) editOrReplyWithParseMode(text string, parseMode ParseMode, keyboard ...interface{}) error {
-	if c.Update.CallbackQuery != nil && c.Update.CallbackQuery.Message != nil {
-		msg := tgbotapi.NewEditMessageText(
-			c.ChatID(),
-			c.Update.CallbackQuery.Message.MessageID,
-			text,
-		)
-
-		// Set parse mode if specified
-		if parseMode != ParseModeNone {
-			msg.ParseMode = string(parseMode)
-		}
-
-		if len(keyboard) > 0 && keyboard[0] != nil {
-			switch kb := keyboard[0].(type) {
-			case *InlineKeyboard:
-				markup := kb.ToTgbotapi()
-				msg.ReplyMarkup = &markup
-			case tgbotapi.InlineKeyboardMarkup:
-				msg.ReplyMarkup = &kb
-			}
-		}
-
-		if _, err := c.Bot.api.Send(msg); err == nil {
-			cb := tgbotapi.NewCallback(c.Update.CallbackQuery.ID, "")
-			c.Bot.api.Request(cb)
-			return nil
-		} else {
-			// Log why the edit failed (optional - could be removed for production)
-			// Common reasons: identical content, message too old, rate limiting
-			_ = err // Acknowledge the error but continue to fallback
-		}
-	}
-	return c.sendWithParseMode(text, parseMode, keyboard...)
 }
 
 // extractUserID extracts user ID from update
