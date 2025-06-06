@@ -17,7 +17,7 @@ func createTestBot() *Bot {
 		middleware:       []MiddlewareFunc{},
 		flowConfig: FlowConfig{
 			ExitCommands:        []string{"/cancel", "/exit"},
-			ExitMessage:         "Operation cancelled.",
+			ExitMessage:         "🚫 Operation cancelled.",
 			AllowGlobalCommands: false,
 			HelpCommands:        []string{"/help"},
 		},

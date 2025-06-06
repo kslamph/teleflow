@@ -3,7 +3,6 @@ package teleflow
 import (
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,7 +121,7 @@ func (ih *ImageHandler) processFileImage(filePath string) (*ProcessedImage, erro
 	}
 
 	// Read file data
-	data, err := ioutil.ReadFile(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read image file: %w", err)
 	}

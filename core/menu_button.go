@@ -135,6 +135,7 @@ func (b *Bot) setMyCommands(items []MenuButtonItem) error {
 
 	// Use Send method - this is what makes the menu button appear!
 	// Note: This may cause a JSON unmarshal error which we'll ignore since it still works
+
 	_, err := b.api.Request(cmdCfg)
 	if err != nil {
 

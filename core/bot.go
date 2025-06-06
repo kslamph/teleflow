@@ -58,9 +58,12 @@
 //
 // Middleware Integration:
 //
+//	// Manual middleware setup
 //	bot.UseMiddleware(teleflow.LoggingMiddleware())
-//	bot.UseMiddleware(teleflow.AuthMiddleware(authChecker))
 //	bot.UseMiddleware(teleflow.RecoveryMiddleware())
+//
+//	// OR automatic with AccessManager (includes rate limiting + auth)
+//	bot, _ := teleflow.NewBot(token, teleflow.WithAccessManager(accessManager))
 //
 // For comprehensive examples and documentation, see the examples/ directory
 // and the documentation at docs/.
@@ -187,7 +190,7 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		middleware:       make([]MiddlewareFunc, 0),
 		flowConfig: FlowConfig{
 			ExitCommands:        []string{"/cancel", "/exit"},
-			ExitMessage:         "Operation cancelled.",
+			ExitMessage:         "🚫 Operation cancelled.",
 			AllowGlobalCommands: false,
 			HelpCommands:        []string{"/help"},
 		},
@@ -224,17 +227,20 @@ func WithFlowConfig(config FlowConfig) BotOption {
 	}
 }
 
-// WithExitCommands sets the global exit commands
-func WithExitCommands(commands []string) BotOption {
-	return func(b *Bot) {
-		b.flowConfig.ExitCommands = commands
-	}
-}
-
-// WithAccessManager sets the user permission checker
+// WithAccessManager sets the user permission checker and automatically applies auth middleware
+// This automatically sets up the optimal middleware order:
+// 1. RecoveryMiddleware (catch panics)
+// 2. LoggingMiddleware (monitor requests)
+// 3. RateLimitMiddleware (block spam before expensive operations)
+// 4. AuthMiddleware (permission checking with database/business logic)
 func WithAccessManager(accessManager AccessManager) BotOption {
 	return func(b *Bot) {
 		b.accessManager = accessManager
+
+		// Apply middleware in optimal order for security and performance
+		// Rate limiting comes before auth to prevent expensive operations on spam/attacks
+		b.UseMiddleware(RateLimitMiddleware(60))       // 60 requests per minute default
+		b.UseMiddleware(AuthMiddleware(accessManager)) // Permission checking after rate limiting
 	}
 }
 
