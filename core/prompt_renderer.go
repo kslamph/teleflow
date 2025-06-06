@@ -90,17 +90,8 @@ func (pr *PromptRenderer) sendMessage(ctx *Context, message string, image *Proce
 
 // sendPhotoMessage sends a photo with optional caption and keyboard
 func (pr *PromptRenderer) sendPhotoMessage(ctx *Context, caption string, image *ProcessedImage, keyboard interface{}) error {
-	// For now, we'll fallback to sending text with photo reference
-	// In a production system, you'd want to extend Context with photo methods
-	photoText := fmt.Sprintf("📷 %s", caption)
-	if caption == "" {
-		photoText = "📷 Image"
-	}
-
-	if keyboard != nil {
-		return ctx.Reply(photoText, keyboard)
-	}
-	return ctx.Reply(photoText)
+	// Use the new SendPhoto method from Context
+	return ctx.SendPhoto(image, caption, keyboard)
 }
 
 // sendTextMessage sends a text message with optional keyboard

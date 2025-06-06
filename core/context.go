@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -395,6 +396,63 @@ func (c *Context) extractUserID(update tgbotapi.Update) int64 {
 		return update.CallbackQuery.From.ID
 	}
 	return 0
+}
+
+// SendPhoto sends a photo message with optional caption and keyboard
+func (c *Context) SendPhoto(image *ProcessedImage, caption string, keyboard ...interface{}) error {
+	var photoConfig tgbotapi.PhotoConfig
+
+	// Handle different image types
+	if image.Data != nil {
+		// Send image data directly (base64 or file data)
+		photoConfig = tgbotapi.NewPhoto(c.ChatID(), tgbotapi.FileBytes{
+			Name:  "image",
+			Bytes: image.Data,
+		})
+	} else if image.FilePath != "" {
+		// Handle URL or file path
+		if c.isURL(image.FilePath) {
+			// Send URL directly
+			photoConfig = tgbotapi.NewPhoto(c.ChatID(), tgbotapi.FileURL(image.FilePath))
+		} else {
+			// Send file path
+			photoConfig = tgbotapi.NewPhoto(c.ChatID(), tgbotapi.FilePath(image.FilePath))
+		}
+	} else {
+		return fmt.Errorf("no valid image data or path provided")
+	}
+
+	// Set caption
+	if caption != "" {
+		photoConfig.Caption = caption
+	}
+
+	// Apply keyboard markup
+	if len(keyboard) > 0 && keyboard[0] != nil {
+		switch kb := keyboard[0].(type) {
+		case *ReplyKeyboard:
+			photoConfig.ReplyMarkup = kb.ToTgbotapi()
+		case *InlineKeyboard:
+			photoConfig.ReplyMarkup = kb.ToTgbotapi()
+		case tgbotapi.ReplyKeyboardRemove:
+			photoConfig.ReplyMarkup = kb
+		case tgbotapi.ReplyKeyboardMarkup:
+			photoConfig.ReplyMarkup = kb
+		case tgbotapi.InlineKeyboardMarkup:
+			photoConfig.ReplyMarkup = kb
+		}
+	}
+
+	// Apply automatic menu button management
+	c.applyAutomaticMenuButton()
+
+	_, err := c.Bot.api.Send(photoConfig)
+	return err
+}
+
+// isURL checks if a string is likely a URL (method on Context)
+func (c *Context) isURL(str string) bool {
+	return strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://")
 }
 
 // answerCallbackQuery answers a callback query to dismiss the loading indicator (internal use only)
