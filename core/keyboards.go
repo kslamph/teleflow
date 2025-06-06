@@ -27,14 +27,19 @@ import (
 //
 //	ctx.ReplyWithKeyboard("Choose an option:", keyboard)
 //
-// Example - Inline Keyboard:
+// Example - Inline Keyboard (New Step-Prompt-Process API):
 //
-//	keyboard := teleflow.NewInlineKeyboard().
-//		AddCallbackRow("✅ Approve", "approve_123", "❌ Reject", "reject_123").
-//		AddURLRow("📖 Documentation", "https://docs.example.com").
-//		AddRow(teleflow.NewInlineButton("🔧 Settings", "settings"))
-//
-//	ctx.ReplyWithInlineKeyboard("Please review:", keyboard)
+//	// Inline keyboards now use simple map-based approach in flow steps
+//	.Prompt(
+//		"Please review:",
+//		nil,
+//		func(ctx *teleflow.Context) map[string]interface{} {
+//			return map[string]interface{}{
+//				"✅ Approve": "approve_123",
+//				"❌ Reject":  "reject_123",
+//			}
+//		},
+//	)
 //
 // Special Button Types:
 //
@@ -117,18 +122,6 @@ func NewReplyKeyboard(rows ...[]ReplyKeyboardButton) *ReplyKeyboard {
 	}
 
 	kb.Keyboard = append(kb.Keyboard, rows...)
-
-	return kb
-}
-
-// NewInlineKeyboard creates a new inline keyboard
-func NewInlineKeyboard(rows ...[]InlineKeyboardButton) *InlineKeyboard {
-	kb := &InlineKeyboard{
-		InlineKeyboard: make([][]InlineKeyboardButton, 0),
-		currentRow:     make([]InlineKeyboardButton, 0),
-	}
-
-	kb.InlineKeyboard = append(kb.InlineKeyboard, rows...)
 
 	return kb
 }
@@ -217,42 +210,6 @@ func (kb *ReplyKeyboard) ToTgbotapi() tgbotapi.ReplyKeyboardMarkup {
 		InputFieldPlaceholder: kb.InputFieldPlaceholder,
 		Selective:             kb.Selective,
 	}
-}
-
-// AddRow adds a new row to the inline keyboard
-func (kb *InlineKeyboard) AddRow() *InlineKeyboard {
-	if len(kb.currentRow) > 0 {
-		kb.InlineKeyboard = append(kb.InlineKeyboard, kb.currentRow)
-		kb.currentRow = make([]InlineKeyboardButton, 0)
-	}
-	return kb
-}
-
-// AddButton adds a callback button to the current row of the inline keyboard
-func (kb *InlineKeyboard) AddButton(text, data string) *InlineKeyboard {
-	kb.currentRow = append(kb.currentRow, InlineKeyboardButton{
-		Text:         text,
-		CallbackData: data,
-	})
-	return kb
-}
-
-// AddURL adds a URL button to the current row of the inline keyboard
-func (kb *InlineKeyboard) AddURL(text, url string) *InlineKeyboard {
-	kb.currentRow = append(kb.currentRow, InlineKeyboardButton{
-		Text: text,
-		URL:  url,
-	})
-	return kb
-}
-
-// AddWebApp adds a web app button to the current row of the inline keyboard
-func (kb *InlineKeyboard) AddWebApp(text string, webApp WebAppInfo) *InlineKeyboard {
-	kb.currentRow = append(kb.currentRow, InlineKeyboardButton{
-		Text:   text,
-		WebApp: &webApp,
-	})
-	return kb
 }
 
 // ToTgbotapi converts the inline keyboard to telegram-bot-api format

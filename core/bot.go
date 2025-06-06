@@ -112,10 +112,6 @@ type TextHandlerFunc func(ctx *Context, text string) error
 //   - error: An error if processing failed, nil otherwise.
 type DefaultTextHandlerFunc func(ctx *Context, fullMessageText string) error
 
-// MiddlewareFunc defines the function signature for middleware.
-// TODO: Refactor middleware system to work with specific handler types.
-type MiddlewareFunc func(next HandlerFunc) HandlerFunc // This HandlerFunc is generic and needs refactoring
-
 // BotOption defines functional options for Bot configuration
 type BotOption func(*Bot)
 
@@ -151,22 +147,15 @@ type AccessManager interface {
 // Bot is the main application structure
 type Bot struct {
 	api                *tgbotapi.BotAPI
-	handlers           map[string]CommandHandlerFunc
-	textHandlers       map[string]TextHandlerFunc
-	defaultTextHandler DefaultTextHandlerFunc // Field for the default text handler
+	handlers           map[string]HandlerFunc
+	textHandlers       map[string]HandlerFunc
+	defaultTextHandler HandlerFunc // Field for the default text handler
 	callbackRegistry   *CallbackRegistry
 	stateManager       StateManager
 	flowManager        *FlowManager
 	templates          *template.Template
-	// General middleware system
+	// Unified middleware system - intercepts all message types
 	middleware []MiddlewareFunc
-
-	// Type-specific middleware
-	commandMiddleware       []CommandMiddlewareFunc
-	textMiddleware          []TextMiddlewareFunc
-	defaultTextMiddleware   []DefaultTextMiddlewareFunc
-	callbackMiddleware      []CallbackMiddlewareFunc
-	flowStepInputMiddleware []FlowStepInputMiddlewareFunc
 
 	// Configuration
 	replyKeyboard *ReplyKeyboard
@@ -183,20 +172,14 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 	}
 
 	b := &Bot{
-		api:          api,
-		handlers:     make(map[string]CommandHandlerFunc),
-		textHandlers: make(map[string]TextHandlerFunc),
-		// defaultTextHandler will be initialized as nil by default
-		callbackRegistry:        NewCallbackRegistry(make([]CallbackMiddlewareFunc, 0)...), // Pass empty slice initially
-		stateManager:            NewInMemoryStateManager(),
-		flowManager:             NewFlowManager(NewInMemoryStateManager()),
-		templates:               template.New("botMessages"),
-		middleware:              make([]MiddlewareFunc, 0),
-		commandMiddleware:       make([]CommandMiddlewareFunc, 0),
-		textMiddleware:          make([]TextMiddlewareFunc, 0),
-		defaultTextMiddleware:   make([]DefaultTextMiddlewareFunc, 0),
-		callbackMiddleware:      make([]CallbackMiddlewareFunc, 0),
-		flowStepInputMiddleware: make([]FlowStepInputMiddlewareFunc, 0),
+		api:              api,
+		handlers:         make(map[string]HandlerFunc),
+		textHandlers:     make(map[string]HandlerFunc),
+		callbackRegistry: NewCallbackRegistry(),
+		stateManager:     NewInMemoryStateManager(),
+		flowManager:      NewFlowManager(NewInMemoryStateManager()),
+		templates:        template.New("botMessages"),
+		middleware:       make([]MiddlewareFunc, 0),
 		flowConfig: FlowConfig{
 			ExitCommands:        []string{"/cancel", "/exit"},
 			ExitMessage:         "Operation cancelled.",
@@ -206,16 +189,9 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 	}
 
 	// Apply options
-	// Apply options AFTER core Bot fields (like middleware slices) are initialized
 	for _, opt := range options {
 		opt(b)
 	}
-
-	// Now that b.callbackMiddleware is potentially populated by options (e.g., WithCallbackMiddleware option if added),
-	// re-initialize CallbackRegistry with the Bot's actual middleware slice.
-	// This is a bit indirect; a cleaner way might involve BotOptions that can access/modify the registry post-init,
-	// or deferring registry creation until after options. For now, this ensures it gets the Bot's slice.
-	b.callbackRegistry = NewCallbackRegistry(b.callbackMiddleware...)
 
 	return b, nil
 }
@@ -255,147 +231,27 @@ func WithAccessManager(accessManager AccessManager) BotOption {
 
 // Adapter functions to convert general middleware to type-specific middleware
 
-// adaptGeneralToCommandMiddleware converts a general MiddlewareFunc to CommandMiddlewareFunc
-func adaptGeneralToCommandMiddleware(m MiddlewareFunc) CommandMiddlewareFunc {
-	return func(next CommandHandlerFunc) CommandHandlerFunc {
-		return func(ctx *Context, command string, args string) error {
-			// Convert CommandHandlerFunc to HandlerFunc for the general middleware
-			genericNext := func(ctx *Context) error {
-				return next(ctx, command, args)
-			}
-			// Apply general middleware and convert back
-			wrappedHandler := m(genericNext)
-			return wrappedHandler(ctx)
-		}
-	}
-}
-
-// adaptGeneralToTextMiddleware converts a general MiddlewareFunc to TextMiddlewareFunc
-func adaptGeneralToTextMiddleware(m MiddlewareFunc) TextMiddlewareFunc {
-	return func(next TextHandlerFunc) TextHandlerFunc {
-		return func(ctx *Context, text string) error {
-			// Convert TextHandlerFunc to HandlerFunc for the general middleware
-			genericNext := func(ctx *Context) error {
-				return next(ctx, text)
-			}
-			// Apply general middleware and convert back
-			wrappedHandler := m(genericNext)
-			return wrappedHandler(ctx)
-		}
-	}
-}
-
-// adaptGeneralToDefaultTextMiddleware converts a general MiddlewareFunc to DefaultTextMiddlewareFunc
-func adaptGeneralToDefaultTextMiddleware(m MiddlewareFunc) DefaultTextMiddlewareFunc {
-	return func(next DefaultTextHandlerFunc) DefaultTextHandlerFunc {
-		return func(ctx *Context, fullMessageText string) error {
-			// Convert DefaultTextHandlerFunc to HandlerFunc for the general middleware
-			genericNext := func(ctx *Context) error {
-				return next(ctx, fullMessageText)
-			}
-			// Apply general middleware and convert back
-			wrappedHandler := m(genericNext)
-			return wrappedHandler(ctx)
-		}
-	}
-}
-
-// adaptGeneralToCallbackMiddleware converts a general MiddlewareFunc to CallbackMiddlewareFunc
-func adaptGeneralToCallbackMiddleware(m MiddlewareFunc) CallbackMiddlewareFunc {
-	return func(next CallbackHandlerFunc) CallbackHandlerFunc {
-		return func(ctx *Context, fullCallbackData string, extractedData string) error {
-			// Convert CallbackHandlerFunc to HandlerFunc for the general middleware
-			genericNext := func(ctx *Context) error {
-				return next(ctx, fullCallbackData, extractedData)
-			}
-			// Apply general middleware and convert back
-			wrappedHandler := m(genericNext)
-			return wrappedHandler(ctx)
-		}
-	}
-}
-
-// adaptGeneralToFlowStepInputMiddleware converts a general MiddlewareFunc to FlowStepInputMiddlewareFunc
-func adaptGeneralToFlowStepInputMiddleware(m MiddlewareFunc) FlowStepInputMiddlewareFunc {
-	return func(next FlowStepInputHandlerFunc) FlowStepInputHandlerFunc {
-		return func(ctx *Context, input string) error {
-			// Convert FlowStepInputHandlerFunc to HandlerFunc for the general middleware
-			genericNext := func(ctx *Context) error {
-				return next(ctx, input)
-			}
-			// Apply general middleware and convert back
-			wrappedHandler := m(genericNext)
-			return wrappedHandler(ctx)
-		}
-	}
-}
-
 // Use adds a general middleware that will be applied to ALL handler types (commands, text, callbacks, flow steps).
 // This middleware is automatically converted to the appropriate type-specific middleware and applied to all handlers.
 // Middlewares are applied in the reverse order they are added.
 //
 // Parameters:
 //   - m: The MiddlewareFunc to add to all handler types.
-func (b *Bot) Use(m MiddlewareFunc) {
+//
+// UseMiddleware adds general middleware that intercepts all message types.
+// This middleware will be applied to commands, text messages, callbacks, and flows.
+// Middlewares are applied in the reverse order they are added.
+//
+// Parameters:
+//   - m: The MiddlewareFunc to add.
+func (b *Bot) UseMiddleware(m MiddlewareFunc) {
 	b.middleware = append(b.middleware, m)
-
-	// Convert general middleware to type-specific middleware and add to all types
-	b.UseCommandMiddleware(adaptGeneralToCommandMiddleware(m))
-	b.UseTextMiddleware(adaptGeneralToTextMiddleware(m))
-	b.UseDefaultTextMiddleware(adaptGeneralToDefaultTextMiddleware(m))
-	b.UseCallbackMiddleware(adaptGeneralToCallbackMiddleware(m))
-	b.UseFlowStepInputMiddleware(adaptGeneralToFlowStepInputMiddleware(m))
 }
 
-// UseCommandMiddleware adds a middleware that will be applied to all command handlers.
-// Middlewares are applied in the reverse order they are added.
-//
-// Parameters:
-//   - m: The CommandMiddlewareFunc to add.
-func (b *Bot) UseCommandMiddleware(m CommandMiddlewareFunc) {
-	b.commandMiddleware = append(b.commandMiddleware, m)
-}
-
-// UseTextMiddleware adds a middleware that will be applied to all specific text handlers
-// (registered via HandleText).
-// Middlewares are applied in the reverse order they are added.
-//
-// Parameters:
-//   - m: The TextMiddlewareFunc to add.
-func (b *Bot) UseTextMiddleware(m TextMiddlewareFunc) {
-	b.textMiddleware = append(b.textMiddleware, m)
-}
-
-// UseDefaultTextMiddleware adds a middleware that will be applied to the default text handler
-// (registered via SetDefaultTextHandler).
-// Middlewares are applied in the reverse order they are added.
-//
-// Parameters:
-//   - m: The DefaultTextMiddlewareFunc to add.
-func (b *Bot) UseDefaultTextMiddleware(m DefaultTextMiddlewareFunc) {
-	b.defaultTextMiddleware = append(b.defaultTextMiddleware, m)
-}
-
-// UseCallbackMiddleware adds a middleware that will be applied to all callback handlers
-// registered via the CallbackRegistry.
-// Middlewares are applied in the reverse order they are added.
-// The CallbackRegistry is responsible for applying these middlewares.
-//
-// Parameters:
-//   - m: The CallbackMiddlewareFunc to add.
-func (b *Bot) UseCallbackMiddleware(m CallbackMiddlewareFunc) {
-	b.callbackMiddleware = append(b.callbackMiddleware, m)
-}
-
-// UseFlowStepInputMiddleware adds a middleware that will be applied to all flow step input handlers.
-// These are handlers associated with steps in a conversation flow that expect user input.
-// Middlewares are applied in the reverse order they are added.
-// The FlowManager is responsible for applying these middlewares.
-//
-// Parameters:
-//   - m: The FlowStepInputMiddlewareFunc to add.
-func (b *Bot) UseFlowStepInputMiddleware(m FlowStepInputMiddlewareFunc) {
-	b.flowStepInputMiddleware = append(b.flowStepInputMiddleware, m)
+// InitializeFlowSystem initializes the flow system with the bot instance.
+// This must be called before using any flow features with the new Step-Prompt-Process API.
+func (b *Bot) InitializeFlowSystem() {
+	b.flowManager.SetBot(b)
 }
 
 // HandleCommand registers a CommandHandlerFunc for a specific command.
@@ -406,7 +262,17 @@ func (b *Bot) UseFlowStepInputMiddleware(m FlowStepInputMiddlewareFunc) {
 //   - commandName: The name of the command to handle (e.g., "help").
 //   - handler: The CommandHandlerFunc to execute when the command is received.
 func (b *Bot) HandleCommand(commandName string, handler CommandHandlerFunc) {
-	b.handlers[commandName] = b.applyCommandMiddleware(handler)
+	// Convert CommandHandlerFunc to HandlerFunc and apply unified middleware
+	wrappedHandler := func(ctx *Context) error {
+		// Extract command and args from the update
+		command := commandName
+		args := ""
+		if ctx.Update.Message != nil && len(ctx.Update.Message.Text) > len(command)+1 {
+			args = ctx.Update.Message.Text[len(command)+1:]
+		}
+		return handler(ctx, command, args)
+	}
+	b.handlers[commandName] = b.applyMiddleware(wrappedHandler)
 }
 
 // HandleText registers a TextHandlerFunc for a message that exactly matches the given text.
@@ -416,29 +282,30 @@ func (b *Bot) HandleCommand(commandName string, handler CommandHandlerFunc) {
 //   - textToMatch: The exact text string to match.
 //   - handler: The TextHandlerFunc to execute when the text is matched.
 func (b *Bot) HandleText(textToMatch string, handler TextHandlerFunc) {
-	b.textHandlers[textToMatch] = b.applyTextMiddleware(handler)
+	// Convert TextHandlerFunc to HandlerFunc and apply unified middleware
+	wrappedHandler := func(ctx *Context) error {
+		return handler(ctx, textToMatch)
+	}
+	b.textHandlers[textToMatch] = b.applyMiddleware(wrappedHandler)
 }
 
 // SetDefaultTextHandler registers a DefaultTextHandlerFunc to be called for any text message
 // that is not a command and does not match any handler registered with HandleText.
 // Only one default text handler can be set; subsequent calls will overwrite the previous one.
-// Any registered default text middleware will be applied to the handler.
+// Any registered unified middleware will be applied to the handler.
 //
 // Parameters:
 //   - handler: The DefaultTextHandlerFunc to execute.
 func (b *Bot) SetDefaultTextHandler(handler DefaultTextHandlerFunc) {
-	b.defaultTextHandler = b.applyDefaultTextMiddleware(handler)
-}
-
-// RegisterCallback registers a CallbackHandler with the bot's CallbackRegistry.
-// The CallbackRegistry manages matching callback queries to their handlers and applying
-// any relevant callback middleware.
-//
-// Parameters:
-//   - handler: The CallbackHandler to register. This handler must implement the
-//     CallbackHandler interface, defining its pattern and handling logic.
-func (b *Bot) RegisterCallback(handler CallbackHandler) {
-	b.callbackRegistry.Register(handler)
+	// Convert DefaultTextHandlerFunc to HandlerFunc and apply unified middleware
+	wrappedHandler := func(ctx *Context) error {
+		var text string
+		if ctx.Update.Message != nil {
+			text = ctx.Update.Message.Text
+		}
+		return handler(ctx, text)
+	}
+	b.defaultTextHandler = b.applyMiddleware(wrappedHandler)
 }
 
 // RegisterFlow registers a flow with the flow manager
@@ -446,47 +313,11 @@ func (b *Bot) RegisterFlow(flow *Flow) {
 	b.flowManager.RegisterFlow(flow)
 }
 
-// applyCommandMiddleware applies all registered command middleware to a handler.
+// applyMiddleware applies all registered general middleware to a handler.
 // This is an internal method called during handler registration.
-func (b *Bot) applyCommandMiddleware(handler CommandHandlerFunc) CommandHandlerFunc {
-	for i := len(b.commandMiddleware) - 1; i >= 0; i-- {
-		handler = b.commandMiddleware[i](handler)
-	}
-	return handler
-}
-
-// applyTextMiddleware applies all registered text middleware to a handler.
-// This is an internal method called during handler registration.
-func (b *Bot) applyTextMiddleware(handler TextHandlerFunc) TextHandlerFunc {
-	for i := len(b.textMiddleware) - 1; i >= 0; i-- {
-		handler = b.textMiddleware[i](handler)
-	}
-	return handler
-}
-
-// applyDefaultTextMiddleware applies all registered default text middleware to a handler.
-// This is an internal method called during handler registration.
-func (b *Bot) applyDefaultTextMiddleware(handler DefaultTextHandlerFunc) DefaultTextHandlerFunc {
-	for i := len(b.defaultTextMiddleware) - 1; i >= 0; i-- {
-		handler = b.defaultTextMiddleware[i](handler)
-	}
-	return handler
-}
-
-// applyCallbackMiddleware applies all registered callback middleware to a handler.
-// This is an internal method, typically used by the CallbackRegistry.
-func (b *Bot) applyCallbackMiddleware(handler CallbackHandlerFunc) CallbackHandlerFunc {
-	for i := len(b.callbackMiddleware) - 1; i >= 0; i-- {
-		handler = b.callbackMiddleware[i](handler)
-	}
-	return handler
-}
-
-// applyFlowStepInputMiddleware applies all registered flow step input middleware to a handler.
-// This is an internal method, typically used by the FlowManager.
-func (b *Bot) applyFlowStepInputMiddleware(handler FlowStepInputHandlerFunc) FlowStepInputHandlerFunc {
-	for i := len(b.flowStepInputMiddleware) - 1; i >= 0; i-- {
-		handler = b.flowStepInputMiddleware[i](handler)
+func (b *Bot) applyMiddleware(handler HandlerFunc) HandlerFunc {
+	for i := len(b.middleware) - 1; i >= 0; i-- {
+		handler = b.middleware[i](handler)
 	}
 	return handler
 }
@@ -508,9 +339,8 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 		} else if b.flowConfig.AllowGlobalCommands && ctx.Update.Message != nil && ctx.Update.Message.IsCommand() {
 			commandName := ctx.Update.Message.Command()
 			if cmdHandler := b.resolveGlobalCommandHandler(commandName); cmdHandler != nil {
-				args := ctx.Update.Message.CommandArguments()
-				// TODO: Apply middleware if/when adapted for CommandHandlerFunc
-				err = cmdHandler(ctx, commandName, args)
+				// Middleware already applied at registration
+				err = cmdHandler(ctx)
 				if err != nil {
 					log.Printf("Global command handler error for UserID %d, command '%s': %v", ctx.UserID(), commandName, err)
 					// Potentially send an error reply
@@ -534,38 +364,33 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 		if update.Message.IsCommand() {
 			commandName := update.Message.Command()
 			if cmdHandler, ok := b.handlers[commandName]; ok {
-				args := ctx.Update.Message.CommandArguments()
-				err = cmdHandler(ctx, commandName, args) // Middleware already applied at registration
+				err = cmdHandler(ctx) // Middleware already applied at registration
 			} else {
 				// No specific command handler, check for default text handler if configured
 				if b.defaultTextHandler != nil {
-					err = b.defaultTextHandler(ctx, update.Message.Text)
+					err = b.defaultTextHandler(ctx)
 				}
 			}
 		} else { // Regular text message
 			text := update.Message.Text
 			if textHandler, ok := b.textHandlers[text]; ok {
-				err = textHandler(ctx, text) // Middleware already applied at registration
+				err = textHandler(ctx) // Middleware already applied at registration
 			} else if b.defaultTextHandler != nil { // Fallback to default text handler
-				err = b.defaultTextHandler(ctx, text)
+				err = b.defaultTextHandler(ctx)
 			}
 			// If no specific text handler and no default, message is ignored unless flow handles it
 		}
 	} else if update.CallbackQuery != nil {
-		// CallbackQuery handling is now more direct in CallbackRegistry.Handle
-		// which returns a HandlerFunc. That HandlerFunc (wrapper) calls the specific CallbackHandler.Handle
-		// The CallbackRegistry.Handle itself is called from resolveHandler (which needs update)
-		// or directly if we refactor resolveHandler out for callbacks.
-		// For now, let's assume resolveHandler will give us the wrapped HandlerFunc.
-		// This part needs to align with how resolveHandler is refactored.
-		// The old resolveHandler returned a generic HandlerFunc.
-		// The new approach should involve CallbackRegistry.Handle returning the specific handler or a wrapper.
-		// Let's adjust resolveHandler first.
-		// For now, this logic path will be hit if resolveHandler is called.
-		// The CallbackRegistry.Handle method returns a HandlerFunc that wraps the specific CallbackHandler.Handle call.
+		// Handle callback queries from inline keyboards
 		genericHandler := b.resolveCallbackHandler(update.CallbackQuery.Data)
 		if genericHandler != nil {
 			err = genericHandler(ctx) // This genericHandler internally calls the specific CallbackHandler.Handle
+		}
+
+		// Always answer callback query to dismiss loading indicator
+		if answerErr := ctx.answerCallbackQuery(""); answerErr != nil {
+			// Log error but don't fail the main processing
+			log.Printf("Failed to answer callback query for UserID %d: %v", ctx.UserID(), answerErr)
 		}
 	}
 
@@ -588,7 +413,7 @@ func (b *Bot) isGlobalExitCommand(text string) bool {
 }
 
 // resolveGlobalCommandHandler resolves global commands that should work during flows
-func (b *Bot) resolveGlobalCommandHandler(commandName string) CommandHandlerFunc {
+func (b *Bot) resolveGlobalCommandHandler(commandName string) HandlerFunc {
 	// Only allow specific global commands during flows
 	for _, helpCmd := range b.flowConfig.HelpCommands {
 		// Ensure command matching is consistent (e.g. with or without '/')

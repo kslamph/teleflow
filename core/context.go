@@ -22,24 +22,20 @@ import (
 //
 // Example usage in handlers:
 //
-//	bot.HandleCommand("/start", func(ctx *teleflow.Context) error {
-//		// Get user information
-//		userID := ctx.UserID()
-//
-//		// Store temporary data
-//		ctx.Set("step", "greeting")
-//
-//		// Reply with keyboard
-//		keyboard := teleflow.NewReplyKeyboard().AddRow("Help", "Settings")
-//		return ctx.ReplyWithKeyboard("Welcome!", keyboard)
+//	bot.HandleCommand("/start", func(ctx *teleflow.Context, command string, args string) error {
+//		// Start a flow using the new Step-Prompt-Process API
+//		return ctx.StartFlow("registration")
 //	})
 //
-//	bot.HandleCallback("button_*", func(ctx *teleflow.Context) error {
-//		// Extract callback data
-//		data := ctx.CallbackData()
-//
-//		// Update message
-//		return ctx.EditMessage("Button clicked: " + data)
+//	// In flow steps, use unified ProcessFunc instead of separate callback handlers
+//	.Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
+//		// Handle both text input and button clicks in one function
+//		if buttonClick != nil {
+//			// Button was clicked
+//			return teleflow.NextStep()
+//		}
+//		// Text was typed
+//		return teleflow.RetryWithPrompt(&teleflow.PromptConfig{Message: "Please use the buttons"})
 //	})
 
 // Context provides information and helpers for the current interaction
@@ -165,6 +161,31 @@ func (c *Context) IsUserInFlow() bool {
 // This is an idempotent operation
 func (c *Context) CancelFlow() {
 	c.Bot.flowManager.CancelFlow(c.UserID())
+}
+
+// SendPrompt renders and sends a PromptConfig message without keyboard interaction.
+// This is useful for informational messages that use the same rendering system
+// as flow prompts but don't require user interaction.
+func (c *Context) SendPrompt(prompt *PromptConfig) error {
+	if c.Bot.flowManager.promptRenderer == nil {
+		return fmt.Errorf("PromptRenderer not initialized - call InitializeFlowSystem() first")
+	}
+
+	// Create a copy of the prompt without keyboard for informational use
+	infoPrompt := &PromptConfig{
+		Message: prompt.Message,
+		Image:   prompt.Image,
+		// Keyboard is intentionally omitted for informational messages
+	}
+
+	renderCtx := &RenderContext{
+		ctx:          c,
+		promptConfig: infoPrompt,
+		stepName:     "info",
+		flowName:     "system",
+	}
+
+	return c.Bot.flowManager.promptRenderer.Render(renderCtx)
 }
 
 func (c *Context) IsGroup() bool {
@@ -374,6 +395,17 @@ func (c *Context) extractUserID(update tgbotapi.Update) int64 {
 		return update.CallbackQuery.From.ID
 	}
 	return 0
+}
+
+// answerCallbackQuery answers a callback query to dismiss the loading indicator (internal use only)
+func (c *Context) answerCallbackQuery(text string) error {
+	if c.Update.CallbackQuery == nil {
+		return nil // Not a callback query, nothing to answer
+	}
+
+	cb := tgbotapi.NewCallback(c.Update.CallbackQuery.ID, text)
+	_, err := c.Bot.api.Request(cb)
+	return err
 }
 
 // extractChatID extracts chat ID from update

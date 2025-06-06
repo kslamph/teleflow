@@ -1,0 +1,170 @@
+package teleflow
+
+import (
+	"fmt"
+	"log"
+	"strings"
+)
+
+// PromptRenderer handles the rendering of PromptConfig objects into Telegram messages
+type PromptRenderer struct {
+	bot             *Bot
+	messageRenderer *MessageRenderer
+	imageHandler    *ImageHandler
+	keyboardBuilder *KeyboardBuilder
+}
+
+// RenderContext provides context for rendering a prompt
+type RenderContext struct {
+	ctx          *Context
+	promptConfig *PromptConfig
+	stepName     string
+	flowName     string
+}
+
+// NewPromptRenderer creates a new prompt renderer
+func NewPromptRenderer(bot *Bot) *PromptRenderer {
+	return &PromptRenderer{
+		bot:             bot,
+		messageRenderer: NewMessageRenderer(),
+		imageHandler:    NewImageHandler(),
+		keyboardBuilder: NewKeyboardBuilder(),
+	}
+}
+
+// Render processes a PromptConfig and sends the appropriate Telegram message
+func (pr *PromptRenderer) Render(renderCtx *RenderContext) error {
+	// Validate PromptConfig
+	if err := pr.validatePromptConfig(renderCtx.promptConfig); err != nil {
+		return fmt.Errorf("invalid PromptConfig in step %s: %w", renderCtx.stepName, err)
+	}
+
+	// Render components
+	message, err := pr.messageRenderer.RenderMessage(renderCtx.promptConfig, renderCtx.ctx)
+	if err != nil {
+		return pr.logFriendlyError("message rendering", renderCtx, err)
+	}
+
+	image, err := pr.imageHandler.ProcessImage(renderCtx.promptConfig.Image, renderCtx.ctx)
+	if err != nil {
+		return pr.logFriendlyError("image processing", renderCtx, err)
+	}
+
+	keyboard, err := pr.keyboardBuilder.BuildKeyboard(renderCtx.promptConfig.Keyboard, renderCtx.ctx)
+	if err != nil {
+		return pr.logFriendlyError("keyboard generation", renderCtx, err)
+	}
+
+	// Send message according to Telegram rules
+	return pr.sendMessage(renderCtx.ctx, message, image, keyboard)
+}
+
+// validatePromptConfig ensures the PromptConfig has at least one non-nil field
+func (pr *PromptRenderer) validatePromptConfig(config *PromptConfig) error {
+	if config.Message == nil && config.Image == nil && config.Keyboard == nil {
+		return fmt.Errorf("PromptConfig cannot have all fields nil - at least one of Message, Image, or Keyboard must be specified")
+	}
+	return nil
+}
+
+// sendMessage determines the appropriate message type and sends it
+func (pr *PromptRenderer) sendMessage(ctx *Context, message string, image *ProcessedImage, keyboard interface{}) error {
+	// Determine message type and content
+	if image != nil {
+		// Photo message with caption
+		return pr.sendPhotoMessage(ctx, message, image, keyboard)
+	}
+
+	if message != "" {
+		// Text message
+		return pr.sendTextMessage(ctx, message, keyboard)
+	}
+
+	if keyboard != nil {
+		// Keyboard only - send invisible message
+		return pr.sendInvisibleMessage(ctx, keyboard)
+	}
+
+	return fmt.Errorf("no content to send - this should not happen after validation")
+}
+
+// sendPhotoMessage sends a photo with optional caption and keyboard
+func (pr *PromptRenderer) sendPhotoMessage(ctx *Context, caption string, image *ProcessedImage, keyboard interface{}) error {
+	// For now, we'll fallback to sending text with photo reference
+	// In a production system, you'd want to extend Context with photo methods
+	photoText := fmt.Sprintf("📷 %s", caption)
+	if caption == "" {
+		photoText = "📷 Image"
+	}
+
+	if keyboard != nil {
+		return ctx.Reply(photoText, keyboard)
+	}
+	return ctx.Reply(photoText)
+}
+
+// sendTextMessage sends a text message with optional keyboard
+func (pr *PromptRenderer) sendTextMessage(ctx *Context, message string, keyboard interface{}) error {
+	if keyboard != nil {
+		return ctx.Reply(message, keyboard)
+	}
+	return ctx.Reply(message)
+}
+
+// sendInvisibleMessage sends a keyboard-only message using zero-width space
+func (pr *PromptRenderer) sendInvisibleMessage(ctx *Context, keyboard interface{}) error {
+	// Zero-width space character (invisible)
+	invisibleText := "\u200B"
+	return ctx.Reply(invisibleText, keyboard)
+}
+
+// logFriendlyError logs developer-friendly error messages with suggestions
+func (pr *PromptRenderer) logFriendlyError(component string, renderCtx *RenderContext, err error) error {
+	suggestions := pr.getSuggestions(component)
+
+	log.Printf("🚨 TeleFlow Rendering Error in Flow '%s', Step '%s' (User %d):\n"+
+		"   Component: %s\n"+
+		"   Error: %s\n"+
+		"   Suggestions:\n%s\n",
+		renderCtx.flowName, renderCtx.stepName, renderCtx.ctx.UserID(),
+		component, err.Error(),
+		formatSuggestions(suggestions))
+
+	return err
+}
+
+// getSuggestions returns component-specific error suggestions
+func (pr *PromptRenderer) getSuggestions(component string) []string {
+	switch component {
+	case "message rendering":
+		return []string{
+			"Check if message function returns valid string",
+			"Verify template syntax if using template strings",
+			"Ensure message is not nil in PromptConfig",
+		}
+	case "image processing":
+		return []string{
+			"Verify image file exists at specified path",
+			"Check base64 encoding format",
+			"Ensure image size is within limits",
+			"Verify image file extension is supported",
+		}
+	case "keyboard generation":
+		return []string{
+			"Check keyboard function returns valid map[string]interface{}",
+			"Verify callback_data values are strings",
+			"Ensure keyboard function doesn't panic",
+		}
+	default:
+		return []string{"Check the component implementation"}
+	}
+}
+
+// formatSuggestions formats a list of suggestions for display
+func formatSuggestions(suggestions []string) string {
+	var result strings.Builder
+	for i, suggestion := range suggestions {
+		result.WriteString(fmt.Sprintf("   %d. %s\n", i+1, suggestion))
+	}
+	return result.String()
+}
