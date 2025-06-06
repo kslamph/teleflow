@@ -199,15 +199,6 @@ func main() {
 		return ctx.StartFlow("user_registration")
 	})
 
-	// Handle cancellation
-	// bot.HandleCommand("cancel", func(ctx *teleflow.Context, command string, args string) error {
-	// 	if ctx.IsUserInFlow() {
-	// 		ctx.CancelFlow()
-	// 		return ctx.Reply("❌ Registration cancelled.")
-	// 	}
-	// 	return ctx.Reply("You're not currently in any process.")
-	// })
-
 	// Demo command to showcase photo capabilities
 	bot.HandleCommand("demo", func(ctx *teleflow.Context, command string, args string) error {
 		return ctx.SendPrompt(&teleflow.PromptConfig{

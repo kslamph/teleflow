@@ -83,7 +83,6 @@ import (
 // FlowManager, Flow, and related types are now implemented in flow.go
 
 // HandlerFunc defines the general function signature for interaction handlers.
-// It will be replaced by more specific handler types.
 type HandlerFunc func(ctx *Context) error
 
 // CommandHandlerFunc defines the function signature for command handlers.
@@ -114,11 +113,11 @@ type TextHandlerFunc func(ctx *Context, text string) error
 //
 // Parameters:
 //   - ctx: The context for the current update.
-//   - fullMessageText: The full text of the received message.
+//   - text: The full text of the received message.
 //
 // Returns:
 //   - error: An error if processing failed, nil otherwise.
-type DefaultTextHandlerFunc func(ctx *Context, fullMessageText string) error
+type DefaultTextHandlerFunc func(ctx *Context, text string) error
 
 // BotOption defines functional options for Bot configuration
 type BotOption func(*Bot)
@@ -189,7 +188,7 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		templates:        template.New("botMessages"),
 		middleware:       make([]MiddlewareFunc, 0),
 		flowConfig: FlowConfig{
-			ExitCommands:        []string{"/cancel", "/exit"},
+			ExitCommands:        []string{"/cancel"},
 			ExitMessage:         "🚫 Operation cancelled.",
 			AllowGlobalCommands: false,
 			HelpCommands:        []string{"/help"},
@@ -201,10 +200,8 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		opt(b)
 	}
 
-	// Automatically initialize the flow system
-	b.flowManager.SetBot(b)
-	b.flowManager.SetBotConfig(b.flowConfig)
-
+	// initialize the flow system
+	b.flowManager.initialize(b)
 	return b, nil
 }
 
@@ -263,13 +260,6 @@ func (b *Bot) UseMiddleware(m MiddlewareFunc) {
 	b.middleware = append(b.middleware, m)
 }
 
-// InitializeFlowSystem initializes the flow system with the bot instance.
-// This is now called automatically during bot creation - manual call is no longer required.
-// Deprecated: This method is now a no-op as initialization happens automatically.
-func (b *Bot) InitializeFlowSystem() {
-	// No-op - initialization now happens automatically in NewBot()
-}
-
 // HandleCommand registers a CommandHandlerFunc for a specific command.
 // The commandName should be the command without the leading slash (e.g., "start" for "/start").
 // Any registered command middleware will be applied to the handler.
@@ -326,7 +316,7 @@ func (b *Bot) SetDefaultTextHandler(handler DefaultTextHandlerFunc) {
 
 // RegisterFlow registers a flow with the flow manager
 func (b *Bot) RegisterFlow(flow *Flow) {
-	b.flowManager.RegisterFlow(flow)
+	b.flowManager.registerFlow(flow)
 }
 
 // applyMiddleware applies all registered general middleware to a handler.

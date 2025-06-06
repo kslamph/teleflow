@@ -96,14 +96,19 @@ func NewFlowManager(stateManager StateManager) *FlowManager {
 	}
 }
 
-// SetBot sets the bot instance and initializes the prompt renderer
-func (fm *FlowManager) SetBot(bot *Bot) {
-	fm.promptRenderer = NewPromptRenderer(bot)
-}
+// // SetBot sets the bot instance and initializes the prompt renderer
+// func (fm *FlowManager) SetBot(bot *Bot) {
+// 	fm.promptRenderer = NewPromptRenderer(bot)
+// }
 
-// SetBotConfig sets the bot configuration for the flow manager
-func (fm *FlowManager) SetBotConfig(config FlowConfig) {
-	fm.botConfig = &config
+// // SetBotConfig sets the bot configuration for the flow manager
+// func (fm *FlowManager) SetBotConfig(config FlowConfig) {
+// 	fm.botConfig = &config
+// }
+
+func (fm *FlowManager) initialize(bot *Bot) {
+	fm.promptRenderer = NewPromptRenderer(bot)
+	fm.botConfig = &bot.flowConfig
 }
 
 // IsUserInFlow checks if a user is currently in a flow
@@ -145,13 +150,13 @@ type UserFlowState struct {
 	LastActive  time.Time
 }
 
-// RegisterFlow registers a flow with the manager
-func (fm *FlowManager) RegisterFlow(flow *Flow) {
+// registerFlow registers a flow with the manager
+func (fm *FlowManager) registerFlow(flow *Flow) {
 	fm.flows[flow.Name] = flow
 }
 
-// StartFlow starts a flow for a user
-func (fm *FlowManager) StartFlow(userID int64, flowName string, ctx *Context) error {
+// startFlow starts a flow for a user
+func (fm *FlowManager) startFlow(userID int64, flowName string, ctx *Context) error {
 	flow, exists := fm.flows[flowName]
 	if !exists {
 		return fmt.Errorf("flow %s not found", flowName)

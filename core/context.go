@@ -116,7 +116,7 @@ func (c *Context) Reply(text string, keyboard ...interface{}) error {
 // StartFlow initiates a new flow for the user
 func (c *Context) StartFlow(flowName string) error {
 	// StartFlow now takes a Context parameter instead of initialData
-	return c.Bot.flowManager.StartFlow(c.UserID(), flowName, c)
+	return c.Bot.flowManager.startFlow(c.UserID(), flowName, c)
 }
 
 // IsUserInFlow checks if the user is currently in a flow
