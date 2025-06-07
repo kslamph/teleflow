@@ -160,7 +160,7 @@ func validateMarkdownV2(text string) error {
 		// This is a simplified check - in practice, you'd need more sophisticated parsing
 		if strings.Contains(text, char) {
 			// Check if it's properly used in formatting context
-			if !isValidMarkdownV2Usage(text, char) {
+			if !isValidMarkdownV2Usage() {
 				return fmt.Errorf("potentially unescaped special character '%s' in MarkdownV2", char)
 			}
 		}
@@ -199,7 +199,7 @@ func validateHTML(text string) error {
 }
 
 // isValidMarkdownV2Usage checks if special characters are used correctly (simplified)
-func isValidMarkdownV2Usage(text, char string) bool {
+func isValidMarkdownV2Usage() bool {
 	// This is a simplified implementation
 	// In practice, you'd need sophisticated parsing to handle all edge cases
 	return true

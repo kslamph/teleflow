@@ -241,7 +241,7 @@ func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 	userState.LastActive = time.Now()
 
 	// Extract input and button click data
-	input, buttonClick := fm.extractInputData(ctx, flow)
+	input, buttonClick := fm.extractInputData(ctx)
 
 	// Load user state data into context
 	for key, value := range userState.Data {
@@ -288,7 +288,7 @@ func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 }
 
 // extractInputData extracts input text and button click information from the update
-func (fm *flowManager) extractInputData(ctx *Context, flow *Flow) (string, *ButtonClick) {
+func (fm *flowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
 	var input string
 	var buttonClick *ButtonClick
 

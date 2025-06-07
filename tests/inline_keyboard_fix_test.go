@@ -65,12 +65,6 @@ func TestEmptyInlineKeyboardHandling(t *testing.T) {
 		t.Error("Empty keyboard should have no buttons")
 	}
 
-	// Test that a nil keyboard is properly handled
-	var nilKeyboard *tgbotapi.InlineKeyboardMarkup
-	if nilKeyboard != nil {
-		t.Error("Nil keyboard should be nil")
-	}
-
 	// Test that a keyboard with empty rows is still considered empty
 	emptyRowsKeyboard := tgbotapi.InlineKeyboardMarkup{
 		InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
