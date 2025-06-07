@@ -80,7 +80,7 @@ type FlowConfig struct {
 
 // flowManager manages all flows and user flow states
 type flowManager struct {
-	flows          map[string]*flow
+	flows          map[string]*Flow
 	userFlows      map[int64]*userFlowState
 	stateManager   StateManager
 	botConfig      *FlowConfig
@@ -90,7 +90,7 @@ type flowManager struct {
 // newFlowManager creates a new flow manager
 func newFlowManager(stateManager StateManager) *flowManager {
 	return &flowManager{
-		flows:        make(map[string]*flow),
+		flows:        make(map[string]*Flow),
 		userFlows:    make(map[int64]*userFlowState),
 		stateManager: stateManager,
 	}
@@ -122,8 +122,8 @@ func (fm *flowManager) cancelFlow(userID int64) {
 	delete(fm.userFlows, userID)
 }
 
-// flow represents a structured multi-step conversation using the new Step-Prompt-Process API
-type flow struct {
+// Flow represents a structured multi-step conversation using the new Step-Prompt-Process API
+type Flow struct {
 	Name       string
 	Steps      map[string]*flowStep // Map for easier lookup by step name
 	Order      []string             // Maintains step execution order
@@ -151,7 +151,7 @@ type userFlowState struct {
 }
 
 // registerFlow registers a flow with the manager
-func (fm *flowManager) registerFlow(flow *flow) {
+func (fm *flowManager) registerFlow(flow *Flow) {
 	fm.flows[flow.Name] = flow
 }
 
@@ -193,7 +193,7 @@ func (fm *flowManager) startFlow(userID int64, flowName string, ctx *Context) er
 }
 
 // renderStepPrompt renders the prompt for a given step
-func (fm *flowManager) renderStepPrompt(ctx *Context, flow *flow, stepName string, userState *userFlowState) error {
+func (fm *flowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName string, userState *userFlowState) error {
 	step := flow.Steps[stepName]
 	if step == nil {
 		return fmt.Errorf("step %s not found", stepName)
@@ -307,7 +307,7 @@ func (fm *flowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
 }
 
 // handleProcessResult processes the result from a ProcessFunc
-func (fm *flowManager) handleProcessResult(ctx *Context, result ProcessResult, userState *userFlowState, flow *flow) (bool, error) {
+func (fm *flowManager) handleProcessResult(ctx *Context, result ProcessResult, userState *userFlowState, flow *Flow) (bool, error) {
 	// Show custom prompt if specified (informational only, no keyboard)
 	if result.Prompt != nil {
 		if err := fm.renderInformationalPrompt(ctx, result.Prompt); err != nil {
@@ -369,7 +369,7 @@ func (fm *flowManager) renderInformationalPrompt(ctx *Context, config *PromptCon
 }
 
 // advanceToNextStep moves to the next step in sequence
-func (fm *flowManager) advanceToNextStep(ctx *Context, userState *userFlowState, flow *flow) (bool, error) {
+func (fm *flowManager) advanceToNextStep(ctx *Context, userState *userFlowState, flow *Flow) (bool, error) {
 	// Find current step index
 	currentIndex := -1
 	for i, stepName := range flow.Order {
@@ -398,7 +398,7 @@ func (fm *flowManager) advanceToNextStep(ctx *Context, userState *userFlowState,
 }
 
 // goToSpecificStep jumps to a named step
-func (fm *flowManager) goToSpecificStep(ctx *Context, userState *userFlowState, flow *flow, targetStep string) (bool, error) {
+func (fm *flowManager) goToSpecificStep(ctx *Context, userState *userFlowState, flow *Flow, targetStep string) (bool, error) {
 	if _, exists := flow.Steps[targetStep]; !exists {
 		return true, fmt.Errorf("target step %s not found in flow", targetStep)
 	}
@@ -408,7 +408,7 @@ func (fm *flowManager) goToSpecificStep(ctx *Context, userState *userFlowState, 
 }
 
 // completeFlow handles flow completion
-func (fm *flowManager) completeFlow(ctx *Context, flow *flow) (bool, error) {
+func (fm *flowManager) completeFlow(ctx *Context, flow *Flow) (bool, error) {
 	// Execute completion handler if it exists
 	if flow.OnComplete != nil {
 		if err := flow.OnComplete(ctx); err != nil {
@@ -423,7 +423,7 @@ func (fm *flowManager) completeFlow(ctx *Context, flow *flow) (bool, error) {
 }
 
 // handleRenderError handles errors that occur during prompt rendering
-func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *flow, stepName string, userState *userFlowState) error {
+func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *Flow, stepName string, userState *userFlowState) error {
 	// Always log the technical error with full context
 	fm.logRenderError(renderErr, stepName, flow.Name, ctx.UserID())
 

@@ -2,14 +2,9 @@ package teleflow
 
 import (
 	"fmt"
-	"html"
-	"log"
 	"regexp"
 	"strings"
 	"text/template"
-
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 // Template system provides simple message templating capabilities for dynamic content.
@@ -84,121 +79,22 @@ var templateRegistry = make(map[string]*TemplateInfo)
 
 // AddTemplate registers a template with the given name, template text, and parse mode
 func (b *Bot) AddTemplate(name, templateText string, parseMode ParseMode) error {
-	return b.addTemplateInternal(name, templateText, parseMode)
-}
-
-// MustAddTemplate registers a template and panics if it fails
-func (b *Bot) MustAddTemplate(name, templateText string, parseMode ParseMode) {
-	if err := b.addTemplateInternal(name, templateText, parseMode); err != nil {
-		log.Fatalf("Failed to add template '%s': %v", name, err)
-	}
-}
-
-// addTemplateInternal is the internal implementation for adding templates
-func (b *Bot) addTemplateInternal(name, templateText string, parseMode ParseMode) error {
-	if name == "" {
-		return fmt.Errorf("template name cannot be empty")
-	}
-
-	if templateText == "" {
-		return fmt.Errorf("template text cannot be empty")
-	}
-
-	// Validate parse mode
-	if err := validateParseMode(parseMode); err != nil {
-		return fmt.Errorf("invalid parse mode: %w", err)
-	}
-
-	// Validate template integrity according to parse mode
-	if err := validateTemplateIntegrity(templateText, parseMode); err != nil {
-		return fmt.Errorf("template integrity validation failed for '%s': %w", name, err)
-	}
-
-	// Parse the template text with custom functions
-	tmpl, err := template.New(name).Funcs(getTemplateFuncs(parseMode)).Parse(templateText)
-	if err != nil {
-		return fmt.Errorf("failed to parse template '%s': %w", name, err)
-	}
-	// Add the template to the bot's template collection
-	if b.templates == nil {
-		// Initialize with all template functions (combine all parse modes)
-		allFuncs := getAllTemplateFuncs()
-		b.templates = template.New("botMessages").Funcs(allFuncs)
-	}
-
-	// Add the template to the collection
-	_, err = b.templates.AddParseTree(name, tmpl.Tree)
-	if err != nil {
-		return fmt.Errorf("failed to add template '%s': %w", name, err)
-	}
-
-	// Store template metadata
-	templateRegistry[name] = &TemplateInfo{
-		Name:      name,
-		ParseMode: parseMode,
-		Template:  tmpl,
-	}
-
-	return nil
-}
-
-// getAllTemplateFuncs returns all template functions for all parse modes
-func getAllTemplateFuncs() template.FuncMap {
-	titleCaser := cases.Title(language.Und)
-	return template.FuncMap{
-		"escape": func(s string) string {
-			// Default to HTML escaping - will be overridden in execution context
-			return html.EscapeString(s)
-		},
-		"safe": func(s string) string {
-			return s
-		},
-		"title": func(s string) string {
-			return titleCaser.String(s)
-		},
-		"upper": func(s string) string {
-			return strings.ToUpper(s)
-		},
-		"lower": func(s string) string {
-			return strings.ToLower(s)
-		},
-	}
+	return defaultTemplateManager.AddTemplate(name, templateText, parseMode)
 }
 
 // GetTemplateInfo retrieves template metadata by name
 func (b *Bot) GetTemplateInfo(name string) *TemplateInfo {
-	return templateRegistry[name]
-}
-
-// GetTemplate retrieves a template by name (useful for debugging/testing)
-func (b *Bot) GetTemplate(name string) *template.Template {
-	if b.templates == nil {
-		return nil
-	}
-	return b.templates.Lookup(name)
+	return defaultTemplateManager.GetTemplateInfo(name)
 }
 
 // ListTemplates returns a list of all registered template names
 func (b *Bot) ListTemplates() []string {
-	if b.templates == nil {
-		return []string{}
-	}
-
-	var names []string
-	for _, tmpl := range b.templates.Templates() {
-		if tmpl.Name() != "botMessages" { // Skip the root template
-			names = append(names, tmpl.Name())
-		}
-	}
-	return names
+	return defaultTemplateManager.ListTemplates()
 }
 
 // HasTemplate checks if a template with the given name exists
 func (b *Bot) HasTemplate(name string) bool {
-	if b.templates == nil {
-		return false
-	}
-	return b.templates.Lookup(name) != nil
+	return defaultTemplateManager.HasTemplate(name)
 }
 
 // validateParseMode validates if the parse mode is supported
@@ -321,40 +217,6 @@ func isSelfClosingTag(tag string) bool {
 		"track": true, "wbr": true,
 	}
 	return selfClosing[tag]
-}
-
-// getTemplateFuncs returns template functions for the given parse mode
-func getTemplateFuncs(parseMode ParseMode) template.FuncMap {
-	titleCaser := cases.Title(language.Und)
-	baseFuncs := template.FuncMap{
-		"escape": func(s string) string {
-			switch parseMode {
-			case ParseModeHTML:
-				return html.EscapeString(s)
-			case ParseModeMarkdown:
-				return escapeMarkdown(s)
-			case ParseModeMarkdownV2:
-				return escapeMarkdownV2(s)
-			default:
-				return s
-			}
-		},
-		"safe": func(s string) string {
-			// Returns unescaped string - use with caution
-			return s
-		},
-		"title": func(s string) string {
-			return titleCaser.String(s)
-		},
-		"upper": func(s string) string {
-			return strings.ToUpper(s)
-		},
-		"lower": func(s string) string {
-			return strings.ToLower(s)
-		},
-	}
-
-	return baseFuncs
 }
 
 // escapeMarkdown escapes special characters for Markdown

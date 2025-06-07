@@ -40,9 +40,14 @@ func (pr *promptRenderer) render(renderCtx *renderContext) error {
 	}
 
 	// Render components
-	message, err := pr.messageRenderer.renderMessage(renderCtx.promptConfig, renderCtx.ctx)
+	message, parseMode, err := pr.messageRenderer.renderMessage(renderCtx.promptConfig, renderCtx.ctx)
 	if err != nil {
 		return pr.logFriendlyError("message rendering", renderCtx, err)
+	}
+
+	// Store parse mode in context for Context.send() to use
+	if parseMode != ParseModeNone {
+		renderCtx.ctx.Set("__render_parse_mode", parseMode)
 	}
 
 	image, err := pr.imageHandler.processImage(renderCtx.promptConfig.Image, renderCtx.ctx)
@@ -56,7 +61,7 @@ func (pr *promptRenderer) render(renderCtx *renderContext) error {
 	}
 
 	// Send message according to Telegram rules
-	return pr.sendMessage(renderCtx.ctx, message, image, keyboard)
+	return pr.sendMessage(renderCtx.ctx, message, parseMode, image, keyboard)
 }
 
 // validatePromptConfig ensures the PromptConfig has at least one non-nil field
@@ -68,16 +73,16 @@ func (pr *promptRenderer) validatePromptConfig(config *PromptConfig) error {
 }
 
 // sendMessage determines the appropriate message type and sends it
-func (pr *promptRenderer) sendMessage(ctx *Context, message string, image *processedImage, keyboard interface{}) error {
+func (pr *promptRenderer) sendMessage(ctx *Context, message string, parseMode ParseMode, image *processedImage, keyboard interface{}) error {
 	// Determine message type and content
 	if image != nil {
 		// Photo message with caption
-		return pr.sendPhotoMessage(ctx, message, image, keyboard)
+		return pr.sendPhotoMessage(ctx, message, parseMode, image, keyboard)
 	}
 
 	if message != "" {
 		// Text message
-		return pr.sendTextMessage(ctx, message, keyboard)
+		return pr.sendTextMessage(ctx, message, parseMode, keyboard)
 	}
 
 	if keyboard != nil {
@@ -89,17 +94,18 @@ func (pr *promptRenderer) sendMessage(ctx *Context, message string, image *proce
 }
 
 // sendPhotoMessage sends a photo with optional caption and keyboard
-func (pr *promptRenderer) sendPhotoMessage(ctx *Context, caption string, image *processedImage, keyboard interface{}) error {
-	// Use the new SendPhoto method from Context
+func (pr *promptRenderer) sendPhotoMessage(ctx *Context, caption string, parseMode ParseMode, image *processedImage, keyboard interface{}) error {
+	// For now, we'll use the existing SendPhoto method from Context
+	// TODO: Implement SendPhotoWithParseMode if needed
 	return ctx.SendPhoto(image, caption, keyboard)
 }
 
 // sendTextMessage sends a text message with optional keyboard
-func (pr *promptRenderer) sendTextMessage(ctx *Context, message string, keyboard interface{}) error {
+func (pr *promptRenderer) sendTextMessage(ctx *Context, message string, parseMode ParseMode, keyboard interface{}) error {
 	if keyboard != nil {
-		return ctx.Reply(message, keyboard)
+		return ctx.ReplyWithParseMode(message, parseMode, keyboard)
 	}
-	return ctx.Reply(message)
+	return ctx.ReplyWithParseMode(message, parseMode)
 }
 
 // sendInvisibleMessage sends a keyboard-only message using zero-width space

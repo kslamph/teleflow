@@ -212,10 +212,13 @@ func main() {
 			Image:   "https://via.placeholder.com/500x250/2196F3/white?text=Help+Menu",
 		})
 	})
-
+	bot.AddTemplate("not_understood", `❓ I didn't understand '{{.Input}}'`, teleflow.ParseModeMarkdownV2)
 	bot.DefaultHandler(func(ctx *teleflow.Context, text string) error {
 		return ctx.SendPrompt(&teleflow.PromptConfig{
-			Message: "❓ I didn't understand that. Please use one of the commands or buttons.",
+			Message: "template:not_understood",
+			TemplateData: map[string]interface{}{
+				"Input": text,
+			},
 		})
 	})
 

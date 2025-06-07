@@ -50,13 +50,13 @@ func (fb *FlowBuilder) OnError(config *ErrorConfig) *FlowBuilder {
 
 // Build creates the final Flow object from the builder.
 // This converts the new API structure to the internal Flow representation.
-func (fb *FlowBuilder) Build() (*flow, error) {
+func (fb *FlowBuilder) Build() (*Flow, error) {
 	if len(fb.steps) == 0 {
 		return nil, fmt.Errorf("flow '%s' must have at least one step", fb.name)
 	}
 
 	// Convert to internal Flow structure
-	flow := &flow{
+	flow := &Flow{
 		Name:    fb.name,
 		Steps:   make(map[string]*flowStep),
 		Order:   fb.order,
@@ -134,6 +134,6 @@ func (sb *StepBuilder) OnFlowComplete(handler func(*Context) error) *FlowBuilder
 
 // Build creates the final Flow object.
 // This is a convenience method that delegates to the FlowBuilder.
-func (sb *StepBuilder) Build() (*flow, error) {
+func (sb *StepBuilder) Build() (*Flow, error) {
 	return sb.flowBuilder.Build()
 }

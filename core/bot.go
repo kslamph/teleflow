@@ -71,7 +71,6 @@ package teleflow
 
 import (
 	"log"
-	"text/template"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -160,7 +159,6 @@ type Bot struct {
 	callbackRegistry   *callbackRegistry
 	stateManager       StateManager
 	flowManager        *flowManager
-	templates          *template.Template
 	// Unified middleware system - intercepts all message types
 	middleware []MiddlewareFunc
 
@@ -185,7 +183,6 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		callbackRegistry: newCallbackRegistry(),
 		stateManager:     NewInMemoryStateManager(),
 		flowManager:      newFlowManager(NewInMemoryStateManager()),
-		templates:        template.New("botMessages"),
 		middleware:       make([]MiddlewareFunc, 0),
 		flowConfig: FlowConfig{
 			ExitCommands:        []string{"/cancel"},
@@ -194,7 +191,6 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 			HelpCommands:        []string{"/help"},
 		},
 	}
-
 	// Apply options
 	for _, opt := range options {
 		opt(b)
@@ -310,7 +306,7 @@ func (b *Bot) DefaultHandler(handler DefaultHandlerFunc) {
 }
 
 // RegisterFlow registers a flow with the flow manager
-func (b *Bot) RegisterFlow(flow *flow) {
+func (b *Bot) RegisterFlow(flow *Flow) {
 	b.flowManager.registerFlow(flow)
 }
 

@@ -23,9 +23,10 @@ type StepBuilder struct {
 
 // PromptConfig represents the declarative specification for a prompt.
 type PromptConfig struct {
-	Message  MessageSpec  // Can be a string, func(*Context) string, or a template.
-	Image    ImageSpec    // Can be a string (URL, file path, base64), func(*Context) string, or nil.
-	Keyboard KeyboardFunc // Can be a func(*Context) map[string]interface{} or nil.
+	Message      MessageSpec            // Can be a string, func(*Context) string, or a template.
+	Image        ImageSpec              // Can be a string (URL, file path, base64), func(*Context) string, or nil.
+	Keyboard     KeyboardFunc           // Can be a func(*Context) map[string]interface{} or nil.
+	TemplateData map[string]interface{} // Template variables that take precedence over context data
 }
 
 // MessageSpec defines the type for message content.
@@ -107,4 +108,16 @@ func CompleteFlow() ProcessResult {
 // CancelFlow creates a ProcessResult that cancels the current flow.
 func CancelFlow() ProcessResult {
 	return ProcessResult{Action: actionCancelFlow}
+}
+
+// isTemplateMessage checks if a message string is a template reference.
+// It returns true and the template name if the message has the format "template:templateName",
+// otherwise returns false and an empty string.
+func isTemplateMessage(message string) (bool, string) {
+	const templatePrefix = "template:"
+	if len(message) > len(templatePrefix) && message[:len(templatePrefix)] == templatePrefix {
+		templateName := message[len(templatePrefix):]
+		return true, templateName
+	}
+	return false, ""
 }

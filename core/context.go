@@ -106,6 +106,11 @@ func (c *Context) Reply(text string, keyboard ...interface{}) error {
 	return c.send(text, keyboard...)
 }
 
+// ReplyWithParseMode sends a text message with specific parse mode and keyboard
+func (c *Context) ReplyWithParseMode(text string, parseMode ParseMode, keyboard ...interface{}) error {
+	return c.sendWithParseMode(text, parseMode, keyboard...)
+}
+
 // StartFlow initiates a new flow for the user
 func (c *Context) StartFlow(flowName string) error {
 	// StartFlow now takes a Context parameter instead of initialData
@@ -133,8 +138,9 @@ func (c *Context) SendPrompt(prompt *PromptConfig) error {
 
 	// Create a copy of the prompt without keyboard for informational use
 	infoPrompt := &PromptConfig{
-		Message: prompt.Message,
-		Image:   prompt.Image,
+		Message:      prompt.Message,
+		Image:        prompt.Image,
+		TemplateData: prompt.TemplateData,
 		// Keyboard is intentionally omitted for informational messages
 	}
 
@@ -146,6 +152,47 @@ func (c *Context) SendPrompt(prompt *PromptConfig) error {
 	}
 
 	return c.bot.flowManager.promptRenderer.render(renderCtx)
+}
+
+// ReplyTemplate renders and sends a template with data and optional keyboard.
+// This is a convenience method that uses the template system with "template:" + templateName format.
+func (c *Context) ReplyTemplate(templateName string, data map[string]interface{}, keyboard ...interface{}) error {
+	prompt := &PromptConfig{
+		Message:      "template:" + templateName,
+		TemplateData: data,
+	}
+
+	// If keyboard is provided, we need to send it differently since SendPrompt omits keyboards
+	if len(keyboard) > 0 && keyboard[0] != nil {
+		// For templates with keyboards, we need to render manually and use Reply
+		if c.bot.flowManager.promptRenderer == nil {
+			return fmt.Errorf("PromptRenderer not initialized - this should not happen as initialization is automatic")
+		}
+
+		// Render the template message
+		message, parseMode, err := c.bot.flowManager.promptRenderer.messageRenderer.renderMessage(prompt, c)
+		if err != nil {
+			return fmt.Errorf("failed to render template '%s': %w", templateName, err)
+		}
+
+		// Send with the keyboard using the appropriate method
+		if parseMode != ParseModeNone {
+			return c.ReplyWithParseMode(message, parseMode, keyboard[0])
+		}
+		return c.Reply(message, keyboard[0])
+	}
+
+	// No keyboard, use SendPrompt
+	return c.SendPrompt(prompt)
+}
+
+// SendPromptWithTemplate is a convenience method for template-based prompts.
+// It renders the specified template with the given data and sends it as a prompt.
+func (c *Context) SendPromptWithTemplate(templateName string, data map[string]interface{}) error {
+	return c.SendPrompt(&PromptConfig{
+		Message:      "template:" + templateName,
+		TemplateData: data,
+	})
 }
 
 func (c *Context) IsGroup() bool {
@@ -190,6 +237,57 @@ func (c *Context) applyAutomaticMenuButton() {
 // send is an internal helper for sending messages with automatic UI management
 func (c *Context) send(text string, keyboard ...interface{}) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
+
+	// Check if a parse mode was set during rendering
+	if parseMode, exists := c.Get("__render_parse_mode"); exists {
+		if pm, ok := parseMode.(ParseMode); ok && pm != ParseModeNone {
+			msg.ParseMode = string(pm)
+		}
+		// Clean up the temporary parse mode
+		delete(c.data, "__render_parse_mode")
+	}
+
+	// Automatic menu button management
+	c.applyAutomaticMenuButton()
+
+	// Apply keyboard markup
+	if len(keyboard) > 0 && keyboard[0] != nil {
+		switch kb := keyboard[0].(type) {
+		case *ReplyKeyboard:
+			msg.ReplyMarkup = kb.ToTgbotapi()
+		case *InlineKeyboard:
+			msg.ReplyMarkup = kb.ToTgbotapi()
+		case tgbotapi.ReplyKeyboardRemove:
+			msg.ReplyMarkup = kb
+		case tgbotapi.ReplyKeyboardMarkup:
+			msg.ReplyMarkup = kb
+		case tgbotapi.InlineKeyboardMarkup:
+			msg.ReplyMarkup = kb
+		}
+	} else {
+		// Apply user-specific reply keyboard automatically
+		if c.bot.accessManager != nil {
+			permissionContext := c.getPermissionContext()
+			if userMenu := c.bot.accessManager.GetReplyKeyboard(permissionContext); userMenu != nil {
+				msg.ReplyMarkup = userMenu.ToTgbotapi()
+			}
+		} else if c.bot.replyKeyboard != nil {
+			msg.ReplyMarkup = c.bot.replyKeyboard.ToTgbotapi()
+		}
+	}
+
+	_, err := c.bot.api.Send(msg)
+	return err
+}
+
+// sendWithParseMode is an internal helper for sending messages with parse mode
+func (c *Context) sendWithParseMode(text string, parseMode ParseMode, keyboard ...interface{}) error {
+	msg := tgbotapi.NewMessage(c.ChatID(), text)
+
+	// Set parse mode if specified
+	if parseMode != ParseModeNone && parseMode != "" {
+		msg.ParseMode = string(parseMode)
+	}
 
 	// Automatic menu button management
 	c.applyAutomaticMenuButton()
