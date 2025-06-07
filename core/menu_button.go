@@ -61,11 +61,10 @@ package teleflow
 import (
 	"fmt"
 	"log"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 // SetMenuButton sets the menu button for a specific chat or all chats
+// Note: Commands-type menu buttons are now set via SetBotCommands method
 func (b *Bot) SetMenuButton(chatID int64, config *MenuButtonConfig) error {
 	if config == nil {
 		return fmt.Errorf("menu button config cannot be nil")
@@ -73,15 +72,7 @@ func (b *Bot) SetMenuButton(chatID int64, config *MenuButtonConfig) error {
 
 	switch config.Type {
 	case menuButtonTypeCommands:
-		// For commands type, register the commands with Telegram - this is what makes them appear!
-		if len(config.Items) > 0 {
-			if err := b.setMyCommands(config.Items); err != nil {
-				log.Printf("Warning: Failed to set bot commands: %v", err)
-				return err
-			}
-		}
-		log.Printf("✅ Commands menu button set for chat %d", chatID)
-		return nil
+		return fmt.Errorf("commands-type menu buttons should be set via SetBotCommands method, not SetMenuButton")
 
 	case menuButtonTypeWebApp:
 		if config.WebApp == nil {
@@ -100,72 +91,37 @@ func (b *Bot) SetMenuButton(chatID int64, config *MenuButtonConfig) error {
 }
 
 // SetDefaultMenuButton sets the default menu button configuration for the bot
+// Only supports web_app or default types. For bot commands, use SetBotCommands method.
 func (b *Bot) SetDefaultMenuButton() error {
 	if b.menuButton == nil {
 		return nil // No menu button configured
+	}
+
+	// Only allow web_app or default types
+	if b.menuButton.Type != menuButtonTypeWebApp && b.menuButton.Type != menuButtonTypeDefault {
+		return fmt.Errorf("SetDefaultMenuButton only supports web_app or default types, use SetBotCommands for commands")
 	}
 
 	// Set for all chats (chatID = 0)
 	return b.SetMenuButton(0, b.menuButton)
 }
 
-// setMyCommands registers bot commands with Telegram using the native telegram-bot-api
-func (b *Bot) setMyCommands(items []menuButtonItem) error {
-	if len(items) == 0 {
-		return nil
-	}
-
-	// Convert MenuButtonItems to tgbotapi.BotCommand format
-	var commands []tgbotapi.BotCommand
-	for _, item := range items {
-		// Remove leading slash if present
-		command := item.command
-		if len(command) > 0 && command[0] == '/' {
-			command = command[1:]
-		}
-
-		commands = append(commands, tgbotapi.BotCommand{
-			Command:     command,
-			Description: item.text,
-		})
-	}
-
-	// Create the setMyCommands request using the native API
-	cmdCfg := tgbotapi.NewSetMyCommands(commands...)
-
-	// Use Send method - this is what makes the menu button appear!
-	// Note: This may cause a JSON unmarshal error which we'll ignore since it still works
-
-	_, err := b.api.Request(cmdCfg)
-	if err != nil {
-
-		return fmt.Errorf("failed to set bot commands: %w", err)
-
-	} else {
-		log.Printf("✅ Registered %d bot commands with Telegram", len(commands))
-	}
-
-	return nil
-}
-
 // initializeMenuButton sets up the menu button when the bot starts
+// Only handles web_app or default types. Bot commands should be set via SetBotCommands.
 func (b *Bot) initializeMenuButton() {
 	if b.menuButton != nil {
-		log.Printf("🔧 Setting up menu button: %s", b.menuButton.Type)
+		// Only initialize web_app or default menu buttons
+		if b.menuButton.Type == menuButtonTypeWebApp || b.menuButton.Type == menuButtonTypeDefault {
+			log.Printf("🔧 Setting up menu button: %s", b.menuButton.Type)
 
-		err := b.SetDefaultMenuButton()
-		if err != nil {
-			log.Printf("❌ Menu button setup failed: %v", err)
-		} else {
-			log.Printf("✅ Menu button configured: %s", b.menuButton.Type)
-		}
-
-		// Log available commands for commands type
-		if b.menuButton.Type == menuButtonTypeCommands && len(b.menuButton.Items) > 0 {
-			log.Printf("📋 Bot commands available:")
-			for _, item := range b.menuButton.Items {
-				log.Printf("   %s - %s", item.text, item.command)
+			err := b.SetDefaultMenuButton()
+			if err != nil {
+				log.Printf("❌ Menu button setup failed: %v", err)
+			} else {
+				log.Printf("✅ Menu button configured: %s", b.menuButton.Type)
 			}
+		} else {
+			log.Printf("ℹ️ Skipping commands-type menu button initialization - use SetBotCommands() method instead")
 		}
 	}
 }

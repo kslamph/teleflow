@@ -2,7 +2,6 @@ package teleflow
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -132,8 +131,8 @@ func (c *Context) CancelFlow() {
 // This is useful for informational messages that use the same rendering system
 // as flow prompts but don't require user interaction.
 func (c *Context) SendPrompt(prompt *PromptConfig) error {
-	if c.bot.flowManager.promptRenderer == nil {
-		return fmt.Errorf("PromptRenderer not initialized - this should not happen as initialization is automatic")
+	if c.bot.promptComposer == nil {
+		return fmt.Errorf("PromptComposer not initialized - this should not happen as initialization is automatic")
 	}
 
 	// Create a copy of the prompt without keyboard for informational use
@@ -144,14 +143,7 @@ func (c *Context) SendPrompt(prompt *PromptConfig) error {
 		// Keyboard is intentionally omitted for informational messages
 	}
 
-	renderCtx := &renderContext{
-		ctx:          c,
-		promptConfig: infoPrompt,
-		stepName:     "info",
-		flowName:     "system",
-	}
-
-	return c.bot.flowManager.promptRenderer.render(renderCtx)
+	return c.bot.promptComposer.ComposeAndSend(c, infoPrompt)
 }
 
 // ReplyTemplate renders and sends a template with data and optional keyboard.
@@ -162,15 +154,17 @@ func (c *Context) ReplyTemplate(templateName string, data map[string]interface{}
 		TemplateData: data,
 	}
 
-	// If keyboard is provided, we need to send it differently since SendPrompt omits keyboards
+	// If keyboard is provided, we need to handle it differently since PromptConfig.Keyboard
+	// expects a KeyboardFunc, but traditional Reply methods accept various keyboard types
 	if len(keyboard) > 0 && keyboard[0] != nil {
 		// For templates with keyboards, we need to render manually and use Reply
-		if c.bot.flowManager.promptRenderer == nil {
-			return fmt.Errorf("PromptRenderer not initialized - this should not happen as initialization is automatic")
+		// since PromptComposer only handles KeyboardFunc in PromptConfig
+		if c.bot.promptComposer == nil {
+			return fmt.Errorf("PromptComposer not initialized")
 		}
 
-		// Render the template message
-		message, parseMode, err := c.bot.flowManager.promptRenderer.messageRenderer.renderMessage(prompt, c)
+		// Render the template message using PromptComposer's messageRenderer
+		message, parseMode, err := c.bot.promptComposer.messageRenderer.renderMessage(prompt, c)
 		if err != nil {
 			return fmt.Errorf("failed to render template '%s': %w", templateName, err)
 		}
@@ -182,8 +176,11 @@ func (c *Context) ReplyTemplate(templateName string, data map[string]interface{}
 		return c.Reply(message, keyboard[0])
 	}
 
-	// No keyboard, use SendPrompt
-	return c.SendPrompt(prompt)
+	// No keyboard, use PromptComposer
+	if c.bot.promptComposer == nil {
+		return fmt.Errorf("PromptComposer not initialized")
+	}
+	return c.bot.promptComposer.ComposeAndSend(c, prompt)
 }
 
 // SendPromptWithTemplate is a convenience method for template-based prompts.
@@ -217,21 +214,11 @@ func (c *Context) getPermissionContext() *PermissionContext {
 }
 
 // applyAutomaticMenuButton automatically sets the menu button for the chat based on user context
+// Note: Bot commands are now set via SetBotCommands method, not through AccessManager
 func (c *Context) applyAutomaticMenuButton() {
-	if c.bot.accessManager != nil {
-		permissionContext := c.getPermissionContext()
-
-		if menuButton := c.bot.accessManager.GetMenuButton(permissionContext); menuButton != nil {
-			// Set menu button for this specific chat
-			log.Printf("Setting menu button for chat %d: %+v", c.ChatID(), menuButton)
-			if err := c.bot.SetMenuButton(c.ChatID(), menuButton); err != nil {
-				// Log error but don't fail the message send
-				// In production, you might want to log this more appropriately
-				log.Printf("Failed to set menu button for chat %d: %v", c.ChatID(), err)
-				_ = err
-			}
-		}
-	}
+	// AccessManager no longer provides menu buttons for bot commands
+	// This method is kept for potential future use with web_app menu buttons
+	// Bot commands should be set directly via Bot.SetBotCommands()
 }
 
 // send is an internal helper for sending messages with automatic UI management
@@ -262,10 +249,14 @@ func (c *Context) send(text string, keyboard ...interface{}) error {
 		case tgbotapi.ReplyKeyboardMarkup:
 			msg.ReplyMarkup = kb
 		case tgbotapi.InlineKeyboardMarkup:
-			msg.ReplyMarkup = kb
+			// Check if the inline keyboard is empty (has no buttons)
+			if len(kb.InlineKeyboard) > 0 {
+				msg.ReplyMarkup = kb
+			}
+			// If empty, don't set ReplyMarkup (leave it nil)
 		}
 	} else {
-		// Apply user-specific reply keyboard automatically
+		// Apply user-specific reply keyboard automatically only if no explicit keyboard provided
 		if c.bot.accessManager != nil {
 			permissionContext := c.getPermissionContext()
 			if userMenu := c.bot.accessManager.GetReplyKeyboard(permissionContext); userMenu != nil {
@@ -304,10 +295,14 @@ func (c *Context) sendWithParseMode(text string, parseMode ParseMode, keyboard .
 		case tgbotapi.ReplyKeyboardMarkup:
 			msg.ReplyMarkup = kb
 		case tgbotapi.InlineKeyboardMarkup:
-			msg.ReplyMarkup = kb
+			// Check if the inline keyboard is empty (has no buttons)
+			if len(kb.InlineKeyboard) > 0 {
+				msg.ReplyMarkup = kb
+			}
+			// If empty, don't set ReplyMarkup (leave it nil)
 		}
 	} else {
-		// Apply user-specific reply keyboard automatically
+		// Apply user-specific reply keyboard automatically only if no explicit keyboard provided
 		if c.bot.accessManager != nil {
 			permissionContext := c.getPermissionContext()
 			if userMenu := c.bot.accessManager.GetReplyKeyboard(permissionContext); userMenu != nil {
@@ -374,7 +369,11 @@ func (c *Context) SendPhoto(image *processedImage, caption string, keyboard ...i
 		case tgbotapi.ReplyKeyboardMarkup:
 			photoConfig.ReplyMarkup = kb
 		case tgbotapi.InlineKeyboardMarkup:
-			photoConfig.ReplyMarkup = kb
+			// Check if the inline keyboard is empty (has no buttons)
+			if len(kb.InlineKeyboard) > 0 {
+				photoConfig.ReplyMarkup = kb
+			}
+			// If empty, don't set ReplyMarkup (leave it nil)
 		}
 	}
 
@@ -410,4 +409,49 @@ func (c *Context) extractChatID(update tgbotapi.Update) int64 {
 		return update.CallbackQuery.Message.Chat.ID
 	}
 	return 0
+}
+
+// ReplyKeyboardOption defines functional options for SendReplyKeyboard.
+type ReplyKeyboardOption func(*tgbotapi.ReplyKeyboardMarkup)
+
+// WithResize configures the reply keyboard to resize.
+func WithResize() ReplyKeyboardOption {
+	return func(kb *tgbotapi.ReplyKeyboardMarkup) {
+		kb.ResizeKeyboard = true
+	}
+}
+
+// WithOneTime configures the reply keyboard to be one-time.
+func WithOneTime() ReplyKeyboardOption {
+	return func(kb *tgbotapi.ReplyKeyboardMarkup) {
+		kb.OneTimeKeyboard = true
+	}
+}
+
+// WithPlaceholder sets the input field placeholder for the reply keyboard.
+func WithPlaceholder(text string) ReplyKeyboardOption {
+	return func(kb *tgbotapi.ReplyKeyboardMarkup) {
+		kb.InputFieldPlaceholder = text
+	}
+}
+
+// SendReplyKeyboard sends a new reply keyboard, replacing any existing one for the user.
+// It uses the BuildReplyKeyboard logic internally.
+// Example: ctx.SendReplyKeyboard([]string{"Button 1", "Button 2"}, 2, WithResize(), WithOneTime())
+func (c *Context) SendReplyKeyboard(buttons []string, buttonsPerRow int, options ...ReplyKeyboardOption) error {
+	if c.bot == nil || c.bot.api == nil {
+		return fmt.Errorf("bot or bot API not available in context for SendReplyKeyboard")
+	}
+
+	tempReplyKeyboard := BuildReplyKeyboard(buttons, buttonsPerRow)
+	tgAPIReplyKeyboard := tempReplyKeyboard.ToTgbotapi()
+
+	for _, opt := range options {
+		opt(&tgAPIReplyKeyboard)
+	}
+
+	msg := tgbotapi.NewMessage(c.ChatID(), "\u200B") // Use an invisible char
+	msg.ReplyMarkup = tgAPIReplyKeyboard
+	_, err := c.bot.api.Send(msg)
+	return err
 }

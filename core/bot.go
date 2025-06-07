@@ -70,6 +70,7 @@
 package teleflow
 
 import (
+	"fmt"
 	"log"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -144,28 +145,26 @@ type AccessManager interface {
 	// GetReplyKeyboard returns the reply keyboard for the user based on context
 	// This keyboard will be automatically applied to reply messages
 	GetReplyKeyboard(ctx *PermissionContext) *ReplyKeyboard
-
-	// GetMenuButton returns the menu button configuration for the user based on context
-	// This menu button will be automatically set for the chat
-	GetMenuButton(ctx *PermissionContext) *MenuButtonConfig
 }
 
 // Bot is the main application structure
 type Bot struct {
-	api                *tgbotapi.BotAPI
-	handlers           map[string]HandlerFunc
-	textHandlers       map[string]HandlerFunc
-	defaultTextHandler HandlerFunc // Field for the default text handler
-	callbackRegistry   *callbackRegistry
-	stateManager       StateManager
-	flowManager        *flowManager
+	api                   *tgbotapi.BotAPI
+	handlers              map[string]HandlerFunc
+	textHandlers          map[string]HandlerFunc
+	defaultTextHandler    HandlerFunc // Field for the default text handler
+	callbackRegistry      *callbackRegistry
+	stateManager          StateManager
+	flowManager           *flowManager
+	promptKeyboardHandler *PromptKeyboardHandler // Handles UUID mappings for prompt keyboards
+	promptComposer        *PromptComposer        // Handles prompt sending
 	// Unified middleware system - intercepts all message types
 	middleware []MiddlewareFunc
 
 	// Configuration
 	replyKeyboard *ReplyKeyboard
-	menuButton    *MenuButtonConfig
-	accessManager AccessManager // AccessManager for user permission checking and replyKeyboard management
+	menuButton    *MenuButtonConfig // Only for web_app or default types
+	accessManager AccessManager     // AccessManager for user permission checking and replyKeyboard management
 	flowConfig    FlowConfig
 }
 
@@ -175,15 +174,15 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	b := &Bot{
-		api:              api,
-		handlers:         make(map[string]HandlerFunc),
-		textHandlers:     make(map[string]HandlerFunc),
-		callbackRegistry: newCallbackRegistry(),
-		stateManager:     NewInMemoryStateManager(),
-		flowManager:      newFlowManager(NewInMemoryStateManager()),
-		middleware:       make([]MiddlewareFunc, 0),
+		api:                   api,
+		handlers:              make(map[string]HandlerFunc),
+		textHandlers:          make(map[string]HandlerFunc),
+		callbackRegistry:      newCallbackRegistry(),
+		stateManager:          NewInMemoryStateManager(),
+		flowManager:           newFlowManager(NewInMemoryStateManager()),
+		promptKeyboardHandler: NewPromptKeyboardHandler(),
+		middleware:            make([]MiddlewareFunc, 0),
 		flowConfig: FlowConfig{
 			ExitCommands:        []string{"/cancel"},
 			ExitMessage:         "🚫 Operation cancelled.",
@@ -192,6 +191,12 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 			OnProcessAction:     ProcessKeepMessage, // Default: keep messages untouched
 		},
 	}
+
+	// Initialize PromptComposer with required dependencies
+	messageRenderer := newMessageRenderer()
+	imageHandler := newImageHandler()
+	b.promptComposer = NewPromptComposer(api, messageRenderer, imageHandler, b.promptKeyboardHandler)
+
 	// Apply options
 	for _, opt := range options {
 		opt(b)
@@ -202,10 +207,14 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 	return b, nil
 }
 
-// WithMenuButton sets the menu button configuration using functional options
+// WithMenuButton sets the default menu button configuration for web_app or default types only.
+// For bot commands, use SetBotCommands() method instead.
 func WithMenuButton(config *MenuButtonConfig) BotOption {
 	return func(b *Bot) {
-		b.menuButton = config
+		// Only allow web_app or default types for WithMenuButton
+		if config != nil && (config.Type == menuButtonTypeWebApp || config.Type == menuButtonTypeDefault) {
+			b.menuButton = config
+		}
 	}
 }
 
@@ -309,6 +318,11 @@ func (b *Bot) DefaultHandler(handler DefaultHandlerFunc) {
 // RegisterFlow registers a flow with the flow manager
 func (b *Bot) RegisterFlow(flow *Flow) {
 	b.flowManager.registerFlow(flow)
+}
+
+// GetPromptKeyboardHandler returns the PromptKeyboardHandler instance
+func (b *Bot) GetPromptKeyboardHandler() *PromptKeyboardHandler {
+	return b.promptKeyboardHandler
 }
 
 // applyMiddleware applies all registered general middleware to a handler.
@@ -442,11 +456,44 @@ func (b *Bot) resolveCallbackHandler(callbackData string) HandlerFunc {
 // and then processUpdate would do type assertions.
 // For now, processUpdate directly accesses b.handlers, b.textHandlers, and calls resolveCallbackHandler.
 
+// SetBotCommands configures the bot's menu button with the given commands.
+// These commands are set globally for the bot on Telegram.
+// The map keys are the command strings (without leading slash), and values are descriptions.
+func (b *Bot) SetBotCommands(commands map[string]string) error {
+	if b.api == nil {
+		return fmt.Errorf("bot API not initialized")
+	}
+	if len(commands) == 0 {
+		// To clear commands, send an empty list
+		clearCmdCfg := tgbotapi.NewSetMyCommands()
+		_, err := b.api.Request(clearCmdCfg)
+		if err != nil {
+			log.Printf("Warning: Failed to clear bot commands: %v", err)
+			return fmt.Errorf("failed to clear bot commands: %w", err)
+		}
+		log.Printf("Bot commands cleared.")
+		return nil
+	}
+
+	var tgCommands []tgbotapi.BotCommand
+	for cmd, desc := range commands {
+		tgCommands = append(tgCommands, tgbotapi.BotCommand{Command: cmd, Description: desc})
+	}
+	cmdCfg := tgbotapi.NewSetMyCommands(tgCommands...)
+	_, err := b.api.Request(cmdCfg)
+	if err != nil {
+		log.Printf("Warning: Failed to set bot commands: %v", err)
+		return fmt.Errorf("failed to set bot commands: %w", err)
+	}
+	log.Printf("Successfully set %d bot commands.", len(tgCommands))
+	return nil
+}
+
 // Start begins listening for updates
 func (b *Bot) Start() error {
 	log.Printf("Authorized on account %s", b.api.Self.UserName)
 
-	// Initialize menu button if configured
+	// Initialize menu button if configured (only for web_app or default types)
 	b.initializeMenuButton()
 
 	u := tgbotapi.NewUpdate(0)

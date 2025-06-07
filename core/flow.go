@@ -83,11 +83,11 @@ type FlowConfig struct {
 
 // flowManager manages all flows and user flow states
 type flowManager struct {
-	flows          map[string]*Flow
-	userFlows      map[int64]*userFlowState
-	stateManager   StateManager
-	botConfig      *FlowConfig
-	promptRenderer *promptRenderer
+	flows        map[string]*Flow
+	userFlows    map[int64]*userFlowState
+	stateManager StateManager
+	botConfig    *FlowConfig
+	bot          *Bot // Reference to bot for accessing promptComposer
 }
 
 // newFlowManager creates a new flow manager
@@ -99,18 +99,8 @@ func newFlowManager(stateManager StateManager) *flowManager {
 	}
 }
 
-// // SetBot sets the bot instance and initializes the prompt renderer
-// func (fm *FlowManager) SetBot(bot *Bot) {
-// 	fm.promptRenderer = NewPromptRenderer(bot)
-// }
-
-// // SetBotConfig sets the bot configuration for the flow manager
-// func (fm *FlowManager) SetBotConfig(config FlowConfig) {
-// 	fm.botConfig = &config
-// }
-
 func (fm *flowManager) initialize(bot *Bot) {
-	fm.promptRenderer = newPromptRenderer(bot)
+	fm.bot = bot
 	fm.botConfig = &bot.flowConfig
 }
 
@@ -213,20 +203,13 @@ func (fm *flowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName strin
 		ctx.Set(key, value)
 	}
 
-	// Create render context with proper step and flow information
-	if fm.promptRenderer == nil {
-		return fmt.Errorf("PromptRenderer not initialized - call SetBot() on FlowManager")
-	}
-
-	renderCtx := &renderContext{
-		ctx:          ctx,
-		promptConfig: step.PromptConfig,
-		stepName:     stepName,
-		flowName:     flow.Name,
+	// Use PromptComposer instead of promptRenderer
+	if fm.bot == nil || fm.bot.promptComposer == nil {
+		return fmt.Errorf("PromptComposer not initialized - Bot not properly set")
 	}
 
 	// Attempt to render with error handling
-	err := fm.promptRenderer.render(renderCtx)
+	err := fm.bot.promptComposer.ComposeAndSend(ctx, step.PromptConfig)
 	if err != nil {
 		return fm.handleRenderError(ctx, err, flow, stepName, userState)
 	}
@@ -312,17 +295,13 @@ func (fm *flowManager) extractInputData(ctx *Context, flow *Flow) (string, *Butt
 	if ctx.update.Message != nil {
 		input = ctx.update.Message.Text
 	} else if ctx.update.CallbackQuery != nil {
-		input = ctx.update.CallbackQuery.Data
+		input = ctx.update.CallbackQuery.Data // This is the UUID string
+		var originalData interface{} = input  // Default to UUID if not found
 
-		// Try to get the original callback data from UUID mapping
-		var originalData interface{} = ctx.update.CallbackQuery.Data // Default to UUID string
-		if fm.promptRenderer != nil && fm.promptRenderer.keyboardBuilder != nil {
-			if mappedData, found := fm.promptRenderer.keyboardBuilder.getCallbackData(ctx.UserID(), ctx.update.CallbackQuery.Data); found {
+		// Use PromptKeyboardHandler (assuming fm has access to it, perhaps via Bot)
+		if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
+			if mappedData, found := pkh.GetCallbackData(ctx.UserID(), input); found {
 				originalData = mappedData
-				// Only clean up mappings if flow is configured to delete messages/keyboards
-				if fm.shouldCleanupMappings(flow) {
-					fm.promptRenderer.keyboardBuilder.cleanupMappings(ctx.UserID())
-				}
 			}
 		}
 
@@ -379,8 +358,8 @@ func (fm *flowManager) handleProcessResult(ctx *Context, result ProcessResult, u
 
 // renderInformationalPrompt renders a prompt without keyboard for informational messages
 func (fm *flowManager) renderInformationalPrompt(ctx *Context, config *PromptConfig) error {
-	if fm.promptRenderer == nil {
-		return fmt.Errorf("PromptRenderer not initialized - call SetBot() on FlowManager")
+	if fm.bot == nil || fm.bot.promptComposer == nil {
+		return fmt.Errorf("PromptComposer not initialized - Bot not properly set")
 	}
 
 	// Create informational prompt without keyboard
@@ -390,14 +369,7 @@ func (fm *flowManager) renderInformationalPrompt(ctx *Context, config *PromptCon
 		// Keyboard is intentionally omitted for informational messages
 	}
 
-	renderCtx := &renderContext{
-		ctx:          ctx,
-		promptConfig: infoPrompt,
-		stepName:     "info",
-		flowName:     "system",
-	}
-
-	return fm.promptRenderer.render(renderCtx)
+	return fm.bot.promptComposer.ComposeAndSend(ctx, infoPrompt)
 }
 
 // advanceToNextStep moves to the next step in sequence
@@ -445,8 +417,17 @@ func (fm *flowManager) completeFlow(ctx *Context, flow *Flow) (bool, error) {
 	if flow.OnComplete != nil {
 		if err := flow.OnComplete(ctx); err != nil {
 			delete(fm.userFlows, ctx.UserID())
+			// Clean up UUID mappings when flow is cancelled due to error
+			if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
+				pkh.CleanupUserMappings(ctx.UserID())
+			}
 			return true, err
 		}
+	}
+
+	// Clean up UUID mappings when flow completes
+	if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
+		pkh.CleanupUserMappings(ctx.UserID())
 	}
 
 	// Remove user from flow
@@ -498,15 +479,8 @@ func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *Fl
 				// Image is intentionally omitted to avoid repeated render errors
 			}
 
-			renderCtx := &renderContext{
-				ctx:          ctx,
-				promptConfig: fallbackPrompt,
-				stepName:     stepName,
-				flowName:     flow.Name,
-			}
-
-			// Try to render without image - if this fails, we'll advance to next step
-			if err := fm.promptRenderer.render(renderCtx); err != nil {
+			// Try to render without image using PromptComposer - if this fails, we'll advance to next step
+			if err := fm.bot.promptComposer.ComposeAndSend(ctx, fallbackPrompt); err != nil {
 				// If even the fallback fails, advance to next step
 				_, err := fm.advanceToNextStep(ctx, userState, flow)
 				return err
@@ -560,29 +534,14 @@ func (fm *flowManager) getActionName(action errorStrategy) string {
 
 // cancelFlowAction handles flow cancellation
 func (fm *flowManager) cancelFlowAction(ctx *Context) (bool, error) {
+	// Clean up UUID mappings when flow is cancelled
+	if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
+		pkh.CleanupUserMappings(ctx.UserID())
+	}
+
 	// Remove user from flow
 	delete(fm.userFlows, ctx.UserID())
 	return true, nil
-}
-
-// handlePreviousMessageAction handles deletion of previous messages based on flow configuration
-func (fm *flowManager) handlePreviousMessageAction(ctx *Context, flow *Flow, userState *userFlowState) error {
-	if userState.LastMessageID == 0 {
-		return nil // No previous message to handle
-	}
-
-	switch flow.OnProcessAction {
-	case ProcessDeleteMessage:
-		return fm.deletePreviousMessage(ctx, userState.LastMessageID)
-	case ProcessDeleteKeyboard:
-		return fm.deletePreviousKeyboard(ctx, userState.LastMessageID)
-	case ProcessKeepMessage:
-		// Do nothing - keep messages untouched
-		return nil
-	default:
-		// Default behavior - keep messages untouched
-		return nil
-	}
 }
 
 // handleMessageAction handles deletion of a specific message based on flow configuration

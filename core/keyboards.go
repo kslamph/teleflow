@@ -118,41 +118,22 @@ type webAppInfo struct {
 	URL string `json:"url"`
 }
 
-// BuildMenuButton creates a menu button configuration from a map of commands to text
+// BuildMenuButton creates a menu button configuration for web_app or default types only.
+// For bot commands, use Bot.SetBotCommands() method instead.
 //
-// This is the primary method for creating menu buttons. The map keys are the commands
-// (without leading slash) and the values are the display text for each command.
+// This function is deprecated for command-type menu buttons. Use the following pattern instead:
 //
-// Example usage:
+//	// Old way (deprecated):
+//	// menuButton := teleflow.BuildMenuButton(map[string]string{"help": "📖 Help"})
 //
-//	menuButton := teleflow.BuildMenuButton(map[string]string{
-//		"help":     "📖 Help",
-//		"settings": "⚙️ Settings",
-//		"about":    "ℹ️ About",
-//	})
+//	// New way:
+//	// err := bot.SetBotCommands(map[string]string{"help": "📖 Help"})
+//
+// BuildMenuButton now only supports creating default menu button configurations.
 func BuildMenuButton(commandMap map[string]string) *MenuButtonConfig {
-	if len(commandMap) == 0 {
-		return &MenuButtonConfig{Type: menuButtonTypeDefault}
-	}
-
-	config := &MenuButtonConfig{
-		Type:  menuButtonTypeCommands,
-		Items: make([]menuButtonItem, 0, len(commandMap)),
-	}
-
-	for command, text := range commandMap {
-		// Ensure command starts with /
-		if len(command) > 0 && command[0] != '/' {
-			command = "/" + command
-		}
-
-		config.Items = append(config.Items, menuButtonItem{
-			text:    text,
-			command: command,
-		})
-	}
-
-	return config
+	// BuildMenuButton is now deprecated for commands - return default type
+	// Users should use Bot.SetBotCommands() for setting bot commands
+	return &MenuButtonConfig{Type: menuButtonTypeDefault}
 }
 
 // newReplyKeyboard creates a new reply keyboard (internal use)

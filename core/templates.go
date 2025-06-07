@@ -74,9 +74,6 @@ type TemplateInfo struct {
 	Template  *template.Template
 }
 
-// templateRegistry holds template metadata
-var templateRegistry = make(map[string]*TemplateInfo)
-
 // AddTemplate registers a template with the given name, template text, and parse mode
 func (b *Bot) AddTemplate(name, templateText string, parseMode ParseMode) error {
 	return defaultTemplateManager.AddTemplate(name, templateText, parseMode)
