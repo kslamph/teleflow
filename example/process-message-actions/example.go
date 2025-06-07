@@ -83,7 +83,7 @@ func main() {
 			}
 			return teleflow.Retry()
 		}).
-		OnFlowComplete(func(ctx *teleflow.Context) error {
+		OnComplete(func(ctx *teleflow.Context) error {
 			return ctx.Reply("✅ Flow completed! All previous messages were deleted when you clicked buttons.")
 		}).
 		Build()
@@ -131,7 +131,7 @@ func main() {
 			}
 			return teleflow.Retry()
 		}).
-		OnFlowComplete(func(ctx *teleflow.Context) error {
+		OnComplete(func(ctx *teleflow.Context) error {
 			return ctx.Reply("✅ Completed! Notice how previous message text remained but keyboards were disabled.")
 		}).
 		Build()
@@ -163,7 +163,7 @@ func main() {
 			}
 			return teleflow.Retry()
 		}).
-		OnFlowComplete(func(ctx *teleflow.Context) error {
+		OnComplete(func(ctx *teleflow.Context) error {
 			return ctx.Reply("✅ Demo completed! All previous keyboards remained functional throughout the flow.")
 		}).
 		Build()
