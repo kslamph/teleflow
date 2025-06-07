@@ -37,34 +37,42 @@ func main() {
 
 	// Start bot
 	log.Println("MarkdownV2 Template Showcase Bot started...")
-	bot.Start()
+	if err := bot.Start(); err != nil {
+		log.Fatalf("Failed to start bot: %v", err)
+	}
 }
 
 func registerMarkdownV2Templates(bot *teleflow.Bot) {
 	// 1. Basic formatting template
-	bot.AddTemplate("basic_formatting",
+	if err := bot.AddTemplate("basic_formatting",
 		"*Bold text* and _italic text_ and __underline__ and ~strikethrough~\n\n"+
 			"You can also combine *_bold italic_* and *__bold underline__*",
-		teleflow.ParseModeMarkdownV2)
+		teleflow.ParseModeMarkdownV2); err != nil {
+		log.Fatalf("Failed to add basic_formatting template: %v", err)
+	}
 
 	// 2. Code and preformatted text
-	bot.AddTemplate("code_example",
+	if err := bot.AddTemplate("code_example",
 		"Here's some `inline code` and a code block:\n\n"+
 			"```go\n"+
 			"func main() {\n"+
 			"    fmt.Println(\"Hello {{.Name}}!\")\n"+
 			"}\n"+
 			"```",
-		teleflow.ParseModeMarkdownV2)
+		teleflow.ParseModeMarkdownV2); err != nil {
+		log.Fatalf("Failed to add code_example template: %v", err)
+	}
 
 	// 3. Links and mentions
-	bot.AddTemplate("links_example",
+	if err := bot.AddTemplate("links_example",
 		"Visit our [website](https://example.com) or check out [TeleFlow](https://github.com/kslamph/teleflow)\\.\n\n"+
 			"You can also mention users like @username or use [inline links](tg://user?id={{.UserID}})\\.",
-		teleflow.ParseModeMarkdownV2)
+		teleflow.ParseModeMarkdownV2); err != nil {
+		log.Fatalf("Failed to add links_example template: %v", err)
+	}
 
 	// 4. Lists and organization
-	bot.AddTemplate("lists_example",
+	if err := bot.AddTemplate("lists_example",
 		"*Available Features:*\n\n"+
 			"{{range $i, $feature := .Features}}"+
 			"{{.Index}}\\. {{.Name}}\n"+
@@ -73,16 +81,20 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 			"• Easy to use\n"+
 			"• Powerful templates\n"+
 			"• MarkdownV2 support",
-		teleflow.ParseModeMarkdownV2)
+		teleflow.ParseModeMarkdownV2); err != nil {
+		log.Fatalf("Failed to add lists_example template: %v", err)
+	}
 
 	// 5. Spoilers and special formatting
-	bot.AddTemplate("spoilers_example",
+	if err := bot.AddTemplate("spoilers_example",
 		"Here's a secret: ||{{.Secret}}||\n\n"+
 			"And here's some `monospace` text with a ||hidden spoiler||\\.",
-		teleflow.ParseModeMarkdownV2)
+		teleflow.ParseModeMarkdownV2); err != nil {
+		log.Fatalf("Failed to add spoilers_example template: %v", err)
+	}
 
 	// 6. Complex user profile template
-	bot.AddTemplate("user_profile",
+	if err := bot.AddTemplate("user_profile",
 		"*👤 User Profile*\n\n"+
 			"*Name:* {{.Name}}\n"+
 			"*Role:* `{{.Role}}`\n"+
@@ -93,19 +105,23 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 			"{{.Index}}\\. {{.Activity}}\n"+
 			"{{end}}\n"+
 			"||Last Login: {{.LastLogin}}||",
-		teleflow.ParseModeMarkdownV2)
+		teleflow.ParseModeMarkdownV2); err != nil {
+		log.Fatalf("Failed to add user_profile template: %v", err)
+	}
 
 	// 7. Notification template with emojis
-	bot.AddTemplate("notification",
+	if err := bot.AddTemplate("notification",
 		"🔔 *{{.Type}} Notification*\n\n"+
 			"{{if eq .Priority \"high\"}}🚨 *HIGH PRIORITY*{{else if eq .Priority \"medium\"}}⚠️ *Medium Priority*{{else}}ℹ️ *Low Priority*{{end}}\n\n"+
 			"*Message:* {{.Message}}\n"+
 			"*Time:* `{{.Time}}`\n\n"+
 			"{{if .ActionRequired}}*Action Required:* ||{{.Action}}||{{end}}",
-		teleflow.ParseModeMarkdownV2)
+		teleflow.ParseModeMarkdownV2); err != nil {
+		log.Fatalf("Failed to add notification template: %v", err)
+	}
 
 	// 8. Product showcase template
-	bot.AddTemplate("product_showcase",
+	if err := bot.AddTemplate("product_showcase",
 		"🛍️ *{{.ProductName}}*\n\n"+
 			"{{.Description}}\n\n"+
 			"*💰 Price:* ~${{.OldPrice}}~ *${{.Price}}*\n"+
@@ -116,10 +132,12 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 			"✅ {{.}}\n"+
 			"{{end}}\n"+
 			"[🛒 Buy Now]({{.PurchaseLink}}) \\| [📖 Learn More]({{.InfoLink}})",
-		teleflow.ParseModeMarkdownV2)
+		teleflow.ParseModeMarkdownV2); err != nil {
+		log.Fatalf("Failed to add product_showcase template: %v", err)
+	}
 
 	// 9. Main menu template
-	bot.AddTemplate("main_menu",
+	if err := bot.AddTemplate("main_menu",
 		"🎨 *MarkdownV2 Template Showcase*\n\n"+
 			"Choose a template to see in action:\n\n"+
 			"📝 Basic Formatting\n"+
@@ -130,7 +148,9 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 			"👤 User Profile\n"+
 			"🔔 Notifications\n"+
 			"🛍️ Product Showcase",
-		teleflow.ParseModeMarkdownV2)
+		teleflow.ParseModeMarkdownV2); err != nil {
+		log.Fatalf("Failed to add main_menu template: %v", err)
+	}
 }
 
 func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
@@ -390,7 +410,9 @@ func setupCommands(bot *teleflow.Bot) {
 	})
 
 	// Default handler using template
-	bot.AddTemplate("not_understood", "❓ I didn't understand `{{.Input}}`\\. Type /help for available commands\\.", teleflow.ParseModeMarkdownV2)
+	if err := bot.AddTemplate("not_understood", "❓ I didn't understand `{{.Input}}`\\. Type /help for available commands\\.", teleflow.ParseModeMarkdownV2); err != nil {
+		log.Fatalf("Failed to add not_understood template: %v", err)
+	}
 	bot.DefaultHandler(func(ctx *teleflow.Context, text string) error {
 		return ctx.ReplyTemplate("not_understood", map[string]interface{}{
 			"Input": text,

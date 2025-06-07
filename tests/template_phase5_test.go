@@ -37,6 +37,7 @@ func TestPhase5TemplateConvenienceMethods(t *testing.T) {
 	info := bot.GetTemplateInfo("test_template")
 	if info == nil {
 		t.Error("GetTemplateInfo should return template info")
+		return
 	}
 	if info.Name != "test_template" {
 		t.Errorf("Expected template name 'test_template', got '%s'", info.Name)

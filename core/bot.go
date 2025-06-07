@@ -162,7 +162,6 @@ type Bot struct {
 	middleware []MiddlewareFunc
 
 	// Configuration
-	replyKeyboard *ReplyKeyboard
 	menuButton    *MenuButtonConfig // Only for web_app or default types
 	accessManager AccessManager     // AccessManager for user permission checking and replyKeyboard management
 	flowConfig    FlowConfig

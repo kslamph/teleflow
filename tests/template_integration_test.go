@@ -115,8 +115,12 @@ func testTemplateRegistrationAndManagement(t *testing.T, bot *teleflow.Bot) {
 // Test 2: Template Rendering in PromptConfig
 func testTemplateRenderingInPromptConfig(t *testing.T, bot *teleflow.Bot) {
 	// Register test templates
-	bot.AddTemplate("user_greeting", "Hello {{.Name}}! Your role is {{.Role}}.", teleflow.ParseModeNone)
-	bot.AddTemplate("list_template", "Items:\n{{range .Items}}• {{.}}\n{{end}}", teleflow.ParseModeNone)
+	if err := bot.AddTemplate("user_greeting", "Hello {{.Name}}! Your role is {{.Role}}.", teleflow.ParseModeNone); err != nil {
+		t.Fatalf("Failed to add user_greeting template: %v", err)
+	}
+	if err := bot.AddTemplate("list_template", "Items:\n{{range .Items}}• {{.}}\n{{end}}", teleflow.ParseModeNone); err != nil {
+		t.Fatalf("Failed to add list_template template: %v", err)
+	}
 
 	// Test direct template rendering through the template manager
 	templateManager := teleflow.GetDefaultTemplateManager()
@@ -182,7 +186,9 @@ func testTemplateRenderingInPromptConfig(t *testing.T, bot *teleflow.Bot) {
 // Test 3: Convenience Methods
 func testConvenienceMethods(t *testing.T, bot *teleflow.Bot) {
 	// Register test template
-	bot.AddTemplate("status_message", "Status: {{.Status}}, User: {{.Username}}", teleflow.ParseModeNone)
+	if err := bot.AddTemplate("status_message", "Status: {{.Status}}, User: {{.Username}}", teleflow.ParseModeNone); err != nil {
+		t.Fatalf("Failed to add status_message template: %v", err)
+	}
 
 	// Test template rendering directly to verify convenience method functionality
 	templateManager := teleflow.GetDefaultTemplateManager()
@@ -225,9 +231,15 @@ func testConvenienceMethods(t *testing.T, bot *teleflow.Bot) {
 // Test 4: End-to-End Flow Integration
 func testEndToEndFlowIntegration(t *testing.T, bot *teleflow.Bot) {
 	// Register templates for flow
-	bot.AddTemplate("name_prompt", "Hello! What's your name?", teleflow.ParseModeNone)
-	bot.AddTemplate("age_prompt", "Nice to meet you, {{.Name}}! How old are you?", teleflow.ParseModeNone)
-	bot.AddTemplate("completion", "Thank you {{.Name}}! You are {{.Age}} years old.", teleflow.ParseModeNone)
+	if err := bot.AddTemplate("name_prompt", "Hello! What's your name?", teleflow.ParseModeNone); err != nil {
+		t.Fatalf("Failed to add name_prompt template: %v", err)
+	}
+	if err := bot.AddTemplate("age_prompt", "Nice to meet you, {{.Name}}! How old are you?", teleflow.ParseModeNone); err != nil {
+		t.Fatalf("Failed to add age_prompt template: %v", err)
+	}
+	if err := bot.AddTemplate("completion", "Thank you {{.Name}}! You are {{.Age}} years old.", teleflow.ParseModeNone); err != nil {
+		t.Fatalf("Failed to add completion template: %v", err)
+	}
 
 	// Test that flow building with templates works correctly
 	flow := teleflow.NewFlow("template_registration").
@@ -363,9 +375,15 @@ func testBackwardsCompatibility(t *testing.T, bot *teleflow.Bot) {
 // Test 6: Parse Mode Application
 func testParseModeApplication(t *testing.T, bot *teleflow.Bot) {
 	// Register templates with different parse modes
-	bot.AddTemplate("plain_text", "Hello {{.Name}}!", teleflow.ParseModeNone)
-	bot.AddTemplate("html_text", "Hello <b>{{.Name}}</b>!", teleflow.ParseModeHTML)
-	bot.AddTemplate("markdown_text", "Hello *{{.Name}}*!", teleflow.ParseModeMarkdown)
+	if err := bot.AddTemplate("plain_text", "Hello {{.Name}}!", teleflow.ParseModeNone); err != nil {
+		t.Fatalf("Failed to add plain_text template: %v", err)
+	}
+	if err := bot.AddTemplate("html_text", "Hello <b>{{.Name}}</b>!", teleflow.ParseModeHTML); err != nil {
+		t.Fatalf("Failed to add html_text template: %v", err)
+	}
+	if err := bot.AddTemplate("markdown_text", "Hello *{{.Name}}*!", teleflow.ParseModeMarkdown); err != nil {
+		t.Fatalf("Failed to add markdown_text template: %v", err)
+	}
 
 	testData := map[string]interface{}{"Name": "TestUser"}
 	templateManager := teleflow.GetDefaultTemplateManager()
@@ -417,7 +435,9 @@ func testParseModeApplication(t *testing.T, bot *teleflow.Bot) {
 // Test 7: Data Precedence and Merging
 func testDataPrecedenceAndMerging(t *testing.T, bot *teleflow.Bot) {
 	// Register test template
-	bot.AddTemplate("data_test", "Name: {{.Name}}, Role: {{.Role}}, Status: {{.Status}}", teleflow.ParseModeNone)
+	if err := bot.AddTemplate("data_test", "Name: {{.Name}}, Role: {{.Role}}, Status: {{.Status}}", teleflow.ParseModeNone); err != nil {
+		t.Fatalf("Failed to add data_test template: %v", err)
+	}
 
 	templateManager := teleflow.GetDefaultTemplateManager()
 
