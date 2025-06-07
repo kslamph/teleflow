@@ -135,6 +135,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 
 func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 	return teleflow.NewFlow("template_showcase").
+		OnProcessDeleteMessage(). // Delete previous messages on button clicks
 		Step("start").
 		Prompt("template:main_menu").
 		WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {

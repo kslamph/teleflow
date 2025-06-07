@@ -189,6 +189,7 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 			ExitMessage:         "🚫 Operation cancelled.",
 			AllowGlobalCommands: false,
 			HelpCommands:        []string{"/help"},
+			OnProcessAction:     ProcessKeepMessage, // Default: keep messages untouched
 		},
 	}
 	// Apply options

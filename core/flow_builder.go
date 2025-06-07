@@ -48,6 +48,20 @@ func (fb *FlowBuilder) OnError(config *ErrorConfig) *FlowBuilder {
 	return fb
 }
 
+// OnProcessDeleteMessage configures the flow to delete entire previous messages when processing button clicks.
+// This provides a clean UX where old messages are removed, preventing scroll-back confusion.
+func (fb *FlowBuilder) OnProcessDeleteMessage() *FlowBuilder {
+	fb.onProcessAction = ProcessDeleteMessage
+	return fb
+}
+
+// OnProcessDeleteKeyboard configures the flow to remove only keyboards from previous messages when processing button clicks.
+// This keeps message content visible but disables old interactive elements.
+func (fb *FlowBuilder) OnProcessDeleteKeyboard() *FlowBuilder {
+	fb.onProcessAction = ProcessDeleteKeyboard
+	return fb
+}
+
 // Build creates the final Flow object from the builder.
 // This converts the new API structure to the internal Flow representation.
 func (fb *FlowBuilder) Build() (*Flow, error) {
@@ -57,11 +71,12 @@ func (fb *FlowBuilder) Build() (*Flow, error) {
 
 	// Convert to internal Flow structure
 	flow := &Flow{
-		Name:    fb.name,
-		Steps:   make(map[string]*flowStep),
-		Order:   fb.order,
-		OnError: fb.onError,       // Set flow-level error handling
-		Timeout: 30 * time.Minute, // Default timeout
+		Name:            fb.name,
+		Steps:           make(map[string]*flowStep),
+		Order:           fb.order,
+		OnError:         fb.onError,         // Set flow-level error handling
+		OnProcessAction: fb.onProcessAction, // Set message handling behavior
+		Timeout:         30 * time.Minute,   // Default timeout
 	}
 
 	// Convert each step

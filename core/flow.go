@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 // Flow system enables the creation of sophisticated multi-step conversational
@@ -76,6 +78,7 @@ type FlowConfig struct {
 	ExitMessage         string
 	AllowGlobalCommands bool
 	HelpCommands        []string
+	OnProcessAction     ProcessMessageAction // How to handle previous messages on button clicks
 }
 
 // flowManager manages all flows and user flow states
@@ -124,12 +127,13 @@ func (fm *flowManager) cancelFlow(userID int64) {
 
 // Flow represents a structured multi-step conversation using the new Step-Prompt-Process API
 type Flow struct {
-	Name       string
-	Steps      map[string]*flowStep // Map for easier lookup by step name
-	Order      []string             // Maintains step execution order
-	OnComplete func(*Context) error // Simplified completion handler
-	OnError    *ErrorConfig         // Flow-level error handling configuration
-	Timeout    time.Duration
+	Name            string
+	Steps           map[string]*flowStep // Map for easier lookup by step name
+	Order           []string             // Maintains step execution order
+	OnComplete      func(*Context) error // Simplified completion handler
+	OnError         *ErrorConfig         // Flow-level error handling configuration
+	OnProcessAction ProcessMessageAction // How to handle previous messages on button clicks
+	Timeout         time.Duration
 }
 
 // flowStep represents a single step in a flow using the new API
@@ -143,11 +147,12 @@ type flowStep struct {
 
 // userFlowState tracks a user's current position in a flow
 type userFlowState struct {
-	FlowName    string
-	CurrentStep string
-	Data        map[string]interface{}
-	StartedAt   time.Time
-	LastActive  time.Time
+	FlowName      string
+	CurrentStep   string
+	Data          map[string]interface{}
+	StartedAt     time.Time
+	LastActive    time.Time
+	LastMessageID int // Track last message ID for deletion options
 }
 
 // registerFlow registers a flow with the manager
@@ -253,7 +258,7 @@ func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 	userState.LastActive = time.Now()
 
 	// Extract input and button click data
-	input, buttonClick := fm.extractInputData(ctx)
+	input, buttonClick := fm.extractInputData(ctx, flow)
 
 	// Load user state data into context
 	for key, value := range userState.Data {
@@ -274,6 +279,20 @@ func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 			// The user experience continues even if callback answering fails
 			_ = err // Acknowledge error but continue
 		}
+
+		// Handle previous message actions based on flow configuration
+		// Use the message ID from the callback query (the message that contains the clicked button)
+		var messageIDToDelete int
+		if ctx.update.CallbackQuery != nil && ctx.update.CallbackQuery.Message != nil {
+			messageIDToDelete = ctx.update.CallbackQuery.Message.MessageID
+		}
+
+		if messageIDToDelete > 0 {
+			if err := fm.handleMessageAction(ctx, flow, messageIDToDelete); err != nil {
+				log.Printf("Error handling message action for UserID %d: %v", ctx.UserID(), err)
+				// Continue processing even if message deletion fails
+			}
+		}
 	}
 
 	// Update user state data from context
@@ -286,7 +305,7 @@ func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 }
 
 // extractInputData extracts input text and button click information from the update
-func (fm *flowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
+func (fm *flowManager) extractInputData(ctx *Context, flow *Flow) (string, *ButtonClick) {
 	var input string
 	var buttonClick *ButtonClick
 
@@ -300,8 +319,10 @@ func (fm *flowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
 		if fm.promptRenderer != nil && fm.promptRenderer.keyboardBuilder != nil {
 			if mappedData, found := fm.promptRenderer.keyboardBuilder.getCallbackData(ctx.UserID(), ctx.update.CallbackQuery.Data); found {
 				originalData = mappedData
-				// Clean up the mapping after use (per-message lifecycle)
-				fm.promptRenderer.keyboardBuilder.cleanupMappings(ctx.UserID())
+				// Only clean up mappings if flow is configured to delete messages/keyboards
+				if fm.shouldCleanupMappings(flow) {
+					fm.promptRenderer.keyboardBuilder.cleanupMappings(ctx.UserID())
+				}
 			}
 		}
 
@@ -542,4 +563,70 @@ func (fm *flowManager) cancelFlowAction(ctx *Context) (bool, error) {
 	// Remove user from flow
 	delete(fm.userFlows, ctx.UserID())
 	return true, nil
+}
+
+// handlePreviousMessageAction handles deletion of previous messages based on flow configuration
+func (fm *flowManager) handlePreviousMessageAction(ctx *Context, flow *Flow, userState *userFlowState) error {
+	if userState.LastMessageID == 0 {
+		return nil // No previous message to handle
+	}
+
+	switch flow.OnProcessAction {
+	case ProcessDeleteMessage:
+		return fm.deletePreviousMessage(ctx, userState.LastMessageID)
+	case ProcessDeleteKeyboard:
+		return fm.deletePreviousKeyboard(ctx, userState.LastMessageID)
+	case ProcessKeepMessage:
+		// Do nothing - keep messages untouched
+		return nil
+	default:
+		// Default behavior - keep messages untouched
+		return nil
+	}
+}
+
+// handleMessageAction handles deletion of a specific message based on flow configuration
+func (fm *flowManager) handleMessageAction(ctx *Context, flow *Flow, messageID int) error {
+	switch flow.OnProcessAction {
+	case ProcessDeleteMessage:
+		return fm.deletePreviousMessage(ctx, messageID)
+	case ProcessDeleteKeyboard:
+		return fm.deletePreviousKeyboard(ctx, messageID)
+	case ProcessKeepMessage:
+		// Do nothing - keep messages untouched
+		return nil
+	default:
+		// Default behavior - keep messages untouched
+		return nil
+	}
+}
+
+// deletePreviousMessage completely deletes the previous message
+func (fm *flowManager) deletePreviousMessage(ctx *Context, messageID int) error {
+	deleteConfig := tgbotapi.DeleteMessageConfig{
+		ChatID:    ctx.ChatID(),
+		MessageID: messageID,
+	}
+
+	_, err := ctx.bot.api.Request(deleteConfig)
+	return err
+}
+
+// deletePreviousKeyboard removes only the keyboard from the previous message
+func (fm *flowManager) deletePreviousKeyboard(ctx *Context, messageID int) error {
+	editConfig := tgbotapi.EditMessageReplyMarkupConfig{
+		BaseEdit: tgbotapi.BaseEdit{
+			ChatID:    ctx.ChatID(),
+			MessageID: messageID,
+		},
+		// ReplyMarkup field is omitted to remove keyboard
+	}
+
+	_, err := ctx.bot.api.Request(editConfig)
+	return err
+}
+
+// shouldCleanupMappings determines if UUID mappings should be cleaned up based on flow configuration
+func (fm *flowManager) shouldCleanupMappings(flow *Flow) bool {
+	return flow.OnProcessAction == ProcessDeleteMessage || flow.OnProcessAction == ProcessDeleteKeyboard
 }

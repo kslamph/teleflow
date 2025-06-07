@@ -4,12 +4,13 @@ package teleflow
 
 // FlowBuilder is used to construct a new flow.
 type FlowBuilder struct {
-	name        string
-	steps       map[string]*StepBuilder
-	order       []string
-	onComplete  func(*Context) error
-	onError     *ErrorConfig // Flow-level error handling
-	currentStep *StepBuilder // Helper for fluent API
+	name            string
+	steps           map[string]*StepBuilder
+	order           []string
+	onComplete      func(*Context) error
+	onError         *ErrorConfig         // Flow-level error handling
+	onProcessAction ProcessMessageAction // How to handle previous messages on button clicks
+	currentStep     *StepBuilder         // Helper for fluent API
 }
 
 // StepBuilder is used to construct a step within a flow.
@@ -71,6 +72,15 @@ func (pr ProcessResult) WithPrompt(prompt *PromptConfig) ProcessResult {
 	pr.Prompt = prompt
 	return pr
 }
+
+// ProcessMessageAction defines how to handle previous messages when processing button clicks
+type ProcessMessageAction int
+
+const (
+	ProcessKeepMessage    ProcessMessageAction = iota // Keep previous messages untouched (default)
+	ProcessDeleteMessage                              // Delete entire previous message
+	ProcessDeleteKeyboard                             // Remove only keyboard from previous message
+)
 
 // processAction defines the type of action to be taken after a step's ProcessFunc completes.
 type processAction int
