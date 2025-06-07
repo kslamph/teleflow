@@ -31,14 +31,6 @@ func main() {
 		log.Fatal("TELEGRAM_BOT_TOKEN environment variable is required")
 	}
 
-	// Create keyboards using proper API
-	// Reply keyboard only contains non-command actions
-	// mainMenuKeyboard := teleflow.NewReplyKeyboard(
-	// 	[]teleflow.ReplyKeyboardButton{
-	// 		{Text: "📝 Register"}, // Main action for registration
-	// 	},
-	// ).Resize()
-
 	mainMenuKeyboard := teleflow.BuildReplyKeyboard([]string{"📝 Register", "🏠 Home", "⚙️ Settings", "❓ Help"}, 3).Resize()
 
 	// Initialize AccessManager
@@ -197,6 +189,12 @@ func main() {
 				"Input": text,
 			},
 		})
+	})
+
+	bot.SetBotCommands(map[string]string{
+		"start":  "Start the user registration flow",
+		"cancel": "Cancel the current flow",
+		"help":   "Show help information!!!",
 	})
 
 	// Start the bot
