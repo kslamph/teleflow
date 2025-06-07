@@ -3,6 +3,7 @@ package teleflow
 import (
 	"fmt"
 	"log"
+	"maps"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -279,9 +280,7 @@ func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 	}
 
 	// Update user state data from context
-	for key, value := range ctx.data {
-		userState.Data[key] = value
-	}
+	maps.Copy(userState.Data, ctx.data)
 
 	// Handle ProcessResult
 	return fm.handleProcessResult(ctx, result, userState, flow)
@@ -442,58 +441,81 @@ func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *Fl
 
 	// Determine error handling strategy
 	action := errorStrategyCancel // default behavior
-	message := "❗ A technical error occurred. Flow has been cancelled."
+	config := &ErrorConfig{
+		Action:  errorStrategyCancel,
+		Message: "❗ A technical error occurred. Flow has been cancelled.",
+	}
 
 	if flow.OnError != nil {
 		action = flow.OnError.Action
-		if flow.OnError.Message != "" {
-			message = flow.OnError.Message
-		}
+		config = flow.OnError
 	}
 
 	// Log the action being taken
 	log.Printf("[FLOW_ERROR_ACTION] Flow: %s, Step: %s, User: %d, Action: %s",
 		flow.Name, stepName, ctx.UserID(), fm.getActionName(action))
 
-	// Execute the configured action
+	// Dispatch to appropriate handler based on strategy
 	switch action {
 	case errorStrategyCancel:
-		fm.notifyUserIfNeeded(ctx, message)
-		delete(fm.userFlows, ctx.UserID())
+		fm.handleErrorStrategyCancel(ctx, flow.Name, stepName, renderErr, config)
 		return nil
 
 	case errorStrategyRetry:
-		fm.notifyUserIfNeeded(ctx, message)
-		// Stay on current step - next update will retry the render
+		fm.handleErrorStrategyRetry(ctx, flow.Name, stepName, renderErr, config, nil)
 		return nil
 
 	case errorStrategyIgnore:
-		fm.notifyUserIfNeeded(ctx, message)
-		// Try to render the step again without the problematic image
 		step := flow.Steps[stepName]
-		if step != nil && step.PromptConfig != nil {
-			// Create a fallback prompt without image to avoid repeated errors
-			fallbackPrompt := &PromptConfig{
-				Message:  step.PromptConfig.Message,
-				Keyboard: step.PromptConfig.Keyboard,
-				// Image is intentionally omitted to avoid repeated render errors
-			}
-
-			// Try to render without image using PromptComposer - if this fails, we'll advance to next step
-			if err := fm.bot.promptComposer.ComposeAndSend(ctx, fallbackPrompt); err != nil {
-				// If even the fallback fails, advance to next step
-				_, err := fm.advanceToNextStep(ctx, userState, flow)
-				return err
-			}
+		var originalPrompt *PromptConfig
+		if step != nil {
+			originalPrompt = step.PromptConfig
 		}
-		return nil
+		return fm.handleErrorStrategyIgnore(ctx, flow.Name, stepName, renderErr, config, originalPrompt, userState, flow)
 
 	default:
 		// Fallback to cancel if unknown action
-		fm.notifyUserIfNeeded(ctx, "❗ A technical error occurred. Flow has been cancelled.")
-		delete(fm.userFlows, ctx.UserID())
+		fm.handleErrorStrategyCancel(ctx, flow.Name, stepName, renderErr, &ErrorConfig{
+			Action:  errorStrategyCancel,
+			Message: "❗ A technical error occurred. Flow has been cancelled.",
+		})
 		return nil
 	}
+}
+
+// handleErrorStrategyCancel handles the cancel error strategy
+func (fm *flowManager) handleErrorStrategyCancel(ctx *Context, flowName string, stepName string, err error, config *ErrorConfig) {
+	fm.notifyUserIfNeeded(ctx, config.Message)
+	delete(fm.userFlows, ctx.UserID())
+}
+
+// handleErrorStrategyRetry handles the retry error strategy
+func (fm *flowManager) handleErrorStrategyRetry(ctx *Context, flowName string, stepName string, err error, config *ErrorConfig, originalPrompt *PromptConfig) {
+	fm.notifyUserIfNeeded(ctx, config.Message)
+	// Stay on current step - next update will retry the render
+}
+
+// handleErrorStrategyIgnore handles the ignore error strategy
+func (fm *flowManager) handleErrorStrategyIgnore(ctx *Context, flowName string, stepName string, err error, config *ErrorConfig, originalPrompt *PromptConfig, userState *userFlowState, flow *Flow) error {
+	fm.notifyUserIfNeeded(ctx, config.Message)
+
+	// Try to render the step again without the problematic image
+	if originalPrompt != nil {
+		// Create a fallback prompt without image to avoid repeated errors
+		fallbackPrompt := &PromptConfig{
+			Message:  originalPrompt.Message,
+			Keyboard: originalPrompt.Keyboard,
+			// Image is intentionally omitted to avoid repeated render errors
+		}
+
+		// Try to render without image using PromptComposer - if this fails, we'll advance to next step
+		if err := fm.bot.promptComposer.ComposeAndSend(ctx, fallbackPrompt); err != nil {
+			// If even the fallback fails, advance to next step
+			_, err := fm.advanceToNextStep(ctx, userState, flow)
+			return err
+		}
+	}
+	return nil
 }
 
 // logRenderError logs detailed information about rendering errors

@@ -8,18 +8,9 @@ import (
 	"strings"
 )
 
-// imageType represents the type of image for Telegram
-type imageType int
-
-const (
-	imageTypePhoto imageType = iota
-	imageTypeDocument
-)
-
 // processedImage contains processed image data ready for sending
 type processedImage struct {
 	data     []byte
-	imgType  imageType
 	isBase64 bool
 	filePath string
 }
@@ -87,7 +78,6 @@ func (ih *imageHandler) processBase64Image(base64Str string) (*processedImage, e
 
 	return &processedImage{
 		data:     data,
-		imgType:  imageTypePhoto,
 		isBase64: true,
 	}, nil
 }
@@ -101,7 +91,7 @@ func (ih *imageHandler) processFileImage(filePath string) (*processedImage, erro
 	}
 
 	// Check file size (Telegram limit is 50MB)
-	if info.Size() > 50*1024*1024 {
+	if info.Size() > 50*1024*1024 { // 50MB
 		return nil, fmt.Errorf("image file too large: %d bytes (max 50MB)", info.Size())
 	}
 
@@ -128,7 +118,6 @@ func (ih *imageHandler) processFileImage(filePath string) (*processedImage, erro
 
 	return &processedImage{
 		data:     data,
-		imgType:  imageTypePhoto,
 		isBase64: false,
 		filePath: filePath,
 	}, nil
@@ -142,7 +131,6 @@ func (ih *imageHandler) processURLImage(imageURL string) (*processedImage, error
 
 	return &processedImage{
 		filePath: imageURL,
-		imgType:  imageTypePhoto,
 		isBase64: false,
 	}, nil
 }

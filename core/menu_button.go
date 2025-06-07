@@ -1,162 +1,92 @@
-// Menu Button System provides comprehensive menu button management for Telegram bots.
-// This system enables customization of the bot's menu button that appears next to the
-// text input field in Telegram chats.
+// Menu Button System provides structures for defining menu button configurations.
+// The menu button appears next to the text input field in Telegram chats.
 //
 // Menu Button Types:
-//   - Commands: Displays registered bot commands in a native menu
-//   - WebApp: Opens a web application when clicked
-//   - Default: Uses Telegram's default menu button behavior
+//   - Commands: Used in conjunction with `Bot.SetBotCommands` to define
+//               the commands that appear in Telegram's command menu.
+//   - Default:  Instructs Telegram to use its default menu button behavior.
 //
 // Basic Usage:
 //
-//	// Create a commands menu button with bot commands
-//	menuButton := &teleflow.MenuButtonConfig{
-//		Type: teleflow.MenuButtonTypeCommands,
-//		Items: []teleflow.MenuButtonItem{
-//			{Text: "📖 Help", Command: "/help"},
-//			{Text: "⚙️ Settings", Command: "/settings"},
-//		},
-//	}
+//	// To define commands for the menu button (used with Bot.SetBotCommands):
+//	commandsConfig := teleflow.NewCommandsMenuButton().
+//		AddCommand("Help", "/help").
+//		AddCommand("Settings", "/settings")
+//	// This config would then be processed by Bot.SetBotCommands.
 //
-//	// Apply to bot using functional options
-//	bot, err := teleflow.NewBot(token, teleflow.WithMenuButton(menuButton))
+//	// To set the menu button to Telegram's default:
+//	defaultConfig := teleflow.NewDefaultMenuButton()
+//	// This config would be set on the Bot, and the Bot would make the
+//	// appropriate API call to Telegram.
 //
-//	// Or set after bot creation
-//	bot.WithMenuButton(menuButton)
-//
-// Helper Functions:
-//
-//	// Create different menu button types
-//	commandsButton := teleflow.NewCommandsMenuButton()
-//	commandsButton.AddCommand("Help", "/help").AddCommand("Status", "/status")
-//
-//	webAppButton := teleflow.NewWebAppMenuButton("Open App", "https://example.com")
-//	defaultButton := teleflow.NewDefaultMenuButton()
-//
-// Advanced Usage with AccessManager:
-//
-//	// Dynamic menu buttons based on user permissions
-//	type MyAccessManager struct{}
-//
-//	func (m *MyAccessManager) GetMenuButton(ctx *teleflow.MenuContext) *teleflow.MenuButtonConfig {
-//		if ctx.UserID == adminID {
-//			return &teleflow.MenuButtonConfig{
-//				Type: teleflow.MenuButtonTypeCommands,
-//				Items: []teleflow.MenuButtonItem{
-//					{Text: "👤 Admin Panel", Command: "/admin"},
-//					{Text: "📊 Analytics", Command: "/stats"},
-//				},
-//			}
-//		}
-//		return teleflow.NewDefaultMenuButton()
-//	}
-//
-// The menu button system automatically:
-//   - Registers commands with Telegram when using Commands type
-//   - Handles menu button initialization during bot startup
-//   - Supports per-chat and global menu button configurations
-//   - Integrates with the AccessManager for permission-based UI
+// The actual API calls to Telegram to set the menu button (e.g., SetMyCommands
+// or SetChatMenuButton) are handled by methods on the Bot struct, not directly here.
+// This file primarily provides the data structures and helpers for these configurations.
 package teleflow
 
-import (
-	"fmt"
-	"log"
+// menuButtonType represents the type of native menu button
+type menuButtonType string
+
+const (
+	// menuButtonTypeCommands indicates the menu button should display bot commands.
+	// The actual commands are defined in the Items field of MenuButtonConfig.
+	menuButtonTypeCommands menuButtonType = "commands"
+
+	// menuButtonTypeDefault indicates Telegram's default menu button behavior should be used.
+	menuButtonTypeDefault menuButtonType = "default"
 )
 
-// SetMenuButton sets the menu button for a specific chat or all chats
-// Note: Commands-type menu buttons are now set via SetBotCommands method
-func (b *Bot) SetMenuButton(chatID int64, config *MenuButtonConfig) error {
-	if config == nil {
-		return fmt.Errorf("menu button config cannot be nil")
-	}
-
-	switch config.Type {
-	case menuButtonTypeCommands:
-		return fmt.Errorf("commands-type menu buttons should be set via SetBotCommands method, not SetMenuButton")
-
-	case menuButtonTypeWebApp:
-		if config.WebApp == nil {
-			return fmt.Errorf("web app config is required for web_app menu button type")
-		}
-		log.Printf("ℹ️ WebApp menu button not yet supported, but config saved")
-		return nil
-
-	case menuButtonTypeDefault:
-		log.Printf("✅ Default menu button set for chat %d", chatID)
-		return nil
-
-	default:
-		return fmt.Errorf("unsupported menu button type: %s", config.Type)
-	}
+// menuButtonItem represents a command item for menu buttons.
+// This is used internally when MenuButtonConfig.Type is menuButtonTypeCommands.
+type menuButtonItem struct {
+	text    string
+	command string
 }
 
-// SetDefaultMenuButton sets the default menu button configuration for the bot
-// Only supports web_app or default types. For bot commands, use SetBotCommands method.
-func (b *Bot) SetDefaultMenuButton() error {
-	if b.menuButton == nil {
-		return nil // No menu button configured
-	}
-
-	// Only allow web_app or default types
-	if b.menuButton.Type != menuButtonTypeWebApp && b.menuButton.Type != menuButtonTypeDefault {
-		return fmt.Errorf("SetDefaultMenuButton only supports web_app or default types, use SetBotCommands for commands")
-	}
-
-	// Set for all chats (chatID = 0)
-	return b.SetMenuButton(0, b.menuButton)
+// MenuButtonConfig represents the configuration for Telegram's native menu button.
+// It's used to define either a list of commands or to specify the default menu button.
+type MenuButtonConfig struct {
+	// Type specifies the type of menu button.
+	Type menuButtonType `json:"type"`
+	// Items is a list of commands, relevant only if Type is menuButtonTypeCommands.
+	// This list is typically processed by `Bot.SetBotCommands`.
+	Items []menuButtonItem `json:"items,omitempty"`
 }
 
-// initializeMenuButton sets up the menu button when the bot starts
-// Only handles web_app or default types. Bot commands should be set via SetBotCommands.
-func (b *Bot) initializeMenuButton() {
-	if b.menuButton != nil {
-		// Only initialize web_app or default menu buttons
-		if b.menuButton.Type == menuButtonTypeWebApp || b.menuButton.Type == menuButtonTypeDefault {
-			log.Printf("🔧 Setting up menu button: %s", b.menuButton.Type)
-
-			err := b.SetDefaultMenuButton()
-			if err != nil {
-				log.Printf("❌ Menu button setup failed: %v", err)
-			} else {
-				log.Printf("✅ Menu button configured: %s", b.menuButton.Type)
-			}
-		} else {
-			log.Printf("ℹ️ Skipping commands-type menu button initialization - use SetBotCommands() method instead")
-		}
-	}
-}
-
-// Helper functions for creating menu button configurations
-
-// NewCommandsMenuButton creates a menu button that shows bot commands
+// NewCommandsMenuButton creates a menu button configuration intended for defining bot commands.
+// The actual commands are added using the AddCommand method.
+// This configuration is typically used with `Bot.SetBotCommands`.
 func NewCommandsMenuButton() *MenuButtonConfig {
 	return &MenuButtonConfig{
-		Type: menuButtonTypeCommands,
+		Type:  menuButtonTypeCommands,
+		Items: make([]menuButtonItem, 0), // Initialize Items
 	}
 }
 
-// NewWebAppMenuButton creates a menu button that opens a web app
-func NewWebAppMenuButton(text, url string) *MenuButtonConfig {
-	return &MenuButtonConfig{
-		Type: menuButtonTypeWebApp,
-		Text: text,
-		WebApp: &webAppInfo{
-			URL: url,
-		},
-	}
-}
-
-// NewDefaultMenuButton creates a default menu button
+// NewDefaultMenuButton creates a menu button configuration that signifies
+// Telegram's default menu button should be used.
+// When this configuration is applied to a Bot, the Bot should instruct Telegram
+// to display its standard menu button.
 func NewDefaultMenuButton() *MenuButtonConfig {
 	return &MenuButtonConfig{
 		Type: menuButtonTypeDefault,
 	}
 }
 
-// AddCommandToMenuButton adds a command to a commands-type menu button
+// AddCommand adds a command to a commands-type menu button configuration.
+// It is a no-op if the MenuButtonConfig is not of type menuButtonTypeCommands.
+// This method allows for fluent construction of command lists.
+//
+// Example:
+//
+//	config := NewCommandsMenuButton().
+//		AddCommand("Start", "/start").
+//		AddCommand("Help", "/help")
 func (config *MenuButtonConfig) AddCommand(text, command string) *MenuButtonConfig {
 	if config.Type != menuButtonTypeCommands {
-		return config // Only works for commands type
+		// Only add commands if the type is explicitly 'commands'.
+		// This prevents accidental modification of a 'default' type config.
+		return config
 	}
 
 	config.Items = append(config.Items, menuButtonItem{

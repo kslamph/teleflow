@@ -24,16 +24,6 @@ func (m *MyAccessManager) GetReplyKeyboard(ctx *teleflow.PermissionContext) *tel
 	return m.mainMenu
 }
 
-// GetMenuButton returns menu button configuration with bot commands
-func (m *MyAccessManager) GetMenuButton(ctx *teleflow.PermissionContext) *teleflow.MenuButtonConfig {
-	return teleflow.BuildMenuButton(map[string]string{
-		"start":  "🚀 Start Registration",
-		"demo":   "📸 Photo Demo",
-		"help":   "❓ Help",
-		"cancel": "❌ Cancel",
-	})
-}
-
 func main() {
 	// Initialize bot
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
@@ -88,18 +78,16 @@ func main() {
 		).
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			if input == "" {
-				return teleflow.Retry().WithPrompt(&teleflow.PromptConfig{
-					Message: "Please enter your name:",
-					Image:   "https://via.placeholder.com/300x150/FF9800/white?text=Name+Required",
-				})
+				return teleflow.Retry().
+					WithPrompt("Please enter your name:").
+					WithImage("https://via.placeholder.com/300x150/FF9800/white?text=Name+Required")
 			}
 
 			// Store the name
 			ctx.Set("user_name", input)
-			return teleflow.NextStep().WithPrompt(&teleflow.PromptConfig{
-				Message: "✅ Name saved! Moving to the next step...",
-				// Image:   "https://via.placeholder.com/300x150/2196F3/white?text=Name+Saved",
-			})
+			return teleflow.NextStep().
+				WithPrompt("✅ Name saved! Moving to the next step...").
+				WithImage("https://via.placeholder.com/300x150/2196F3/white?text=Name+Saved")
 		}).
 		Step("age").
 		Prompt(
@@ -116,18 +104,16 @@ func main() {
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			// Simple age validation
 			if len(input) == 0 || len(input) > 3 {
-				return teleflow.Retry().WithPrompt(&teleflow.PromptConfig{
-					Message: "Please enter a valid age (1-3 digits):",
-					Image:   "https://via.placeholder.com/300x150/F44336/white?text=Invalid+Age",
-				})
+				return teleflow.Retry().
+					WithPrompt("Please enter a valid age (1-3 digits):").
+					WithImage("https://via.placeholder.com/300x150/F44336/white?text=Invalid+Age")
 			}
 
 			// Store the age
 			ctx.Set("user_age", input)
-			return teleflow.NextStep().WithPrompt(&teleflow.PromptConfig{
-				Message: "✅ Age recorded! Let's confirm your details...",
-				Image:   "https://via.placeholder.com/300x150/4CAF50/white?text=Age+Saved",
-			})
+			return teleflow.NextStep().
+				WithPrompt("✅ Age recorded! Let's confirm your details...").
+				WithImage("https://via.placeholder.com/300x150/4CAF50/white?text=Age+Saved")
 		}).
 		Step("confirmation").
 		Prompt(
@@ -147,17 +133,14 @@ func main() {
 
 			switch input {
 			case "confirm":
-				return teleflow.CompleteFlow().WithPrompt(&teleflow.PromptConfig{
-					Message: "🎉 Perfect! Processing your registration...",
-				})
+				return teleflow.CompleteFlow().
+					WithPrompt("🎉 Perfect! Processing your registration...")
 			case "restart":
-				return teleflow.GoToStep("age").WithPrompt(&teleflow.PromptConfig{
-					Message: "🔄 No problem! Let's start over...",
-				})
+				return teleflow.GoToStep("age").
+					WithPrompt("🔄 No problem! Let's start over...")
 			default:
-				return teleflow.Retry().WithPrompt(&teleflow.PromptConfig{
-					Message: "Please click one of the buttons above.",
-				})
+				return teleflow.Retry().
+					WithPrompt("Please click one of the buttons above.")
 			}
 		}).
 		OnComplete(func(ctx *teleflow.Context) error {

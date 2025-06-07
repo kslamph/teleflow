@@ -13,7 +13,7 @@ import (
 // selection, and persistent navigation elements.
 //
 // Inline Keyboards appear directly below messages as clickable buttons.
-// They support callback data, URLs, web apps, and other interactive elements
+// They support callback data, URLs, and other interactive elements
 // without sending text messages.
 //
 // Simple Map-based Keyboards :
@@ -53,15 +53,12 @@ import (
 //	// Request location
 //	keyboard.AddRow(teleflow.NewReplyButton("📍 Share Location").SetRequestLocation())
 //
-//	// Web app integration
-//	keyboard.AddRow(teleflow.NewReplyButton("🌐 Open App").WithWebApp("https://app.example.com"))
 
 // ReplyKeyboardButton represents a button in a reply keyboard
 type ReplyKeyboardButton struct {
-	Text            string      `json:"text"`
-	RequestContact  bool        `json:"request_contact,omitempty"`
-	RequestLocation bool        `json:"request_location,omitempty"`
-	WebApp          *webAppInfo `json:"web_app,omitempty"`
+	Text            string `json:"text"`
+	RequestContact  bool   `json:"request_contact,omitempty"`
+	RequestLocation bool   `json:"request_location,omitempty"`
 }
 
 // ReplyKeyboard represents a custom reply keyboard
@@ -71,66 +68,35 @@ type ReplyKeyboard struct {
 	OneTimeKeyboard       bool                    `json:"one_time_keyboard,omitempty"`
 	InputFieldPlaceholder string                  `json:"input_field_placeholder,omitempty"`
 	Selective             bool                    `json:"selective,omitempty"`
-	currentRow            []ReplyKeyboardButton
 }
 
 // InlineKeyboardButton represents a button in an inline keyboard
 type InlineKeyboardButton struct {
-	Text                         string      `json:"text"`
-	URL                          string      `json:"url,omitempty"`
-	CallbackData                 string      `json:"callback_data,omitempty"`
-	WebApp                       *webAppInfo `json:"web_app,omitempty"`
-	SwitchInlineQuery            string      `json:"switch_inline_query,omitempty"`
-	SwitchInlineQueryCurrentChat string      `json:"switch_inline_query_current_chat,omitempty"`
+	Text                         string `json:"text"`
+	URL                          string `json:"url,omitempty"`
+	CallbackData                 string `json:"callback_data,omitempty"`
+	SwitchInlineQuery            string `json:"switch_inline_query,omitempty"`
+	SwitchInlineQueryCurrentChat string `json:"switch_inline_query_current_chat,omitempty"`
 }
 
 // InlineKeyboard represents an inline keyboard
 type InlineKeyboard struct {
 	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
-	currentRow     []InlineKeyboardButton
 }
 
-// menuButtonType represents the type of native menu button
-type menuButtonType string
-
-const (
-	menuButtonTypeCommands menuButtonType = "commands"
-	menuButtonTypeWebApp   menuButtonType = "web_app"
-	menuButtonTypeDefault  menuButtonType = "default"
-)
-
-// menuButtonItem represents a command item for menu buttons
-type menuButtonItem struct {
-	text    string
-	command string
-}
-
-// MenuButtonConfig represents the configuration for Telegram's native menu button
-type MenuButtonConfig struct {
-	Type   menuButtonType   `json:"type"`
-	Text   string           `json:"text,omitempty"`    // For web_app type
-	WebApp *webAppInfo      `json:"web_app,omitempty"` // For web_app type
-	Items  []menuButtonItem `json:"items,omitempty"`   // For commands type (not sent to API, used internally)
-}
-
-// webAppInfo represents a web app
-type webAppInfo struct {
-	URL string `json:"url"`
-}
-
-// BuildMenuButton creates a menu button configuration for web_app or default types only.
+// BuildMenuButton creates a default menu button configuration.
 // For bot commands, use Bot.SetBotCommands() method instead.
 //
 // This function is deprecated for command-type menu buttons. Use the following pattern instead:
 //
 //	// Old way (deprecated):
-//	// menuButton := teleflow.BuildMenuButton(map[string]string{"help": "📖 Help"})
+//	// menuButton := teleflow.BuildMenuButton() // Assuming it previously took commandMap
 //
 //	// New way:
 //	// err := bot.SetBotCommands(map[string]string{"help": "📖 Help"})
 //
 // BuildMenuButton now only supports creating default menu button configurations.
-func BuildMenuButton(commandMap map[string]string) *MenuButtonConfig {
+func BuildMenuButton() *MenuButtonConfig {
 	// BuildMenuButton is now deprecated for commands - return default type
 	// Users should use Bot.SetBotCommands() for setting bot commands
 	return &MenuButtonConfig{Type: menuButtonTypeDefault}
@@ -139,19 +105,15 @@ func BuildMenuButton(commandMap map[string]string) *MenuButtonConfig {
 // newReplyKeyboard creates a new reply keyboard (internal use)
 func newReplyKeyboard(rows ...[]ReplyKeyboardButton) *ReplyKeyboard {
 	kb := &ReplyKeyboard{
-		Keyboard:   make([][]ReplyKeyboardButton, 0),
-		currentRow: make([]ReplyKeyboardButton, 0),
+		Keyboard: make([][]ReplyKeyboardButton, 0),
 	}
-
 	kb.Keyboard = append(kb.Keyboard, rows...)
-
 	return kb
 }
 
 // BuildReplyKeyboard creates a reply keyboard with custom buttons per row
 //
 // This function allows you to specify how many buttons should appear in each row.
-// This provides more control over the keyboard layout compared to BuildReplyKeyboard.
 //
 // Parameters:
 //   - buttons: slice of button texts
@@ -175,8 +137,7 @@ func BuildReplyKeyboard(buttons []string, buttonsPerRow int) *ReplyKeyboard {
 	}
 
 	kb := &ReplyKeyboard{
-		Keyboard:   make([][]ReplyKeyboardButton, 0),
-		currentRow: make([]ReplyKeyboardButton, 0),
+		Keyboard: make([][]ReplyKeyboardButton, 0),
 	}
 
 	// Split buttons into rows based on buttonsPerRow
@@ -214,12 +175,6 @@ func (kb *ReplyKeyboard) Placeholder(text string) *ReplyKeyboard {
 
 // ToTgbotapi converts the reply keyboard to telegram-bot-api format
 func (kb *ReplyKeyboard) ToTgbotapi() tgbotapi.ReplyKeyboardMarkup {
-	// Add any remaining buttons in currentRow
-	if len(kb.currentRow) > 0 {
-		kb.Keyboard = append(kb.Keyboard, kb.currentRow)
-		kb.currentRow = make([]ReplyKeyboardButton, 0)
-	}
-
 	// Convert to tgbotapi format
 	var keyboard [][]tgbotapi.KeyboardButton
 	for _, row := range kb.Keyboard {
@@ -230,7 +185,6 @@ func (kb *ReplyKeyboard) ToTgbotapi() tgbotapi.ReplyKeyboardMarkup {
 				RequestContact:  btn.RequestContact,
 				RequestLocation: btn.RequestLocation,
 			}
-			// Note: WebApp support may vary by telegram-bot-api version
 			tgRow = append(tgRow, tgBtn)
 		}
 		keyboard = append(keyboard, tgRow)
@@ -247,11 +201,6 @@ func (kb *ReplyKeyboard) ToTgbotapi() tgbotapi.ReplyKeyboardMarkup {
 
 // ToTgbotapi converts the inline keyboard to telegram-bot-api format
 func (kb *InlineKeyboard) ToTgbotapi() tgbotapi.InlineKeyboardMarkup {
-	// Add any remaining buttons in currentRow
-	if len(kb.currentRow) > 0 {
-		kb.InlineKeyboard = append(kb.InlineKeyboard, kb.currentRow)
-		kb.currentRow = make([]InlineKeyboardButton, 0)
-	}
 	// Convert to tgbotapi format
 	var keyboard [][]tgbotapi.InlineKeyboardButton
 	for _, row := range kb.InlineKeyboard {
@@ -274,8 +223,6 @@ func (kb *InlineKeyboard) ToTgbotapi() tgbotapi.InlineKeyboardMarkup {
 			if btn.SwitchInlineQueryCurrentChat != "" {
 				tgBtn.SwitchInlineQueryCurrentChat = &btn.SwitchInlineQueryCurrentChat
 			}
-			// Note: WebApp support may vary by telegram-bot-api version
-
 			tgRow = append(tgRow, tgBtn)
 		}
 		keyboard = append(keyboard, tgRow)

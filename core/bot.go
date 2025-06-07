@@ -211,7 +211,7 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 func WithMenuButton(config *MenuButtonConfig) BotOption {
 	return func(b *Bot) {
 		// Only allow web_app or default types for WithMenuButton
-		if config != nil && (config.Type == menuButtonTypeWebApp || config.Type == menuButtonTypeDefault) {
+		if config != nil && config.Type == menuButtonTypeDefault {
 			b.menuButton = config
 		}
 	}
@@ -493,7 +493,6 @@ func (b *Bot) Start() error {
 	log.Printf("Authorized on account %s", b.api.Self.UserName)
 
 	// Initialize menu button if configured (only for web_app or default types)
-	b.initializeMenuButton()
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60

@@ -2,6 +2,7 @@ package teleflow
 
 import (
 	"fmt"
+	"sync"
 )
 
 // PromptKeyboardHandler handles building inline keyboards from KeyboardFunc for prompts
@@ -10,7 +11,7 @@ type PromptKeyboardHandler struct {
 	// Stores UUID mappings per user (or per message if keyboards are long-lived and tied to messages)
 	// Key: UserID (int64), Value: map[string]interface{} (uuid -> originalData)
 	userUUIDMappings map[int64]map[string]interface{}
-	// mu sync.RWMutex // If userUUIDMappings is accessed concurrently by different goroutines
+	mu               sync.RWMutex // Protects userUUIDMappings
 }
 
 // NewPromptKeyboardHandler creates a new PromptKeyboardHandler.
@@ -37,23 +38,32 @@ func (pkh *PromptKeyboardHandler) BuildKeyboard(ctx *Context, keyboardFunc Keybo
 	}
 
 	// Store UUID mappings from the user's builder instance
-	// pkh.mu.Lock() // Lock if concurrent access is possible
-	// defer pkh.mu.Unlock()
+	pkh.mu.Lock()
+	defer pkh.mu.Unlock()
 
-	if pkh.userUUIDMappings[ctx.UserID()] == nil {
-		pkh.userUUIDMappings[ctx.UserID()] = make(map[string]interface{})
+	userID := ctx.UserID()
+	if pkh.userUUIDMappings[userID] == nil {
+		pkh.userUUIDMappings[userID] = make(map[string]interface{})
 	}
 	for uuid, data := range builder.GetUUIDMapping() {
-		pkh.userUUIDMappings[ctx.UserID()][uuid] = data
+		pkh.userUUIDMappings[userID][uuid] = data
 	}
 
-	return builder.Build(), nil
+	// Return the tgbotapi.InlineKeyboardMarkup built by the builder
+	// The builder.Build() method itself returns tgbotapi.InlineKeyboardMarkup
+	builtKeyboard := builder.Build()
+	if numButtons(builtKeyboard) == 0 { // Ensure we don't return an empty keyboard markup
+		return nil, nil
+	}
+
+	return builtKeyboard, nil
 }
 
 // GetCallbackData retrieves the original callback data for a given user and UUID.
 func (pkh *PromptKeyboardHandler) GetCallbackData(userID int64, uuid string) (interface{}, bool) {
-	// pkh.mu.RLock()
-	// defer pkh.mu.RUnlock()
+	pkh.mu.RLock()
+	defer pkh.mu.RUnlock()
+
 	if userMappings, exists := pkh.userUUIDMappings[userID]; exists {
 		data, found := userMappings[uuid]
 		return data, found
@@ -64,7 +74,7 @@ func (pkh *PromptKeyboardHandler) GetCallbackData(userID int64, uuid string) (in
 // CleanupUserMappings removes all UUID mappings for a specific user.
 // This should be called when a flow ends or when messages with keyboards are no longer relevant.
 func (pkh *PromptKeyboardHandler) CleanupUserMappings(userID int64) {
-	// pkh.mu.Lock()
-	// defer pkh.mu.Unlock()
+	pkh.mu.Lock()
+	defer pkh.mu.Unlock()
 	delete(pkh.userUUIDMappings, userID)
 }

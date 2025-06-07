@@ -1,5 +1,7 @@
 package teleflow
 
+import "time"
+
 // Assuming Context type is defined in core/context.go
 
 // FlowBuilder is used to construct a new flow.
@@ -11,6 +13,7 @@ type FlowBuilder struct {
 	onError         *ErrorConfig         // Flow-level error handling
 	onProcessAction ProcessMessageAction // How to handle previous messages on button clicks
 	currentStep     *StepBuilder         // Helper for fluent API
+	timeout         time.Duration        // Flow timeout duration
 }
 
 // StepBuilder is used to construct a step within a flow.
@@ -67,9 +70,41 @@ type ProcessResult struct {
 }
 
 // WithPrompt adds a custom prompt to any ProcessResult.
-// This allows for fluent chaining like: NextStep().WithPrompt(&PromptConfig{Message: "Moving to next step!"})
-func (pr ProcessResult) WithPrompt(prompt *PromptConfig) ProcessResult {
-	pr.Prompt = prompt
+// It accepts either a *PromptConfig or a MessageSpec (same as StepBuilder.Prompt).
+// This allows for fluent chaining like:
+// NextStep().WithPrompt(&PromptConfig{Message: "Moving to next step!"})
+// or NextStep().WithPrompt("Moving to next step!")
+// or NextStep().WithPrompt(func(ctx *Context) string { return "Dynamic message" })
+func (pr ProcessResult) WithPrompt(prompt MessageSpec) ProcessResult {
+
+	if pr.Prompt == nil {
+		pr.Prompt = &PromptConfig{}
+	}
+	pr.Prompt.Message = prompt
+
+	return pr
+}
+
+// WithImage adds an image to the ProcessResult's prompt using ImageSpec (same as PromptBuilder.WithImage).
+// This allows for fluent chaining like:
+// NextStep().WithPrompt("Message").WithImage("https://example.com/image.jpg")
+// or NextStep().WithPrompt("Message").WithImage(func(ctx *Context) string { return "dynamic-url" })
+func (pr ProcessResult) WithImage(image ImageSpec) ProcessResult {
+	if pr.Prompt == nil {
+		pr.Prompt = &PromptConfig{}
+	}
+	pr.Prompt.Image = image
+	return pr
+}
+
+// WithTemplateData adds template data to the ProcessResult's prompt (same as PromptBuilder.WithTemplateData).
+// This allows for fluent chaining like:
+// NextStep().WithPrompt("template:my_template").WithTemplateData(map[string]interface{}{"name": "John"})
+func (pr ProcessResult) WithTemplateData(data map[string]interface{}) ProcessResult {
+	if pr.Prompt == nil {
+		pr.Prompt = &PromptConfig{}
+	}
+	pr.Prompt.TemplateData = data
 	return pr
 }
 

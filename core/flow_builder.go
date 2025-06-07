@@ -9,9 +9,10 @@ import (
 // This is the main entry point for creating flows using the new Step-Prompt-Process API.
 func NewFlow(name string) *FlowBuilder {
 	return &FlowBuilder{
-		name:  name,
-		steps: make(map[string]*StepBuilder),
-		order: make([]string, 0),
+		name:    name,
+		steps:   make(map[string]*StepBuilder),
+		order:   make([]string, 0),
+		timeout: 30 * time.Minute, // Default timeout of 30 minutes
 	}
 }
 
@@ -48,6 +49,13 @@ func (fb *FlowBuilder) OnError(config *ErrorConfig) *FlowBuilder {
 	return fb
 }
 
+// WithTimeout sets the timeout duration for the flow.
+// Set to 0 to indicate no timeout.
+func (fb *FlowBuilder) WithTimeout(duration time.Duration) *FlowBuilder {
+	fb.timeout = duration
+	return fb
+}
+
 // OnProcessDeleteMessage configures the flow to delete entire previous messages when processing button clicks.
 // This provides a clean UX where old messages are removed, preventing scroll-back confusion.
 func (fb *FlowBuilder) OnProcessDeleteMessage() *FlowBuilder {
@@ -76,7 +84,7 @@ func (fb *FlowBuilder) Build() (*Flow, error) {
 		Order:           fb.order,
 		OnError:         fb.onError,         // Set flow-level error handling
 		OnProcessAction: fb.onProcessAction, // Set message handling behavior
-		Timeout:         30 * time.Minute,   // Default timeout
+		Timeout:         fb.timeout,         // Use configured timeout
 	}
 
 	// Convert each step
