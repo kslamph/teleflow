@@ -458,11 +458,11 @@ func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *Fl
 	// Dispatch to appropriate handler based on strategy
 	switch action {
 	case errorStrategyCancel:
-		fm.handleErrorStrategyCancel(ctx, flow.Name, stepName, renderErr, config)
+		fm.handleErrorStrategyCancel(ctx, config)
 		return nil
 
 	case errorStrategyRetry:
-		fm.handleErrorStrategyRetry(ctx, flow.Name, stepName, renderErr, config, nil)
+		fm.handleErrorStrategyRetry(ctx, config)
 		return nil
 
 	case errorStrategyIgnore:
@@ -471,11 +471,11 @@ func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *Fl
 		if step != nil {
 			originalPrompt = step.PromptConfig
 		}
-		return fm.handleErrorStrategyIgnore(ctx, flow.Name, stepName, renderErr, config, originalPrompt, userState, flow)
+		return fm.handleErrorStrategyIgnore(ctx, config, originalPrompt, userState, flow)
 
 	default:
 		// Fallback to cancel if unknown action
-		fm.handleErrorStrategyCancel(ctx, flow.Name, stepName, renderErr, &ErrorConfig{
+		fm.handleErrorStrategyCancel(ctx, &ErrorConfig{
 			Action:  errorStrategyCancel,
 			Message: "❗ A technical error occurred. Flow has been cancelled.",
 		})
@@ -484,19 +484,21 @@ func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *Fl
 }
 
 // handleErrorStrategyCancel handles the cancel error strategy
-func (fm *flowManager) handleErrorStrategyCancel(ctx *Context, flowName string, stepName string, err error, config *ErrorConfig) {
+func (fm *flowManager) handleErrorStrategyCancel(ctx *Context, config *ErrorConfig) {
+	// Log the cancellation
+
 	fm.notifyUserIfNeeded(ctx, config.Message)
 	delete(fm.userFlows, ctx.UserID())
 }
 
 // handleErrorStrategyRetry handles the retry error strategy
-func (fm *flowManager) handleErrorStrategyRetry(ctx *Context, flowName string, stepName string, err error, config *ErrorConfig, originalPrompt *PromptConfig) {
+func (fm *flowManager) handleErrorStrategyRetry(ctx *Context, config *ErrorConfig) {
 	fm.notifyUserIfNeeded(ctx, config.Message)
 	// Stay on current step - next update will retry the render
 }
 
 // handleErrorStrategyIgnore handles the ignore error strategy
-func (fm *flowManager) handleErrorStrategyIgnore(ctx *Context, flowName string, stepName string, err error, config *ErrorConfig, originalPrompt *PromptConfig, userState *userFlowState, flow *Flow) error {
+func (fm *flowManager) handleErrorStrategyIgnore(ctx *Context, config *ErrorConfig, originalPrompt *PromptConfig, userState *userFlowState, flow *Flow) error {
 	fm.notifyUserIfNeeded(ctx, config.Message)
 
 	// Try to render the step again without the problematic image
