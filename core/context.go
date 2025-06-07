@@ -54,7 +54,7 @@ import (
 type Context struct {
 	bot    *Bot
 	update tgbotapi.Update
-	data   map[string]interface{}
+	data   map[string]interface{} // For request-scoped data only (data relevant for the current update processing lifecycle, including middleware). Not for flow persistence.
 
 	// User context
 	userID    int64
@@ -100,14 +100,82 @@ func (c *Context) Get(key string) (interface{}, bool) {
 	return val, ok
 }
 
+// SetFlowData sets data for the current step in the active flow
+func (c *Context) SetFlowData(key string, value interface{}) error {
+	if !c.IsUserInFlow() {
+		return fmt.Errorf("user not in a flow, cannot set flow data")
+	}
+	// Delegate to flowManager to update UserFlowState.Data
+	return c.bot.flowManager.setUserFlowData(c.UserID(), key, value)
+}
+
+// GetFlowData gets data from the active flow's state
+func (c *Context) GetFlowData(key string) (interface{}, bool) {
+	if !c.IsUserInFlow() {
+		return nil, false
+	}
+	// Delegate to flowManager to get from UserFlowState.Data
+	return c.bot.flowManager.getUserFlowData(c.UserID(), key)
+}
+
 // Reply sends a text message with appropriate keyboard for user
-func (c *Context) Reply(text string, keyboard ...interface{}) error {
-	return c.send(text, keyboard...)
+func (c *Context) Reply(text string, keyboardMarkup ...interface{}) error {
+	msg := tgbotapi.NewMessage(c.ChatID(), text)
+
+	if len(keyboardMarkup) > 0 && keyboardMarkup[0] != nil {
+		// Handle direct keyboard markup (tgbotapi types)
+		switch kb := keyboardMarkup[0].(type) {
+		case tgbotapi.InlineKeyboardMarkup:
+			msg.ReplyMarkup = kb
+		case tgbotapi.ReplyKeyboardMarkup:
+			msg.ReplyMarkup = kb
+		case tgbotapi.ReplyKeyboardRemove:
+			msg.ReplyMarkup = kb
+		default:
+			msg.ReplyMarkup = keyboardMarkup[0]
+		}
+	} else if c.bot.accessManager != nil {
+		// Apply automatic reply keyboard if no specific markup and accessManager is present
+		permissionContext := c.getPermissionContext()
+		if userMenu := c.bot.accessManager.GetReplyKeyboard(permissionContext); userMenu != nil {
+			msg.ReplyMarkup = userMenu.ToTgbotapi()
+		}
+	}
+
+	_, err := c.bot.api.Send(msg)
+	return err
 }
 
 // ReplyWithParseMode sends a text message with specific parse mode and keyboard
-func (c *Context) ReplyWithParseMode(text string, parseMode ParseMode, keyboard ...interface{}) error {
-	return c.sendWithParseMode(text, parseMode, keyboard...)
+func (c *Context) ReplyWithParseMode(text string, parseMode ParseMode, keyboardMarkup ...interface{}) error {
+	msg := tgbotapi.NewMessage(c.ChatID(), text)
+
+	if parseMode != ParseModeNone {
+		msg.ParseMode = string(parseMode)
+	}
+
+	if len(keyboardMarkup) > 0 && keyboardMarkup[0] != nil {
+		// Handle direct keyboard markup (tgbotapi types)
+		switch kb := keyboardMarkup[0].(type) {
+		case tgbotapi.InlineKeyboardMarkup:
+			msg.ReplyMarkup = kb
+		case tgbotapi.ReplyKeyboardMarkup:
+			msg.ReplyMarkup = kb
+		case tgbotapi.ReplyKeyboardRemove:
+			msg.ReplyMarkup = kb
+		default:
+			msg.ReplyMarkup = keyboardMarkup[0]
+		}
+	} else if c.bot.accessManager != nil {
+		// Apply automatic reply keyboard if no specific markup and accessManager is present
+		permissionContext := c.getPermissionContext()
+		if userMenu := c.bot.accessManager.GetReplyKeyboard(permissionContext); userMenu != nil {
+			msg.ReplyMarkup = userMenu.ToTgbotapi()
+		}
+	}
+
+	_, err := c.bot.api.Send(msg)
+	return err
 }
 
 // StartFlow initiates a new flow for the user
@@ -222,17 +290,9 @@ func (c *Context) applyAutomaticMenuButton() {
 }
 
 // send is an internal helper for sending messages with automatic UI management
+// Simplified as per Phase 3.1 - no longer handles __render_parse_mode
 func (c *Context) send(text string, keyboard ...interface{}) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
-
-	// Check if a parse mode was set during rendering
-	if parseMode, exists := c.Get("__render_parse_mode"); exists {
-		if pm, ok := parseMode.(ParseMode); ok && pm != ParseModeNone {
-			msg.ParseMode = string(pm)
-		}
-		// Clean up the temporary parse mode
-		delete(c.data, "__render_parse_mode")
-	}
 
 	// Automatic menu button management
 	c.applyAutomaticMenuButton()
@@ -272,6 +332,7 @@ func (c *Context) send(text string, keyboard ...interface{}) error {
 }
 
 // sendWithParseMode is an internal helper for sending messages with parse mode
+// Simplified as per Phase 3.1
 func (c *Context) sendWithParseMode(text string, parseMode ParseMode, keyboard ...interface{}) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
 

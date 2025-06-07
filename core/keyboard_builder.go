@@ -68,18 +68,3 @@ func (pkh *PromptKeyboardHandler) CleanupUserMappings(userID int64) {
 	// defer pkh.mu.Unlock()
 	delete(pkh.userUUIDMappings, userID)
 }
-
-// Legacy compatibility functions - keeping for backward compatibility during transition
-type inlineKeyboardBuilder struct {
-	handler *PromptKeyboardHandler
-}
-
-func newInlineKeyboardBuilder() *inlineKeyboardBuilder {
-	return &inlineKeyboardBuilder{
-		handler: NewPromptKeyboardHandler(),
-	}
-}
-
-func (kb *inlineKeyboardBuilder) buildInlineKeyboard(keyboardFunc KeyboardFunc, ctx *Context) (interface{}, error) {
-	return kb.handler.BuildKeyboard(ctx, keyboardFunc)
-}

@@ -585,7 +585,32 @@ func (fm *flowManager) deletePreviousKeyboard(ctx *Context, messageID int) error
 	return err
 }
 
-// shouldCleanupMappings determines if UUID mappings should be cleaned up based on flow configuration
-func (fm *flowManager) shouldCleanupMappings(flow *Flow) bool {
-	return flow.OnProcessAction == ProcessDeleteMessage || flow.OnProcessAction == ProcessDeleteKeyboard
+// setUserFlowData sets flow-specific data for a user
+func (fm *flowManager) setUserFlowData(userID int64, key string, value interface{}) error {
+	userState, exists := fm.userFlows[userID]
+	if !exists {
+		return fmt.Errorf("user %d not in a flow", userID)
+	}
+
+	if userState.Data == nil {
+		userState.Data = make(map[string]interface{})
+	}
+
+	userState.Data[key] = value
+	return nil
+}
+
+// getUserFlowData gets flow-specific data for a user
+func (fm *flowManager) getUserFlowData(userID int64, key string) (interface{}, bool) {
+	userState, exists := fm.userFlows[userID]
+	if !exists {
+		return nil, false
+	}
+
+	if userState.Data == nil {
+		return nil, false
+	}
+
+	value, ok := userState.Data[key]
+	return value, ok
 }
