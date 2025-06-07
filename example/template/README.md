@@ -49,6 +49,45 @@ bot.AddTemplate("template_name", "Template content with {{.Variables}}", teleflo
 .Prompt("template:template_name", templateData, keyboardFunc)
 ```
 
+### **Fluent Inline Keyboard Builder**
+```go
+func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
+    // Complex callback data - can be any interface{}
+    userData := map[string]interface{}{
+        "user_id": ctx.UserID(),
+        "action":  "profile",
+        "timestamp": time.Now(),
+    }
+    
+    return teleflow.NewInlineKeyboard().
+        ButtonCallback("📝 Basic", "basic").
+        ButtonCallback("💻 Code", "code").
+        Row().
+        ButtonCallback("🔗 Links", "links").
+        ButtonCallback("📋 Lists", "lists").
+        Row().
+        ButtonCallback("👤 Profile", userData).
+        ButtonUrl("🌐 Website", "https://example.com")
+}
+```
+
+### **Enhanced Callback Data**
+```go
+// Handle different data types in ProcessFunc
+func(ctx *Context, input string, buttonClick *ButtonClick) ProcessResult {
+    switch data := buttonClick.Data.(type) {
+    case map[string]interface{}:
+        userID := data["user_id"].(int64)
+        action := data["action"].(string)
+        // Handle complex data
+    case string:
+        // Handle simple string data
+    case MyCustomStruct:
+        // Handle custom struct data
+    }
+}
+```
+
 ### **Convenience Methods**
 ```go
 // Direct template reply

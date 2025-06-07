@@ -95,22 +95,50 @@ func (fb *FlowBuilder) Build() (*Flow, error) {
 	return flow, nil
 }
 
-// Prompt sets the prompt configuration for the current step.
-// This defines what message, image, and keyboard to show to the user.
-func (sb *StepBuilder) Prompt(message MessageSpec, image ImageSpec, keyboard KeyboardFunc) *StepBuilder {
-	sb.promptConfig = &PromptConfig{
-		Message:  message,
-		Image:    image,
-		Keyboard: keyboard,
-	}
-	return sb
+// PromptBuilder provides a fluent interface for building prompts
+type PromptBuilder struct {
+	stepBuilder  *StepBuilder
+	promptConfig *PromptConfig
 }
 
-// Process sets the processing function for the current step.
-// This function handles user input and determines the next action.
-func (sb *StepBuilder) Process(processFunc ProcessFunc) *StepBuilder {
-	sb.processFunc = processFunc
-	return sb
+// Prompt starts building a prompt with a message.
+// The message can be a string or a template reference like "template:my_template".
+func (sb *StepBuilder) Prompt(message MessageSpec) *PromptBuilder {
+	promptConfig := &PromptConfig{
+		Message: message,
+	}
+
+	return &PromptBuilder{
+		stepBuilder:  sb,
+		promptConfig: promptConfig,
+	}
+}
+
+// WithTemplateData sets the template data for the prompt.
+// This data is available to templates and takes precedence over context data.
+func (pb *PromptBuilder) WithTemplateData(data map[string]interface{}) *PromptBuilder {
+	pb.promptConfig.TemplateData = data
+	return pb
+}
+
+// WithImage sets the image for the prompt.
+// The image can be a URL, file path, base64 string, or a function that returns such a string.
+func (pb *PromptBuilder) WithImage(image ImageSpec) *PromptBuilder {
+	pb.promptConfig.Image = image
+	return pb
+}
+
+// WithInlineKeyboard sets the inline keyboard for the prompt.
+func (pb *PromptBuilder) WithInlineKeyboard(keyboard KeyboardFunc) *PromptBuilder {
+	pb.promptConfig.Keyboard = keyboard
+	return pb
+}
+
+// Process completes the prompt configuration and sets the processing function.
+func (pb *PromptBuilder) Process(processFunc ProcessFunc) *StepBuilder {
+	pb.stepBuilder.promptConfig = pb.promptConfig
+	pb.stepBuilder.processFunc = processFunc
+	return pb.stepBuilder
 }
 
 // OnComplete sets a completion handler for this specific step.

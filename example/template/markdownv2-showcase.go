@@ -89,7 +89,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 			"*Join Date:* {{.JoinDate}}\n"+
 			"*Status:* {{if .IsActive}}✅ _Active_{{else}}❌ _Inactive_{{end}}\n\n"+
 			"*Recent Activity:*\n"+
-			"{{range $i, $activity := .Activities}}"+
+			"{{range .Activities}}"+
 			"{{.Index}}\\. {{.Activity}}\n"+
 			"{{end}}\n"+
 			"||Last Login: {{.LastLogin}}||",
@@ -110,7 +110,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 			"{{.Description}}\n\n"+
 			"*💰 Price:* ~${{.OldPrice}}~ *${{.Price}}*\n"+
 			"*⭐ Rating:* {{.Rating}}/5\n"+
-			"*📦 Stock:* {{if gt .Stock 0}}`{{.Stock}} available`{{else}}_Out of stock_{{end}}\n\n"+
+			"*📦 Stock:* {{if .Stock}}{{if gt .Stock 0}}`{{.Stock}} available`{{else}}_Out of stock_{{end}}{{else}}_Stock info unavailable_{{end}}\n\n"+
 			"*Features:*\n"+
 			"{{range .Features}}"+
 			"✅ {{.}}\n"+
@@ -135,30 +135,41 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 
 func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 	return teleflow.NewFlow("template_showcase").
-		OnError(teleflow.OnErrorCancel()).
 		Step("start").
-		Prompt(
-			"template:main_menu",
-			nil,
-			func(ctx *teleflow.Context) map[string]interface{} {
-				return map[string]interface{}{
-					"inline_keyboard": []map[string]interface{}{
+		Prompt("template:main_menu").
+		WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
+			// Demonstrate complex callback data - can be any interface{}
+			basicData := map[string]interface{}{
+				"type":      "template_demo",
+				"category":  "formatting",
+				"template":  "basic_formatting",
+				"user_id":   ctx.UserID(),
+				"timestamp": "2024-06-07",
+			}
 
-						{"text": "📝 Basic Formatting", "callback_data": "basic"},
-						{"text": "💻 Code Examples", "callback_data": "code"},
+			codeData := struct {
+				Type     string `json:"type"`
+				Template string `json:"template"`
+				Language string `json:"language"`
+			}{
+				Type:     "code_example",
+				Template: "code_example",
+				Language: "go",
+			}
 
-						{"text": "🔗 Links & Mentions", "callback_data": "links"},
-						{"text": "📋 Lists", "callback_data": "lists"},
-
-						{"text": "🤫 Spoilers", "callback_data": "spoilers"},
-						{"text": "👤 User Profile", "callback_data": "profile"},
-
-						{"text": "🔔 Notifications", "callback_data": "notification"},
-						{"text": "🛍️ Product Showcase", "callback_data": "product"},
-					},
-				}
-			},
-		).
+			return teleflow.NewInlineKeyboard().
+				ButtonCallback("📝 Basic Formatting", basicData).
+				ButtonCallback("💻 Code Examples", codeData).
+				Row().
+				ButtonCallback("🔗 Links & Mentions", "links").
+				ButtonCallback("📋 Lists", "lists").
+				Row().
+				ButtonCallback("🤫 Spoilers", "spoilers").
+				Row().
+				ButtonCallback("👤 User Profile", "profile").
+				ButtonCallback("🔔 Notifications", "notification").
+				ButtonCallback("🛍️ Product Showcase", "product")
+		}).
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			if buttonClick == nil {
 				return teleflow.Retry().WithPrompt(&teleflow.PromptConfig{
@@ -166,171 +177,149 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 				})
 			}
 
-			switch buttonClick.Data {
-			case "basic":
-				return teleflow.GoToStep("show_basic")
-			case "code":
+			// Demonstrate handling different data types
+			switch data := buttonClick.Data.(type) {
+			case map[string]interface{}:
+				// Handle complex map data
+				if data["type"] == "template_demo" && data["category"] == "formatting" {
+					ctx.Set("demo_data", data) // Store for use in template
+					return teleflow.GoToStep("show_basic")
+				}
+			case struct {
+				Type     string `json:"type"`
+				Template string `json:"template"`
+				Language string `json:"language"`
+			}:
+				// Handle struct data
+				ctx.Set("code_data", data)
 				return teleflow.GoToStep("show_code")
-			case "links":
-				return teleflow.GoToStep("show_links")
-			case "lists":
-				return teleflow.GoToStep("show_lists")
-			case "spoilers":
-				return teleflow.GoToStep("show_spoilers")
-			case "profile":
-				return teleflow.GoToStep("show_profile")
-			case "notification":
-				return teleflow.GoToStep("show_notification")
-			case "product":
-				return teleflow.GoToStep("show_product")
-			default:
-				return teleflow.Retry()
+			case string:
+				// Handle simple string data (backward compatibility)
+				switch data {
+				case "links":
+					return teleflow.GoToStep("show_links")
+				case "lists":
+					return teleflow.GoToStep("show_lists")
+				case "spoilers":
+					return teleflow.GoToStep("show_spoilers")
+				case "profile":
+					return teleflow.GoToStep("show_profile")
+				case "notification":
+					return teleflow.GoToStep("show_notification")
+				case "product":
+					return teleflow.GoToStep("show_product")
+				}
 			}
+
+			return teleflow.Retry()
 		}).
 
 		// Basic formatting example
 		Step("show_basic").
-		Prompt(
-			"template:basic_formatting",
-			nil,
-			getBackButton(),
-		).
+		Prompt("template:basic_formatting").
+		WithInlineKeyboard(getBackButton()).
 		Process(handleBackButton).
 
 		// Code example
 		Step("show_code").
-		Prompt(
-			"template:code_example",
-			nil,
-			getBackButton(),
-		).
-		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
-			// Set template data for this step
-			ctx.Set("Name", "World")
-			return handleBackButton(ctx, input, buttonClick)
+		Prompt("template:code_example").
+		WithTemplateData(map[string]interface{}{
+			"Name": "World",
 		}).
+		WithInlineKeyboard(getBackButton()).
+		Process(handleBackButton).
 
 		// Links example
 		Step("show_links").
-		Prompt(
-			"template:links_example",
-			nil,
-			getBackButton(),
-		).
-		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
-			// Set template data for this step
-			ctx.Set("UserID", "123456789")
-			return handleBackButton(ctx, input, buttonClick)
+		Prompt("template:links_example").
+		WithTemplateData(map[string]interface{}{
+			"UserID": "123456789",
 		}).
+		WithInlineKeyboard(getBackButton()).
+		Process(handleBackButton).
 
 		// Lists example
 		Step("show_lists").
-		Prompt(
-			"template:lists_example",
-			nil,
-			getBackButton(),
-		).
-		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
-			// Set template data for this step
-			ctx.Set("Features", []map[string]interface{}{
+		Prompt("template:lists_example").
+		WithTemplateData(map[string]interface{}{
+			"Features": []map[string]interface{}{
 				{"Index": "1", "Name": "Template system with MarkdownV2 support"},
 				{"Index": "2", "Name": "Data precedence \\(TemplateData over Context\\)"},
 				{"Index": "3", "Name": "Parse mode auto\\-detection"},
 				{"Index": "4", "Name": "Backwards compatibility"},
-			})
-			return handleBackButton(ctx, input, buttonClick)
+			},
 		}).
-
+		WithInlineKeyboard(getBackButton()).
+		Process(handleBackButton).
 		// Spoilers example
 		Step("show_spoilers").
-		Prompt(
-			"template:spoilers_example",
-			nil,
-			getBackButton(),
-		).
-		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
-			// Set template data for this step
-			ctx.Set("Secret", "Templates are awesome\\!")
-			return handleBackButton(ctx, input, buttonClick)
+		Prompt("template:spoilers_example").
+		WithTemplateData(map[string]interface{}{
+			"Secret": "Templates are awesome\\!",
 		}).
+		WithInlineKeyboard(getBackButton()).
+		Process(handleBackButton).
 
 		// User profile example
+		// User profile example
 		Step("show_profile").
-		Prompt(
-			"template:user_profile",
-			nil,
-			getBackButton(),
-		).
-		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
-			// Set template data for this step
-			ctx.Set("Name", "John Doe")
-			ctx.Set("Role", "Developer")
-			ctx.Set("JoinDate", "2024\\-01\\-15")
-			ctx.Set("IsActive", true)
-			ctx.Set("LastLogin", "2024\\-06\\-07 10:30 AM")
-			ctx.Set("Activities", []map[string]interface{}{
+		Prompt("template:user_profile").
+		WithTemplateData(map[string]interface{}{
+			"Name":      "John Doe",
+			"Role":      "Developer",
+			"JoinDate":  "2024\\-01\\-15",
+			"IsActive":  true,
+			"LastLogin": "2024\\-06\\-07 10:30 AM",
+			"Activities": []map[string]interface{}{
 				{"Index": "1", "Activity": "Implemented template system"},
 				{"Index": "2", "Activity": "Fixed markdown parsing"},
 				{"Index": "3", "Activity": "Added new features"},
-			})
-			return handleBackButton(ctx, input, buttonClick)
+			},
 		}).
-
+		WithInlineKeyboard(getBackButton()).
+		Process(handleBackButton).
 		// Notification example
 		Step("show_notification").
-		Prompt(
-			"template:notification",
-			nil,
-			getBackButton(),
-		).
-		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
-			// Set template data for this step
-			ctx.Set("Type", "System")
-			ctx.Set("Priority", "high")
-			ctx.Set("Message", "Template system has been successfully implemented\\!")
-			ctx.Set("Time", "2024\\-06\\-07 10:45 AM")
-			ctx.Set("ActionRequired", true)
-			ctx.Set("Action", "Review the implementation and test all features")
-			return handleBackButton(ctx, input, buttonClick)
+		Prompt("template:notification").
+		WithTemplateData(map[string]interface{}{
+			"Type":           "System",
+			"Priority":       "high",
+			"Message":        "Template system has been successfully implemented\\!",
+			"Time":           "2024\\-06\\-07 10:45 AM",
+			"ActionRequired": true,
+			"Action":         "Review the implementation and test all features",
 		}).
+		WithInlineKeyboard(getBackButton()).
+		Process(handleBackButton).
 
 		// Product showcase example
 		Step("show_product").
-		Prompt(
-			"template:product_showcase",
-			nil,
-			getBackButton(),
-		).
-		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
-			// Set template data for this step
-			ctx.Set("ProductName", "TeleFlow Pro")
-			ctx.Set("Description", "_The ultimate Telegram bot framework with advanced template support\\._")
-			ctx.Set("OldPrice", "99\\.99")
-			ctx.Set("Price", "79\\.99")
-			ctx.Set("Rating", "4\\.9")
-			ctx.Set("Stock", 15)
-			ctx.Set("Features", []string{
+		Prompt("template:product_showcase").
+		WithTemplateData(map[string]interface{}{
+			"ProductName": "TeleFlow Pro",
+			"Description": "_The ultimate Telegram bot framework with advanced template support\\._",
+			"OldPrice":    "99\\.99",
+			"Price":       "79\\.99",
+			"Rating":      "4\\.9",
+			"Stock":       15,
+			"Features": []string{
 				"Advanced template system",
 				"MarkdownV2 support",
 				"Flow\\-based architecture",
 				"Type\\-safe APIs",
-			})
-			ctx.Set("PurchaseLink", "https://example.com/buy")
-			ctx.Set("InfoLink", "https://example.com/info")
-			return handleBackButton(ctx, input, buttonClick)
+			},
+			"PurchaseLink": "https://example.com/buy",
+			"InfoLink":     "https://example.com/info",
 		}).
+		WithInlineKeyboard(getBackButton()).
+		Process(handleBackButton).
 		Build()
 }
 
-func getBackButton() func(ctx *teleflow.Context) map[string]interface{} {
-	return func(ctx *teleflow.Context) map[string]interface{} {
-		return map[string]interface{}{
-			"inline_keyboard": [][]map[string]interface{}{
-				{
-					{"text": "🔙 Back to Menu", "callback_data": "back"},
-				},
-			},
-		}
+func getBackButton() func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
+	return func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
+		return teleflow.NewInlineKeyboard().
+			ButtonCallback("🔙 Back to Menu", "back")
 	}
 }
 

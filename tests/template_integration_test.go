@@ -232,7 +232,7 @@ func testEndToEndFlowIntegration(t *testing.T, bot *teleflow.Bot) {
 	// Test that flow building with templates works correctly
 	flow := teleflow.NewFlow("template_registration").
 		Step("ask_name").
-		Prompt("template:name_prompt", nil, nil).
+		Prompt("template:name_prompt").
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			if len(strings.TrimSpace(input)) < 2 {
 				return teleflow.Retry().WithPrompt(&teleflow.PromptConfig{
@@ -243,7 +243,7 @@ func testEndToEndFlowIntegration(t *testing.T, bot *teleflow.Bot) {
 			return teleflow.NextStep()
 		}).
 		Step("ask_age").
-		Prompt("template:age_prompt", nil, nil).
+		Prompt("template:age_prompt").
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			if input == "" {
 				return teleflow.Retry().WithPrompt(&teleflow.PromptConfig{
@@ -254,7 +254,7 @@ func testEndToEndFlowIntegration(t *testing.T, bot *teleflow.Bot) {
 			return teleflow.NextStep()
 		}).
 		Step("completion").
-		Prompt("template:completion", nil, nil).
+		Prompt("template:completion").
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			return teleflow.CompleteFlow()
 		})
@@ -322,7 +322,7 @@ func testBackwardsCompatibility(t *testing.T, bot *teleflow.Bot) {
 	// Test that existing non-template flows can be built
 	simpleFlow := teleflow.NewFlow("simple_flow").
 		Step("simple_step").
-		Prompt("What's your favorite color?", nil, nil).
+		Prompt("What's your favorite color?").
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			ctx.Set("color", input)
 			return teleflow.CompleteFlow()
@@ -510,11 +510,12 @@ func TestTemplateSystemIntegration(t *testing.T) {
 	// Test comprehensive flow building (without registration)
 	userOnboardingFlow := teleflow.NewFlow("user_onboarding").
 		Step("welcome").
-		Prompt("template:welcome", map[string]interface{}{"Name": "New User"}, func(ctx *teleflow.Context) map[string]interface{} {
-			return map[string]interface{}{
-				"Continue": "continue_onboarding",
-				"Skip":     "skip_onboarding",
-			}
+		Prompt("template:welcome").
+		WithTemplateData(map[string]interface{}{"Name": "New User"}).
+		WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
+			return teleflow.NewInlineKeyboard().
+				ButtonCallback("Continue", "continue_onboarding").
+				ButtonCallback("Skip", "skip_onboarding")
 		}).
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			if buttonClick != nil && buttonClick.Data == "skip_onboarding" {
@@ -523,15 +524,16 @@ func TestTemplateSystemIntegration(t *testing.T) {
 			return teleflow.NextStep()
 		}).
 		Step("profile_setup").
-		Prompt("template:profile", nil, nil).
+		Prompt("template:profile").
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			return teleflow.NextStep()
 		}).
 		Step("completion").
-		Prompt("template:notification", map[string]interface{}{
+		Prompt("template:notification").
+		WithTemplateData(map[string]interface{}{
 			"Message":   "Onboarding completed successfully!",
 			"Timestamp": "2025-01-07 02:00:00",
-		}, nil).
+		}).
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			return teleflow.CompleteFlow()
 		})

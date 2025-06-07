@@ -294,8 +294,19 @@ func (fm *flowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
 		input = ctx.update.Message.Text
 	} else if ctx.update.CallbackQuery != nil {
 		input = ctx.update.CallbackQuery.Data
+
+		// Try to get the original callback data from UUID mapping
+		var originalData interface{} = ctx.update.CallbackQuery.Data // Default to UUID string
+		if fm.promptRenderer != nil && fm.promptRenderer.keyboardBuilder != nil {
+			if mappedData, found := fm.promptRenderer.keyboardBuilder.getCallbackData(ctx.UserID(), ctx.update.CallbackQuery.Data); found {
+				originalData = mappedData
+				// Clean up the mapping after use (per-message lifecycle)
+				fm.promptRenderer.keyboardBuilder.cleanupMappings(ctx.UserID())
+			}
+		}
+
 		buttonClick = &ButtonClick{
-			Data:     ctx.update.CallbackQuery.Data,
+			Data:     originalData, // Now contains the original interface{} data
 			Text:     ctx.update.CallbackQuery.Message.Text,
 			UserID:   ctx.UserID(),
 			ChatID:   ctx.update.CallbackQuery.Message.Chat.ID,
@@ -501,6 +512,10 @@ func (fm *flowManager) notifyUserIfNeeded(ctx *Context, message string) {
 	if message == ON_ERROR_SILENT {
 		return
 	}
+
+	// Clear any parse mode from template rendering before sending error notification
+	// This prevents MarkdownV2 parsing errors when sending plain text error messages
+	ctx.Set("__render_parse_mode", ParseModeNone)
 
 	// Use a simple text reply for error notifications to avoid additional render errors
 	if err := ctx.Reply(message); err != nil {

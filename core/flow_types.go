@@ -37,10 +37,9 @@ type MessageSpec interface{}
 // It can be a string (URL, file path, base64), a function that returns such a string, or nil.
 type ImageSpec interface{}
 
-// KeyboardFunc defines the function signature for generating a keyboard.
-// It takes a Context and returns a map representing the keyboard structure.
-// Example: map[string]interface{}{"Button Text": "callback_data"}
-type KeyboardFunc func(ctx *Context) map[string]interface{}
+// KeyboardFunc defines the function signature for generating an inline keyboard.
+// It takes a Context and returns an InlineKeyboardBuilder for fluent keyboard construction.
+type KeyboardFunc func(ctx *Context) *InlineKeyboardBuilder
 
 // ProcessFunc defines the signature for the function that processes user input for a step.
 // It takes the current context, user input string, and optional button click information.
@@ -48,8 +47,10 @@ type KeyboardFunc func(ctx *Context) map[string]interface{}
 type ProcessFunc func(ctx *Context, input string, buttonClick *ButtonClick) ProcessResult
 
 // ButtonClick holds information about a button click event passed to ProcessFunc.
+// With the new InlineKeyboardBuilder system, Data contains the original interface{}
+// that was passed to ButtonCallback(), not just the UUID string.
 type ButtonClick struct {
-	Data     string                 // Callback data associated with the button.
+	Data     interface{}            // Original callback data passed to ButtonCallback() (UUID-mapped).
 	Text     string                 // Text of the button clicked.
 	UserID   int64                  // ID of the user who clicked the button.
 	ChatID   int64                  // ID of the chat where the button was clicked.

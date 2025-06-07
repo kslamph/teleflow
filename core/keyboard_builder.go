@@ -2,16 +2,18 @@ package teleflow
 
 import (
 	"fmt"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 // inlineKeyboardBuilder handles building keyboards from KeyboardFunc
-type inlineKeyboardBuilder struct{}
+type inlineKeyboardBuilder struct {
+	uuidMappings map[string]map[string]interface{} // Maps message IDs to UUID mappings
+}
 
 // newInlineKeyboardBuilder creates a new keyboard builder
 func newInlineKeyboardBuilder() *inlineKeyboardBuilder {
-	return &inlineKeyboardBuilder{}
+	return &inlineKeyboardBuilder{
+		uuidMappings: make(map[string]map[string]interface{}),
+	}
 }
 
 // buildInlineKeyboard processes a KeyboardFunc and returns the appropriate keyboard structure
@@ -20,39 +22,38 @@ func (kb *inlineKeyboardBuilder) buildInlineKeyboard(keyboardFunc KeyboardFunc, 
 		return nil, nil // No keyboard specified
 	}
 
-	// Execute the keyboard function
-	keyboardMap := keyboardFunc(ctx)
-	if keyboardMap == nil {
+	// Execute the keyboard function to get the builder
+	builder := keyboardFunc(ctx)
+	if builder == nil {
 		return nil, nil // Function returned nil, no keyboard
 	}
 
-	// Convert map to inline keyboard structure
-	return kb.convertMapToInlineKeyboard(keyboardMap)
+	// Validate the builder
+	if err := builder.ValidateBuilder(); err != nil {
+		return nil, fmt.Errorf("invalid keyboard: %v", err)
+	}
+
+	// Store UUID mappings for this message (we'll need message ID from context)
+	messageKey := fmt.Sprintf("user_%d", ctx.UserID()) // Simple key for now
+	kb.uuidMappings[messageKey] = builder.GetUUIDMapping()
+
+	// Build and return the keyboard markup
+	return builder.Build(), nil
 }
 
-// convertMapToInlineKeyboard converts a map[string]interface{} to an inline keyboard
-func (kb *inlineKeyboardBuilder) convertMapToInlineKeyboard(keyboardMap map[string]interface{}) (interface{}, error) {
-	if len(keyboardMap) == 0 {
-		return nil, nil
-	}
-
-	// Create a proper tgbotapi.InlineKeyboardMarkup
-	var rows [][]tgbotapi.InlineKeyboardButton
-
-	for text, callbackData := range keyboardMap {
-		// Validate callback data
-		callbackStr, ok := callbackData.(string)
-		if !ok {
-			return nil, fmt.Errorf("keyboard callback data must be string, got %T for button '%s'", callbackData, text)
+// getCallbackData retrieves the original callback data from UUID
+func (kb *inlineKeyboardBuilder) getCallbackData(userID int64, uuid string) (interface{}, bool) {
+	messageKey := fmt.Sprintf("user_%d", userID)
+	if mapping, exists := kb.uuidMappings[messageKey]; exists {
+		if data, found := mapping[uuid]; found {
+			return data, true
 		}
-
-		// Create button
-		button := tgbotapi.NewInlineKeyboardButtonData(text, callbackStr)
-
-		// Add as single-button row
-		rows = append(rows, []tgbotapi.InlineKeyboardButton{button})
 	}
+	return nil, false
+}
 
-	// Return proper inline keyboard markup
-	return tgbotapi.NewInlineKeyboardMarkup(rows...), nil
+// cleanupMappings removes UUID mappings for a user (called on flow end or callback handling)
+func (kb *inlineKeyboardBuilder) cleanupMappings(userID int64) {
+	messageKey := fmt.Sprintf("user_%d", userID)
+	delete(kb.uuidMappings, messageKey)
 }
