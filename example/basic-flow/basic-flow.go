@@ -103,9 +103,9 @@ func main() {
 				age, _ := ctx.GetFlowData("user_age")
 				return fmt.Sprintf("Great! So your name is %s and you're %s years old. Is this correct?", name, age)
 			}).
-		WithInlineKeyboard(
-			func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-				return teleflow.NewInlineKeyboard().
+		WithPromptKeyboard(
+			func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+				return teleflow.NewPromptKeyboard().
 					ButtonCallback("✅ Yes, that's correct", "confirm").
 					ButtonCallback("❌ No, let me try again", "restart")
 			},
@@ -159,7 +159,6 @@ func main() {
 	bot.HandleCommand("demo", func(ctx *teleflow.Context, command string, args string) error {
 		return ctx.SendPrompt(&teleflow.PromptConfig{
 			Message: "📸 TeleFlow Photo Demo\n\nThis showcases different image capabilities:\n• Static URLs\n• Dynamic images based on context\n• Placeholder images for testing\n• Images with text and keyboards",
-			Image:   "https://via.placeholder.com/600x400/673AB7/white?text=TeleFlow+Photo+Demo",
 		})
 	})
 
@@ -167,7 +166,6 @@ func main() {
 	bot.HandleCommand("help", func(ctx *teleflow.Context, command string, args string) error {
 		return ctx.SendPrompt(&teleflow.PromptConfig{
 			Message: "🤖 TeleFlow Bot Commands:\n\n/start - Begin user registration flow\n/register - Alternative registration command\n/demo - Photo capabilities demo\n/cancel - Cancel current flow\n/help - Show this help",
-			Image:   "https://via.placeholder.com/500x250/2196F3/white?text=Help+Menu",
 		})
 	})
 	if err := bot.AddTemplate("not_understood", `❓ I didn't understand '{{.Input}}'`, teleflow.ParseModeMarkdownV2); err != nil {

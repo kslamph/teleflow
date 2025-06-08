@@ -33,7 +33,7 @@ import (
 // callback data conflicts and provide secure callback handling. Original
 // callback data is preserved in the UUID mapping for retrieval.
 
-// InlineKeyboardBuilder provides a fluent API for building inline keyboards with automatic UUID management.
+// PromptKeyboardBuilder provides a fluent API for building inline keyboards with automatic UUID management.
 //
 // This builder creates inline keyboards that appear directly below messages in Telegram.
 // It automatically generates UUID-based callback data to ensure uniqueness and security,
@@ -56,13 +56,13 @@ import (
 //
 //	keyboard := builder.Build()
 //	uuidMap := builder.GetUUIDMapping()
-type InlineKeyboardBuilder struct {
+type PromptKeyboardBuilder struct {
 	rows        [][]tgbotapi.InlineKeyboardButton // Completed rows of buttons
 	currentRow  []tgbotapi.InlineKeyboardButton   // Current row being built
 	uuidMapping map[string]interface{}            // Maps generated UUIDs to original callback data
 }
 
-// NewInlineKeyboard creates a new inline keyboard builder instance.
+// NewPromptKeyboard creates a new inline keyboard builder instance.
 //
 // This constructor initializes an empty keyboard builder with no buttons or rows.
 // The builder uses fluent method chaining to construct the keyboard layout.
@@ -71,11 +71,11 @@ type InlineKeyboardBuilder struct {
 //
 // Example:
 //
-//	builder := NewInlineKeyboard().
+//	builder := NewPromptKeyboard().
 //		ButtonCallback("Option 1", "opt1").
 //		ButtonCallback("Option 2", "opt2")
-func NewInlineKeyboard() *InlineKeyboardBuilder {
-	return &InlineKeyboardBuilder{
+func NewPromptKeyboard() *PromptKeyboardBuilder {
+	return &PromptKeyboardBuilder{
 		rows:        make([][]tgbotapi.InlineKeyboardButton, 0),
 		currentRow:  make([]tgbotapi.InlineKeyboardButton, 0),
 		uuidMapping: make(map[string]interface{}),
@@ -98,7 +98,7 @@ func NewInlineKeyboard() *InlineKeyboardBuilder {
 //
 //	builder.ButtonCallback("Approve", "approve_request_123").
 //		ButtonCallback("Reject", map[string]string{"action": "reject", "id": "123"})
-func (kb *InlineKeyboardBuilder) ButtonCallback(text string, data interface{}) *InlineKeyboardBuilder {
+func (kb *PromptKeyboardBuilder) ButtonCallback(text string, data interface{}) *PromptKeyboardBuilder {
 	// Generate UUID for the callback data to ensure uniqueness
 	callbackUUID := uuid.New().String()
 
@@ -128,7 +128,7 @@ func (kb *InlineKeyboardBuilder) ButtonCallback(text string, data interface{}) *
 //
 //	builder.ButtonUrl("Visit Website", "https://example.com").
 //		ButtonUrl("Documentation", "https://docs.example.com")
-func (kb *InlineKeyboardBuilder) ButtonUrl(text string, url string) *InlineKeyboardBuilder {
+func (kb *PromptKeyboardBuilder) ButtonUrl(text string, url string) *PromptKeyboardBuilder {
 	button := tgbotapi.NewInlineKeyboardButtonURL(text, url)
 	kb.currentRow = append(kb.currentRow, button)
 
@@ -153,7 +153,7 @@ func (kb *InlineKeyboardBuilder) ButtonUrl(text string, url string) *InlineKeybo
 //		ButtonCallback("Button 3", "data3")
 //	// Results in: [Button 1 | Button 2]
 //	//            [Button 3]
-func (kb *InlineKeyboardBuilder) Row() *InlineKeyboardBuilder {
+func (kb *PromptKeyboardBuilder) Row() *PromptKeyboardBuilder {
 	if len(kb.currentRow) > 0 {
 		kb.rows = append(kb.rows, kb.currentRow)
 		kb.currentRow = make([]tgbotapi.InlineKeyboardButton, 0)
@@ -179,7 +179,7 @@ func (kb *InlineKeyboardBuilder) Row() *InlineKeyboardBuilder {
 //		ButtonCallback("No", "cancel").
 //		Build()
 //	// Use keyboard with Telegram API
-func (kb *InlineKeyboardBuilder) Build() tgbotapi.InlineKeyboardMarkup {
+func (kb *PromptKeyboardBuilder) Build() tgbotapi.InlineKeyboardMarkup {
 	// Add any remaining buttons in current row to the final keyboard
 	if len(kb.currentRow) > 0 {
 		kb.rows = append(kb.rows, kb.currentRow)
@@ -202,7 +202,7 @@ func (kb *InlineKeyboardBuilder) Build() tgbotapi.InlineKeyboardMarkup {
 //	builder := NewInlineKeyboard().ButtonCallback("Test", "original_data")
 //	mapping := builder.GetUUIDMapping()
 //	// mapping contains: {"generated-uuid": "original_data"}
-func (kb *InlineKeyboardBuilder) GetUUIDMapping() map[string]interface{} {
+func (kb *PromptKeyboardBuilder) GetUUIDMapping() map[string]interface{} {
 	return kb.uuidMapping
 }
 
@@ -220,7 +220,7 @@ func (kb *InlineKeyboardBuilder) GetUUIDMapping() map[string]interface{} {
 //	if err := builder.ValidateBuilder(); err != nil {
 //		// Handle validation error
 //	}
-func (kb *InlineKeyboardBuilder) ValidateBuilder() error {
+func (kb *PromptKeyboardBuilder) ValidateBuilder() error {
 	totalButtons := len(kb.currentRow)
 	for _, row := range kb.rows {
 		totalButtons += len(row)

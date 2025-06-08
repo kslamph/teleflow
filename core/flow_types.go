@@ -107,7 +107,7 @@ type ImageSpec interface{}
 //	    ButtonCallback("Confirm", "confirm").
 //	    ButtonCallback("Cancel", "cancel")
 //	})
-type KeyboardFunc func(ctx *Context) *InlineKeyboardBuilder
+type KeyboardFunc func(ctx *Context) *PromptKeyboardBuilder
 
 // ProcessFunc defines the signature for functions that process user input within a flow step.
 // This is the core processing function that receives user input (text or button clicks),

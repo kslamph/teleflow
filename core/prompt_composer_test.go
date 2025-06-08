@@ -323,8 +323,8 @@ func TestPromptComposer_ComposeAndSend_KeyboardOnlyMessage(t *testing.T) {
 	}
 
 	ctx := createTestContext()
-	keyboardFunc := func(ctx *Context) *InlineKeyboardBuilder {
-		return NewInlineKeyboard().ButtonCallback("Test", "test_data")
+	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
+		return NewPromptKeyboard().ButtonCallback("Test", "test_data")
 	}
 	promptConfig := &PromptConfig{
 		Keyboard: keyboardFunc,
@@ -374,8 +374,8 @@ func TestPromptComposer_ComposeAndSend_CombinedMessage(t *testing.T) {
 	}
 
 	ctx := createTestContext()
-	keyboardFunc := func(ctx *Context) *InlineKeyboardBuilder {
-		return NewInlineKeyboard().ButtonCallback("Test", "test_data")
+	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
+		return NewPromptKeyboard().ButtonCallback("Test", "test_data")
 	}
 	promptConfig := &PromptConfig{
 		Message:  "*Bold Text*",
@@ -477,8 +477,8 @@ func TestPromptComposer_ComposeAndSend_KeyboardBuildingError(t *testing.T) {
 	}
 
 	ctx := createTestContext()
-	keyboardFunc := func(ctx *Context) *InlineKeyboardBuilder {
-		return NewInlineKeyboard()
+	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
+		return NewPromptKeyboard()
 	}
 	promptConfig := &PromptConfig{
 		Keyboard: keyboardFunc,
@@ -527,8 +527,8 @@ func TestPromptComposer_ValidatePromptConfig(t *testing.T) {
 		{
 			name: "Keyboard only",
 			config: &PromptConfig{
-				Keyboard: func(ctx *Context) *InlineKeyboardBuilder {
-					return NewInlineKeyboard()
+				Keyboard: func(ctx *Context) *PromptKeyboardBuilder {
+					return NewPromptKeyboard()
 				},
 			},
 			expectError: false,

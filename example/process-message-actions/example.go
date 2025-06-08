@@ -23,8 +23,8 @@ func main() {
 		OnProcessDeleteKeyboard(). // All button clicks will delete previous messages
 		Step("menu").
 		Prompt("Choose an option:").
-		WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-			return teleflow.NewInlineKeyboard().
+		WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+			return teleflow.NewPromptKeyboard().
 				ButtonCallback("🔄 Refresh", "refresh").
 				Row().
 				ButtonCallback("📊 Stats", "stats").
@@ -49,8 +49,8 @@ func main() {
 		}).
 		Step("stats").
 		Prompt("📊 Here are your stats. What would you like to do?").
-		WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-			return teleflow.NewInlineKeyboard().
+		WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+			return teleflow.NewPromptKeyboard().
 				ButtonCallback("🔙 Back to Menu", "back").
 				ButtonCallback("✅ Done", "done")
 		}).
@@ -67,8 +67,8 @@ func main() {
 		}).
 		Step("settings").
 		Prompt("⚙️ Settings panel. Configure your preferences:").
-		WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-			return teleflow.NewInlineKeyboard().
+		WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+			return teleflow.NewPromptKeyboard().
 				ButtonCallback("🔙 Back to Menu", "back").
 				ButtonCallback("✅ Save & Exit", "save")
 		}).
@@ -97,8 +97,8 @@ func main() {
 		OnProcessDeleteKeyboard(). // Button clicks will remove keyboards from previous messages
 		Step("welcome").
 		Prompt("Welcome! This flow will disable previous keyboards when you click buttons.").
-		WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-			return teleflow.NewInlineKeyboard().
+		WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+			return teleflow.NewPromptKeyboard().
 				ButtonCallback("➡️ Continue", "continue").
 				ButtonCallback("❌ Cancel", "cancel")
 		}).
@@ -115,8 +115,8 @@ func main() {
 		}).
 		Step("confirm").
 		Prompt("Are you sure you want to proceed?").
-		WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-			return teleflow.NewInlineKeyboard().
+		WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+			return teleflow.NewPromptKeyboard().
 				ButtonCallback("✅ Yes, proceed", "yes").
 				ButtonCallback("🔙 Go back", "back")
 		}).
@@ -145,8 +145,8 @@ func main() {
 		// No OnProcessDelete* methods called - default behavior keeps messages untouched
 		Step("demo").
 		Prompt("This flow keeps all messages and keyboards intact. Try scrolling back and clicking old buttons!").
-		WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-			return teleflow.NewInlineKeyboard().
+		WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+			return teleflow.NewPromptKeyboard().
 				ButtonCallback("🔄 Refresh (keeps old keyboards)", "refresh").
 				ButtonCallback("✅ Finish", "finish")
 		}).

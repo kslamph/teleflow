@@ -21,6 +21,7 @@ The `teleflow/core` package is the heart of the Teleflow framework, providing th
 *   **Access Control**: Built-in permission system with automatic UI management for unauthorized users.
 *   **Error Handling**: Comprehensive error handling with configurable strategies (cancel, retry, ignore) for flow steps.
 *   **Menu Button Integration**: Support for bot menu buttons with web app and command configurations.
+*   **Main Menu Keyboards**: Persistent reply keyboards that appear below the chat input box for quick user actions.
 
 ## Architecture Highlights
 

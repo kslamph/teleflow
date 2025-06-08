@@ -11,8 +11,8 @@ func TestPromptKeyboardHandler_BuildKeyboard_ValidKeyboardFunc(t *testing.T) {
 	ctx := createTestContext()
 
 	// Create a keyboard function that returns a valid builder
-	keyboardFunc := func(ctx *Context) *InlineKeyboardBuilder {
-		return NewInlineKeyboard().
+	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
+		return NewPromptKeyboard().
 			ButtonCallback("Button 1", "data1").
 			ButtonCallback("Button 2", "data2").
 			Row().
@@ -103,7 +103,7 @@ func TestPromptKeyboardHandler_BuildKeyboard_KeyboardFuncReturnsNil(t *testing.T
 	ctx := createTestContext()
 
 	// Create a keyboard function that returns nil
-	keyboardFunc := func(ctx *Context) *InlineKeyboardBuilder {
+	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
 		return nil
 	}
 
@@ -131,8 +131,8 @@ func TestPromptKeyboardHandler_BuildKeyboard_InvalidKeyboard(t *testing.T) {
 	ctx := createTestContext()
 
 	// Create a keyboard function that returns an empty keyboard (invalid)
-	keyboardFunc := func(ctx *Context) *InlineKeyboardBuilder {
-		return NewInlineKeyboard() // Empty keyboard, no buttons
+	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
+		return NewPromptKeyboard() // Empty keyboard, no buttons
 	}
 
 	// Execute
@@ -160,8 +160,8 @@ func TestPromptKeyboardHandler_GetCallbackData_ExistingUUID(t *testing.T) {
 	userID := ctx.UserID()
 
 	// First, build a keyboard to create UUID mappings
-	keyboardFunc := func(ctx *Context) *InlineKeyboardBuilder {
-		return NewInlineKeyboard().
+	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
+		return NewPromptKeyboard().
 			ButtonCallback("Test Button", "test_data").
 			ButtonCallback("Another Button", map[string]string{"key": "value"})
 	}
@@ -219,8 +219,8 @@ func TestPromptKeyboardHandler_GetCallbackData_NonExistingUser(t *testing.T) {
 	ctx := createTestContext()
 
 	// First, build a keyboard for one user
-	keyboardFunc := func(ctx *Context) *InlineKeyboardBuilder {
-		return NewInlineKeyboard().ButtonCallback("Test", "data")
+	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
+		return NewPromptKeyboard().ButtonCallback("Test", "data")
 	}
 
 	result, err := handler.BuildKeyboard(ctx, keyboardFunc)
@@ -251,8 +251,8 @@ func TestPromptKeyboardHandler_CleanupUserMappings(t *testing.T) {
 	userID := ctx.UserID()
 
 	// First, build a keyboard to create UUID mappings
-	keyboardFunc := func(ctx *Context) *InlineKeyboardBuilder {
-		return NewInlineKeyboard().
+	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
+		return NewPromptKeyboard().
 			ButtonCallback("Button 1", "data1").
 			ButtonCallback("Button 2", "data2")
 	}
@@ -314,11 +314,11 @@ func TestPromptKeyboardHandler_MultipleUsers(t *testing.T) {
 	ctx2 := NewContext(&Bot{}, update2)
 
 	// Build keyboards for both users
-	keyboardFunc1 := func(ctx *Context) *InlineKeyboardBuilder {
-		return NewInlineKeyboard().ButtonCallback("User1 Button", "user1_data")
+	keyboardFunc1 := func(ctx *Context) *PromptKeyboardBuilder {
+		return NewPromptKeyboard().ButtonCallback("User1 Button", "user1_data")
 	}
-	keyboardFunc2 := func(ctx *Context) *InlineKeyboardBuilder {
-		return NewInlineKeyboard().ButtonCallback("User2 Button", "user2_data")
+	keyboardFunc2 := func(ctx *Context) *PromptKeyboardBuilder {
+		return NewPromptKeyboard().ButtonCallback("User2 Button", "user2_data")
 	}
 
 	result1, err1 := handler.BuildKeyboard(ctx1, keyboardFunc1)

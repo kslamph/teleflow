@@ -84,35 +84,6 @@ type ReplyKeyboard struct {
 	Selective             bool                    `json:"selective,omitempty"`               // Show keyboard only to mentioned users
 }
 
-// InlineKeyboardButton represents a single button in an inline keyboard.
-//
-// Inline keyboard buttons appear directly below messages and support various
-// interaction types including callbacks, URLs, and inline query switching.
-type InlineKeyboardButton struct {
-	Text                         string `json:"text"`                                       // Button text displayed to user
-	URL                          string `json:"url,omitempty"`                              // URL to open when pressed
-	CallbackData                 string `json:"callback_data,omitempty"`                    // Data sent in callback query
-	SwitchInlineQuery            string `json:"switch_inline_query,omitempty"`              // Switch to inline mode in any chat
-	SwitchInlineQueryCurrentChat string `json:"switch_inline_query_current_chat,omitempty"` // Switch to inline mode in current chat
-}
-
-// InlineKeyboard represents an inline keyboard with buttons arranged in rows.
-//
-// Inline keyboards appear directly below messages and provide interactive
-// elements without cluttering the input area. They're ideal for quick actions,
-// confirmations, and navigation within conversations.
-//
-// Use InlineKeyboardBuilder for construction:
-//
-//	keyboard := NewInlineKeyboard().
-//		ButtonCallback("Approve", "approve_data").
-//		ButtonCallback("Reject", "reject_data").
-//		Row().
-//		ButtonUrl("Learn More", "https://example.com")
-type InlineKeyboard struct {
-	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"` // 2D array of inline keyboard buttons
-}
-
 // BuildMenuButton is DEPRECATED and has been removed.
 //
 // MIGRATION: Use Bot.SetBotCommands() for command management or
@@ -286,56 +257,5 @@ func (kb *ReplyKeyboard) ToTgbotapi() tgbotapi.ReplyKeyboardMarkup {
 		OneTimeKeyboard:       kb.OneTimeKeyboard,
 		InputFieldPlaceholder: kb.InputFieldPlaceholder,
 		Selective:             kb.Selective,
-	}
-}
-
-// ToTgbotapi converts the InlineKeyboard to the telegram-bot-api library format.
-//
-// This conversion function transforms the internal InlineKeyboard representation
-// into the format expected by the telegram-bot-api library for sending to Telegram.
-// All button properties including callback data, URLs, and inline query settings
-// are preserved during conversion.
-//
-// Returns a tgbotapi.InlineKeyboardMarkup ready for use with telegram-bot-api methods.
-//
-// Example:
-//
-//	keyboard := &InlineKeyboard{
-//		InlineKeyboard: [][]InlineKeyboardButton{
-//			{{Text: "Button 1", CallbackData: "data1"}},
-//		},
-//	}
-//	tgKeyboard := keyboard.ToTgbotapi()
-//	// Use tgKeyboard with telegram-bot-api functions
-func (kb *InlineKeyboard) ToTgbotapi() tgbotapi.InlineKeyboardMarkup {
-	// Convert internal button format to telegram-bot-api format
-	var keyboard [][]tgbotapi.InlineKeyboardButton
-	for _, row := range kb.InlineKeyboard {
-		var tgRow []tgbotapi.InlineKeyboardButton
-		for _, btn := range row {
-			tgBtn := tgbotapi.InlineKeyboardButton{
-				Text: btn.Text,
-			}
-
-			// Set optional fields as pointers (telegram-bot-api requirement)
-			if btn.URL != "" {
-				tgBtn.URL = &btn.URL
-			}
-			if btn.CallbackData != "" {
-				tgBtn.CallbackData = &btn.CallbackData
-			}
-			if btn.SwitchInlineQuery != "" {
-				tgBtn.SwitchInlineQuery = &btn.SwitchInlineQuery
-			}
-			if btn.SwitchInlineQueryCurrentChat != "" {
-				tgBtn.SwitchInlineQueryCurrentChat = &btn.SwitchInlineQueryCurrentChat
-			}
-			tgRow = append(tgRow, tgBtn)
-		}
-		keyboard = append(keyboard, tgRow)
-	}
-
-	return tgbotapi.InlineKeyboardMarkup{
-		InlineKeyboard: keyboard,
 	}
 }

@@ -211,8 +211,8 @@ func TestIntegrationP1P3FlowComponents(t *testing.T) {
 		keyboardFlow, err := teleflow.NewFlow("keyboard_flow").
 			Step("choice").
 			Prompt("Choose an option:").
-			WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-				return teleflow.NewInlineKeyboard().
+			WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+				return teleflow.NewPromptKeyboard().
 					ButtonCallback("Option A", "a").
 					ButtonCallback("Option B", "b")
 			}).
@@ -376,7 +376,7 @@ func TestIntegrationP1P3PromptKeyboardHandler(t *testing.T) {
 		}
 
 		// Test keyboard function that returns nil
-		nilKeyboardFunc := func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
+		nilKeyboardFunc := func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
 			return nil
 		}
 		result2, err := handler.BuildKeyboard(ctx, nilKeyboardFunc)
@@ -388,8 +388,8 @@ func TestIntegrationP1P3PromptKeyboardHandler(t *testing.T) {
 		}
 
 		// Test valid keyboard function
-		validKeyboardFunc := func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-			return teleflow.NewInlineKeyboard().
+		validKeyboardFunc := func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+			return teleflow.NewPromptKeyboard().
 				ButtonCallback("Test Button", "test_data")
 		}
 
@@ -430,7 +430,7 @@ func TestIntegrationP1P3PromptKeyboardHandler(t *testing.T) {
 
 	t.Run("InlineKeyboardBuilderValidation", func(t *testing.T) {
 		// Test keyboard builder validation
-		builder := teleflow.NewInlineKeyboard()
+		builder := teleflow.NewPromptKeyboard()
 
 		// Empty keyboard should fail validation
 		err := builder.ValidateBuilder()

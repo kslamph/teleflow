@@ -113,7 +113,7 @@ func TestKeyboardBuilderNilHandling(t *testing.T) {
 	}
 
 	// Test with keyboard function that returns nil
-	nilKeyboardFunc := func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
+	nilKeyboardFunc := func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
 		return nil
 	}
 	result2, err := handler.BuildKeyboard(ctx, nilKeyboardFunc)

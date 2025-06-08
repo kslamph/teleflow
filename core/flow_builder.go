@@ -325,7 +325,7 @@ func (pb *PromptBuilder) WithImage(image ImageSpec) *PromptBuilder {
 	return pb
 }
 
-// WithInlineKeyboard adds an interactive inline keyboard to the prompt.
+// WithPromptKeyboard adds an interactive inline keyboard to the prompt.
 // The keyboard function receives the current context and returns an InlineKeyboardBuilder
 // for creating buttons with callbacks, URLs, and other interactive elements.
 //
@@ -337,12 +337,12 @@ func (pb *PromptBuilder) WithImage(image ImageSpec) *PromptBuilder {
 //
 // Example:
 //
-//	step.Prompt("Choose option:").WithInlineKeyboard(func(ctx *Context) *InlineKeyboardBuilder {
+//	step.Prompt("Choose option:").WithPromptKeyboard(func(ctx *Context) *InlineKeyboardBuilder {
 //	  return NewInlineKeyboard().
 //	    ButtonCallback("Option A", "choice_a").
 //	    ButtonCallback("Option B", "choice_b")
 //	})
-func (pb *PromptBuilder) WithInlineKeyboard(keyboard KeyboardFunc) *PromptBuilder {
+func (pb *PromptBuilder) WithPromptKeyboard(keyboard KeyboardFunc) *PromptBuilder {
 	pb.promptConfig.Keyboard = keyboard
 	return pb
 }

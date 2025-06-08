@@ -83,6 +83,37 @@ func main() {
    go run main.go
    ```
 
+## Main Menu Keyboard Setup
+
+Add a persistent keyboard below the chat input box for quick user actions:
+
+```go
+// Create keyboard with action buttons
+mainMenuKeyboard := core.BuildReplyKeyboard([]string{"📝 Register", "🏠 Home", "⚙️ Settings", "❓ Help"}, 3).Resize()
+
+// Implement AccessManager for keyboard management
+type MyAccessManager struct {
+	mainMenu *core.ReplyKeyboard
+}
+
+func (m *MyAccessManager) CheckPermission(ctx *core.PermissionContext) error {
+	return nil // Allow all actions
+}
+
+func (m *MyAccessManager) GetReplyKeyboard(ctx *core.PermissionContext) *core.ReplyKeyboard {
+	return m.mainMenu
+}
+
+// Create bot with AccessManager
+accessManager := &MyAccessManager{mainMenu: mainMenuKeyboard}
+bot, err := core.NewBot(token, core.WithAccessManager(accessManager))
+
+// Handle keyboard button presses
+bot.HandleText("📝 Register", func(ctx *core.Context, text string) error {
+	return ctx.StartFlow("user_registration")
+})
+```
+
 ## Conversation Flows: Registration Bot
 
 Now let's create a more sophisticated bot using Teleflow's powerful Step-Prompt-Process API for conversation flows:
@@ -131,14 +162,14 @@ func main() {
 			}
 			
 			// Store the name for later use
-			ctx.Set("user_name", input)
+			ctx.SetFlowData("user_name", input)
 			return core.NextStep().WithPrompt("✅ Nice to meet you, " + input + "!")
 		}).
 		
 		// Step 2: Ask for age
 		Step("age").
 		Prompt(func(ctx *core.Context) string {
-			name, _ := ctx.Get("user_name")
+			name, _ := ctx.GetFlowData("user_name")
 			return fmt.Sprintf("How old are you, %s?", name)
 		}).
 		Process(func(ctx *core.Context, input string, buttonClick *core.ButtonClick) core.ProcessResult {
@@ -147,15 +178,15 @@ func main() {
 				return core.Retry().WithPrompt("Please enter a valid age (1-3 digits):")
 			}
 			
-			ctx.Set("user_age", input)
+			ctx.SetFlowData("user_age", input)
 			return core.NextStep().WithPrompt("✅ Age recorded!")
 		}).
 		
 		// Step 3: Confirmation with inline keyboard
 		Step("confirmation").
 		Prompt(func(ctx *core.Context) string {
-			name, _ := ctx.Get("user_name")
-			age, _ := ctx.Get("user_age")
+			name, _ := ctx.GetFlowData("user_name")
+			age, _ := ctx.GetFlowData("user_age")
 			return fmt.Sprintf("Please confirm:\n👤 Name: %s\n🎂 Age: %s\n\nIs this correct?", name, age)
 		}).
 		WithInlineKeyboard(func(ctx *core.Context) *core.InlineKeyboardBuilder {
@@ -176,8 +207,8 @@ func main() {
 		
 		// Handle flow completion
 		OnComplete(func(ctx *core.Context) error {
-			name, _ := ctx.Get("user_name")
-			age, _ := ctx.Get("user_age")
+			name, _ := ctx.GetFlowData("user_name")
+			age, _ := ctx.GetFlowData("user_age")
 			
 			message := fmt.Sprintf("🎉 Welcome to our service!\n\n👤 Name: %s\n🎂 Age: %s\n\nYou're all set!", name, age)
 			return ctx.SendPromptText(message)
@@ -259,8 +290,8 @@ Within process functions, you can:
 - [`CompleteFlow()`](core/flow_types.go): Finish the conversation
 
 ### 6. Data Storage
-- [`ctx.Set("key", value)`](core/context.go): Store data for the current step
-- [`ctx.Get("key")`](core/context.go): Retrieve stored data
+- [`ctx.SetFlowData("key", value)`](core/context.go): Store data for the current step
+- [`ctx.GetFlowData("key")`](core/context.go): Retrieve stored data
 - Data persists throughout the entire flow
 
 ## Environment Setup

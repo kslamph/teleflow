@@ -532,8 +532,8 @@ func TestTemplateSystemIntegration(t *testing.T) {
 		Step("welcome").
 		Prompt("template:welcome").
 		WithTemplateData(map[string]interface{}{"Name": "New User"}).
-		WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-			return teleflow.NewInlineKeyboard().
+		WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+			return teleflow.NewPromptKeyboard().
 				ButtonCallback("Continue", "continue_onboarding").
 				ButtonCallback("Skip", "skip_onboarding")
 		}).

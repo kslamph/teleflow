@@ -158,7 +158,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 		OnProcessDeleteMessage(). // Delete previous messages on button clicks
 		Step("start").
 		Prompt("template:main_menu").
-		WithInlineKeyboard(func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
+		WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
 			// Demonstrate complex callback data - can be any interface{}
 			basicData := map[string]interface{}{
 				"type":      "template_demo",
@@ -178,7 +178,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 				Language: "go",
 			}
 
-			return teleflow.NewInlineKeyboard().
+			return teleflow.NewPromptKeyboard().
 				ButtonCallback("📝 Basic Formatting", basicData).
 				ButtonCallback("💻 Code Examples", codeData).
 				Row().
@@ -238,7 +238,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 		// Basic formatting example
 		Step("show_basic").
 		Prompt("template:basic_formatting").
-		WithInlineKeyboard(getBackButton()).
+		WithPromptKeyboard(getBackButton()).
 		Process(handleBackButton).
 
 		// Code example
@@ -247,7 +247,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 		WithTemplateData(map[string]interface{}{
 			"Name": "World",
 		}).
-		WithInlineKeyboard(getBackButton()).
+		WithPromptKeyboard(getBackButton()).
 		Process(handleBackButton).
 
 		// Links example
@@ -256,7 +256,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 		WithTemplateData(map[string]interface{}{
 			"UserID": "123456789",
 		}).
-		WithInlineKeyboard(getBackButton()).
+		WithPromptKeyboard(getBackButton()).
 		Process(handleBackButton).
 
 		// Lists example
@@ -270,7 +270,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 				{"Index": "4", "Name": "Backwards compatibility"},
 			},
 		}).
-		WithInlineKeyboard(getBackButton()).
+		WithPromptKeyboard(getBackButton()).
 		Process(handleBackButton).
 		// Spoilers example
 		Step("show_spoilers").
@@ -278,7 +278,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 		WithTemplateData(map[string]interface{}{
 			"Secret": "Templates are awesome\\!",
 		}).
-		WithInlineKeyboard(getBackButton()).
+		WithPromptKeyboard(getBackButton()).
 		Process(handleBackButton).
 
 		// User profile example
@@ -297,7 +297,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 				{"Index": "3", "Activity": "Added new features"},
 			},
 		}).
-		WithInlineKeyboard(getBackButton()).
+		WithPromptKeyboard(getBackButton()).
 		Process(handleBackButton).
 		// Notification example
 		Step("show_notification").
@@ -310,7 +310,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 			"ActionRequired": true,
 			"Action":         "Review the implementation and test all features",
 		}).
-		WithInlineKeyboard(getBackButton()).
+		WithPromptKeyboard(getBackButton()).
 		Process(handleBackButton).
 
 		// Product showcase example
@@ -332,14 +332,14 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 			"PurchaseLink": "https://example.com/buy",
 			"InfoLink":     "https://example.com/info",
 		}).
-		WithInlineKeyboard(getBackButton()).
+		WithPromptKeyboard(getBackButton()).
 		Process(handleBackButton).
 		Build()
 }
 
-func getBackButton() func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-	return func(ctx *teleflow.Context) *teleflow.InlineKeyboardBuilder {
-		return teleflow.NewInlineKeyboard().
+func getBackButton() func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+	return func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
+		return teleflow.NewPromptKeyboard().
 			ButtonCallback("🔙 Back to Menu", "back")
 	}
 }
