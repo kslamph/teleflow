@@ -66,18 +66,16 @@ type FlowConfig struct {
 }
 
 type flowManager struct {
-	flows        map[string]*Flow
-	userFlows    map[int64]*userFlowState
-	stateManager StateManager
-	botConfig    *FlowConfig
-	bot          *Bot
+	flows     map[string]*Flow
+	userFlows map[int64]*userFlowState
+	botConfig *FlowConfig
+	bot       *Bot
 }
 
-func newFlowManager(stateManager StateManager) *flowManager {
+func newFlowManager() *flowManager {
 	return &flowManager{
-		flows:        make(map[string]*Flow),
-		userFlows:    make(map[int64]*userFlowState),
-		stateManager: stateManager,
+		flows:     make(map[string]*Flow),
+		userFlows: make(map[int64]*userFlowState),
 	}
 }
 

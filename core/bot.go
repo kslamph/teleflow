@@ -41,7 +41,6 @@ type Bot struct {
 	textHandlers       map[string]HandlerFunc
 	defaultTextHandler HandlerFunc
 
-	stateManager          StateManager
 	flowManager           *flowManager
 	promptKeyboardHandler *PromptKeyboardHandler
 	promptComposer        *PromptComposer
@@ -58,12 +57,10 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		return nil, err
 	}
 	b := &Bot{
-		api:          api,
-		handlers:     make(map[string]HandlerFunc),
-		textHandlers: make(map[string]HandlerFunc),
-
-		stateManager:          NewInMemoryStateManager(),
-		flowManager:           newFlowManager(NewInMemoryStateManager()),
+		api:                   api,
+		handlers:              make(map[string]HandlerFunc),
+		textHandlers:          make(map[string]HandlerFunc),
+		flowManager:           newFlowManager(),
 		promptKeyboardHandler: newPromptKeyboardHandler(),
 		middleware:            make([]MiddlewareFunc, 0),
 		flowConfig: FlowConfig{
