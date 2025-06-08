@@ -75,6 +75,7 @@ func main() {
 
 			// Store the name
 			ctx.SetFlowData("user_name", input)
+
 			return teleflow.NextStep().WithPrompt("✅ Name saved! Moving to the next step...")
 		}).
 		Step("age").
@@ -132,7 +133,6 @@ func main() {
 			age, _ := ctx.GetFlowData("user_age")
 
 			// Use SendPrompt with a celebration image
-			log.Println("Registration complete for user:", name, "Age:", age)
 			return ctx.SendPrompt(&teleflow.PromptConfig{
 				Message: fmt.Sprintf("🎉 Registration complete!\nName: %s\nAge: %s\n\nWelcome to our service!", name, age),
 			})

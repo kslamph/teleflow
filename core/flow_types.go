@@ -38,11 +38,10 @@ type FlowBuilder struct {
 // It accumulates step configuration including prompt specification, processing logic,
 // and completion handlers before being converted to a flowStep.
 type StepBuilder struct {
-	name         string               // Unique step identifier within the flow
-	promptConfig *PromptConfig        // Declarative prompt configuration (message, image, keyboard)
-	processFunc  ProcessFunc          // Function to process user input and determine next action
-	onComplete   func(*Context) error // Optional step-specific completion handler
-	flowBuilder  *FlowBuilder         // Reference to parent flow builder for fluent chaining
+	name         string        // Unique step identifier within the flow
+	promptConfig *PromptConfig // Declarative prompt configuration (message, image, keyboard)
+	processFunc  ProcessFunc   // Function to process user input and determine next action
+	flowBuilder  *FlowBuilder  // Reference to parent flow builder for fluent chaining
 }
 
 // PromptConfig represents the complete declarative specification for a step's prompt.

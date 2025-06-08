@@ -236,8 +236,6 @@ func (fb *FlowBuilder) Build() (*Flow, error) {
 			Name:         stepBuilder.name,
 			PromptConfig: stepBuilder.promptConfig,
 			ProcessFunc:  stepBuilder.processFunc,
-			OnComplete:   stepBuilder.onComplete,
-			Timeout:      5 * time.Minute, // Default step timeout
 		}
 
 		flow.Steps[stepName] = flowStep
@@ -374,27 +372,6 @@ func (pb *PromptBuilder) Process(processFunc ProcessFunc) *StepBuilder {
 	return pb.stepBuilder
 }
 
-// OnComplete sets a completion handler for this specific step.
-// This handler is executed after the step's ProcessFunc completes successfully and before
-// proceeding to the next step. It can be used for step-specific cleanup, validation, or side effects.
-//
-// Parameters:
-//   - handler: Function to execute after successful step completion
-//
-// Returns:
-//   - *StepBuilder: The same builder for method chaining
-//
-// Example:
-//
-//	step.OnComplete(func(ctx *Context) error {
-//	  log.Printf("User %d completed step: %s", ctx.UserID(), stepName)
-//	  return nil
-//	})
-func (sb *StepBuilder) OnComplete(handler func(*Context) error) *StepBuilder {
-	sb.onComplete = handler
-	return sb
-}
-
 // Step continues building the flow by adding a new step with the specified name.
 // This enables fluent chaining where you can define multiple steps in sequence.
 // The method delegates to the parent FlowBuilder to maintain the step order.
@@ -413,7 +390,7 @@ func (sb *StepBuilder) Step(name string) *StepBuilder {
 	return sb.flowBuilder.Step(name)
 }
 
-// OnFlowComplete sets the completion handler for the entire flow.
+// OnComplete sets the completion handler for the entire flow.
 // This is a convenience method that allows setting the flow completion handler
 // from within a step builder chain, maintaining the fluent interface.
 //
@@ -426,10 +403,10 @@ func (sb *StepBuilder) Step(name string) *StepBuilder {
 // Example:
 //
 //	flow.Step("final").Prompt("Done!").Process(handleFinal).
-//	     OnFlowComplete(func(ctx *Context) error {
+//	     OnComplete(func(ctx *Context) error {
 //	       return ctx.Reply("Flow completed successfully!")
 //	     })
-func (sb *StepBuilder) OnFlowComplete(handler func(*Context) error) *FlowBuilder {
+func (sb *StepBuilder) OnComplete(handler func(*Context) error) *FlowBuilder {
 	return sb.flowBuilder.OnComplete(handler)
 }
 

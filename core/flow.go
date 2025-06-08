@@ -218,11 +218,9 @@ type Flow struct {
 // Each step defines what the user sees (prompt), how input is processed (function), and optional
 // completion handling. Steps are executed sequentially according to the flow's Order.
 type flowStep struct {
-	Name         string               // Unique step identifier within the flow
-	PromptConfig *PromptConfig        // Declarative specification of what to display (message, image, keyboard)
-	ProcessFunc  ProcessFunc          // Function that processes user input and determines next action
-	OnComplete   func(*Context) error // Optional handler executed after successful step processing
-	Timeout      time.Duration        // Maximum time to wait for user input before timeout
+	Name         string        // Unique step identifier within the flow
+	PromptConfig *PromptConfig // Declarative specification of what to display (message, image, keyboard)
+	ProcessFunc  ProcessFunc   // Function that processes user input and determines next action
 }
 
 // userFlowState tracks an individual user's current position and data within an active flow.
@@ -566,6 +564,9 @@ func (fm *flowManager) completeFlow(ctx *Context, flow *Flow) (bool, error) {
 			}
 			return true, err
 		}
+	} else {
+		log.Printf("[FLOW_COMPLETE] Flow %s called for user %d without completion handler", flow.Name, ctx.UserID())
+		return true, fmt.Errorf("no completion handler defined for flow %s", flow.Name)
 	}
 
 	// Clean up UUID mappings when flow completes
