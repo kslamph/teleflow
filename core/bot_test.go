@@ -7,7 +7,6 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// TestableBotAPI extends TestBotAPI to track Request calls specifically for SetBotCommands
 type TestableBotAPI struct {
 	*TestBotAPI
 	RequestFunc  func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error)
@@ -29,7 +28,6 @@ func (t *TestableBotAPI) Request(c tgbotapi.Chattable) (*tgbotapi.APIResponse, e
 	return &tgbotapi.APIResponse{Ok: true}, nil
 }
 
-// TestableBot extends Bot to allow dependency injection for testing
 type TestableBot struct {
 	api *TestableBotAPI
 }
@@ -46,7 +44,7 @@ func (tb *TestableBot) SetBotCommands(commands map[string]string) error {
 	}
 
 	if len(commands) == 0 {
-		// To clear commands, send an empty list
+
 		clearCmdCfg := tgbotapi.NewSetMyCommands()
 		_, err := tb.api.Request(clearCmdCfg)
 		if err != nil {
@@ -68,7 +66,7 @@ func (tb *TestableBot) SetBotCommands(commands map[string]string) error {
 }
 
 func TestBot_SetBotCommands_NewCommands(t *testing.T) {
-	// Setup
+
 	api := NewTestableBotAPI()
 	bot := NewTestableBot(api)
 
@@ -78,26 +76,21 @@ func TestBot_SetBotCommands_NewCommands(t *testing.T) {
 		"about": "About this bot",
 	}
 
-	// Execute
 	err := bot.SetBotCommands(commands)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Check that Request was called
 	if len(api.RequestCalls) != 1 {
 		t.Errorf("Expected 1 Request call, got %d", len(api.RequestCalls))
 	}
 
-	// Verify the SetMyCommandsConfig was sent
 	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
 		if len(cmdConfig.Commands) != 3 {
 			t.Errorf("Expected 3 commands, got %d", len(cmdConfig.Commands))
 		}
 
-		// Verify commands are present (order may vary due to map iteration)
 		expectedCommands := map[string]string{
 			"start": "Start the bot",
 			"help":  "Show help information",
@@ -120,7 +113,7 @@ func TestBot_SetBotCommands_NewCommands(t *testing.T) {
 }
 
 func TestBot_SetBotCommands_SingleCommand(t *testing.T) {
-	// Setup
+
 	api := NewTestableBotAPI()
 	bot := NewTestableBot(api)
 
@@ -128,15 +121,12 @@ func TestBot_SetBotCommands_SingleCommand(t *testing.T) {
 		"start": "Start the bot",
 	}
 
-	// Execute
 	err := bot.SetBotCommands(commands)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Verify single command was set
 	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
 		if len(cmdConfig.Commands) != 1 {
 			t.Errorf("Expected 1 command, got %d", len(cmdConfig.Commands))
@@ -153,24 +143,20 @@ func TestBot_SetBotCommands_SingleCommand(t *testing.T) {
 }
 
 func TestBot_SetBotCommands_ClearCommands(t *testing.T) {
-	// Setup
+
 	api := NewTestableBotAPI()
 	bot := NewTestableBot(api)
 
-	// Execute with empty commands map
 	err := bot.SetBotCommands(map[string]string{})
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Check that Request was called
 	if len(api.RequestCalls) != 1 {
 		t.Errorf("Expected 1 Request call, got %d", len(api.RequestCalls))
 	}
 
-	// Verify empty SetMyCommandsConfig was sent
 	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
 		if len(cmdConfig.Commands) != 0 {
 			t.Errorf("Expected 0 commands for clearing, got %d", len(cmdConfig.Commands))
@@ -181,24 +167,20 @@ func TestBot_SetBotCommands_ClearCommands(t *testing.T) {
 }
 
 func TestBot_SetBotCommands_NilCommands(t *testing.T) {
-	// Setup
+
 	api := NewTestableBotAPI()
 	bot := NewTestableBot(api)
 
-	// Execute with nil commands map
 	err := bot.SetBotCommands(nil)
 
-	// Verify - nil map should be treated as empty and clear commands
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Check that Request was called
 	if len(api.RequestCalls) != 1 {
 		t.Errorf("Expected 1 Request call, got %d", len(api.RequestCalls))
 	}
 
-	// Verify empty SetMyCommandsConfig was sent
 	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
 		if len(cmdConfig.Commands) != 0 {
 			t.Errorf("Expected 0 commands for nil map, got %d", len(cmdConfig.Commands))
@@ -209,7 +191,7 @@ func TestBot_SetBotCommands_NilCommands(t *testing.T) {
 }
 
 func TestBot_SetBotCommands_APIError(t *testing.T) {
-	// Setup
+
 	api := NewTestableBotAPI()
 	api.RequestFunc = func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error) {
 		return nil, errors.New("API request failed")
@@ -220,10 +202,8 @@ func TestBot_SetBotCommands_APIError(t *testing.T) {
 		"start": "Start the bot",
 	}
 
-	// Execute
 	err := bot.SetBotCommands(commands)
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
@@ -233,17 +213,15 @@ func TestBot_SetBotCommands_APIError(t *testing.T) {
 }
 
 func TestBot_SetBotCommands_ClearCommandsAPIError(t *testing.T) {
-	// Setup
+
 	api := NewTestableBotAPI()
 	api.RequestFunc = func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error) {
 		return nil, errors.New("Clear API request failed")
 	}
 	bot := NewTestableBot(api)
 
-	// Execute with empty commands to trigger clear
 	err := bot.SetBotCommands(map[string]string{})
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
@@ -253,17 +231,15 @@ func TestBot_SetBotCommands_ClearCommandsAPIError(t *testing.T) {
 }
 
 func TestBot_SetBotCommands_NilAPIError(t *testing.T) {
-	// Setup bot with nil API
+
 	bot := NewTestableBot(nil)
 
 	commands := map[string]string{
 		"start": "Start the bot",
 	}
 
-	// Execute
 	err := bot.SetBotCommands(commands)
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error for nil API, got nil")
 	}
@@ -273,7 +249,7 @@ func TestBot_SetBotCommands_NilAPIError(t *testing.T) {
 }
 
 func TestBot_SetBotCommands_LongDescriptions(t *testing.T) {
-	// Setup
+
 	api := NewTestableBotAPI()
 	bot := NewTestableBot(api)
 
@@ -283,21 +259,17 @@ func TestBot_SetBotCommands_LongDescriptions(t *testing.T) {
 		"analytics": "View detailed analytics and statistics about bot usage and performance metrics",
 	}
 
-	// Execute
 	err := bot.SetBotCommands(commands)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Verify all commands with long descriptions were processed
 	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
 		if len(cmdConfig.Commands) != 3 {
 			t.Errorf("Expected 3 commands, got %d", len(cmdConfig.Commands))
 		}
 
-		// Verify each command has its description preserved
 		foundCommands := make(map[string]string)
 		for _, cmd := range cmdConfig.Commands {
 			foundCommands[cmd.Command] = cmd.Description
@@ -316,7 +288,7 @@ func TestBot_SetBotCommands_LongDescriptions(t *testing.T) {
 }
 
 func TestBot_SetBotCommands_SpecialCharacters(t *testing.T) {
-	// Setup
+
 	api := NewTestableBotAPI()
 	bot := NewTestableBot(api)
 
@@ -326,15 +298,12 @@ func TestBot_SetBotCommands_SpecialCharacters(t *testing.T) {
 		"settings": "⚙️ Configure settings",
 	}
 
-	// Execute
 	err := bot.SetBotCommands(commands)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Verify special characters in descriptions are preserved
 	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
 		foundCommands := make(map[string]string)
 		for _, cmd := range cmdConfig.Commands {
@@ -354,41 +323,35 @@ func TestBot_SetBotCommands_SpecialCharacters(t *testing.T) {
 }
 
 func TestBot_SetBotCommands_MultipleCallsSequential(t *testing.T) {
-	// Setup
+
 	api := NewTestableBotAPI()
 	bot := NewTestableBot(api)
 
-	// First set of commands
 	commands1 := map[string]string{
 		"start": "Start the bot",
 		"help":  "Get help",
 	}
 
-	// Second set of commands
 	commands2 := map[string]string{
 		"info":     "Bot information",
 		"settings": "Configure settings",
 		"about":    "About this bot",
 	}
 
-	// Execute first set
 	err1 := bot.SetBotCommands(commands1)
 	if err1 != nil {
 		t.Errorf("Expected no error for first set, got: %v", err1)
 	}
 
-	// Execute second set
 	err2 := bot.SetBotCommands(commands2)
 	if err2 != nil {
 		t.Errorf("Expected no error for second set, got: %v", err2)
 	}
 
-	// Verify both calls were made
 	if len(api.RequestCalls) != 2 {
 		t.Errorf("Expected 2 Request calls, got %d", len(api.RequestCalls))
 	}
 
-	// Verify first set
 	if cmdConfig1, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
 		if len(cmdConfig1.Commands) != 2 {
 			t.Errorf("Expected 2 commands in first set, got %d", len(cmdConfig1.Commands))
@@ -397,7 +360,6 @@ func TestBot_SetBotCommands_MultipleCallsSequential(t *testing.T) {
 		t.Errorf("Expected SetMyCommandsConfig for first call, got %T", api.RequestCalls[0])
 	}
 
-	// Verify second set
 	if cmdConfig2, ok := api.RequestCalls[1].(tgbotapi.SetMyCommandsConfig); ok {
 		if len(cmdConfig2.Commands) != 3 {
 			t.Errorf("Expected 3 commands in second set, got %d", len(cmdConfig2.Commands))

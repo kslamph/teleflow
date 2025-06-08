@@ -7,7 +7,6 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// TestableContext extends Context for testing with injectable dependencies
 type TestableContext struct {
 	*Context
 	testBot *TestBot
@@ -18,7 +17,6 @@ type TestBot struct {
 	flowManager *TestFlowManager
 }
 
-// TestFlowManager implements basic flow manager functionality for testing
 type TestFlowManager struct {
 	userFlowStates map[int64]*TestUserFlowState
 	setDataFunc    func(userID int64, key string, value interface{}) error
@@ -77,7 +75,6 @@ func (tfm *TestFlowManager) getUserFlowData(userID int64, key string) (interface
 	return value, found
 }
 
-// Helper methods
 func (tfm *TestFlowManager) addUserToFlow(userID int64, flowName string) {
 	tfm.userFlowStates[userID] = &TestUserFlowState{
 		UserID:   userID,
@@ -86,7 +83,6 @@ func (tfm *TestFlowManager) addUserToFlow(userID int64, flowName string) {
 	}
 }
 
-// TestableContext methods that override Context methods for testing
 func (tc *TestableContext) SendReplyKeyboard(buttons []string, buttonsPerRow int, options ...ReplyKeyboardOption) error {
 	if tc.testBot == nil || tc.testBot.api == nil {
 		return errors.New("bot or bot API not available in context for SendReplyKeyboard")
@@ -99,7 +95,7 @@ func (tc *TestableContext) SendReplyKeyboard(buttons []string, buttonsPerRow int
 		opt(&tgAPIReplyKeyboard)
 	}
 
-	msg := tgbotapi.NewMessage(tc.ChatID(), "\u200B") // Use an invisible char
+	msg := tgbotapi.NewMessage(tc.ChatID(), "\u200B")
 	msg.ReplyMarkup = tgAPIReplyKeyboard
 	_, err := tc.testBot.api.Send(msg)
 	return err
@@ -145,7 +141,7 @@ func NewTestableContext(botAPI *TestBotAPI, flowManager *TestFlowManager) *Testa
 }
 
 func TestContext_SendReplyKeyboard_BasicFunctionality(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{}
 	flowManager := NewTestFlowManager()
 	ctx := NewTestableContext(botAPI, flowManager)
@@ -153,20 +149,16 @@ func TestContext_SendReplyKeyboard_BasicFunctionality(t *testing.T) {
 	buttons := []string{"Button 1", "Button 2", "Button 3"}
 	buttonsPerRow := 2
 
-	// Execute
 	err := ctx.SendReplyKeyboard(buttons, buttonsPerRow)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Check that Send was called
 	if len(botAPI.SendCalls) != 1 {
 		t.Errorf("Expected 1 Send call, got %d", len(botAPI.SendCalls))
 	}
 
-	// Verify the message sent
 	if msg, ok := botAPI.SendCalls[0].(tgbotapi.MessageConfig); ok {
 		if msg.Text != "\u200B" {
 			t.Errorf("Expected invisible character, got '%s'", msg.Text)
@@ -175,7 +167,6 @@ func TestContext_SendReplyKeyboard_BasicFunctionality(t *testing.T) {
 			t.Errorf("Expected ChatID %d, got %d", ctx.ChatID(), msg.ChatID)
 		}
 
-		// Verify keyboard structure
 		if kb, ok := msg.ReplyMarkup.(tgbotapi.ReplyKeyboardMarkup); ok {
 			if len(kb.Keyboard) != 2 {
 				t.Errorf("Expected 2 rows, got %d", len(kb.Keyboard))
@@ -195,7 +186,7 @@ func TestContext_SendReplyKeyboard_BasicFunctionality(t *testing.T) {
 }
 
 func TestContext_SendReplyKeyboard_WithOptions(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{}
 	flowManager := NewTestFlowManager()
 	ctx := NewTestableContext(botAPI, flowManager)
@@ -203,15 +194,12 @@ func TestContext_SendReplyKeyboard_WithOptions(t *testing.T) {
 	buttons := []string{"Yes", "No"}
 	buttonsPerRow := 2
 
-	// Execute with options
 	err := ctx.SendReplyKeyboard(buttons, buttonsPerRow, WithResize(), WithOneTime(), WithPlaceholder("Choose an option"))
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Verify the keyboard options
 	if msg, ok := botAPI.SendCalls[0].(tgbotapi.MessageConfig); ok {
 		if kb, ok := msg.ReplyMarkup.(tgbotapi.ReplyKeyboardMarkup); ok {
 			if !kb.ResizeKeyboard {
@@ -232,7 +220,7 @@ func TestContext_SendReplyKeyboard_WithOptions(t *testing.T) {
 }
 
 func TestContext_SendReplyKeyboard_EmptyButtons(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{}
 	flowManager := NewTestFlowManager()
 	ctx := NewTestableContext(botAPI, flowManager)
@@ -240,15 +228,12 @@ func TestContext_SendReplyKeyboard_EmptyButtons(t *testing.T) {
 	buttons := []string{}
 	buttonsPerRow := 2
 
-	// Execute
 	err := ctx.SendReplyKeyboard(buttons, buttonsPerRow)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Verify empty keyboard is handled
 	if msg, ok := botAPI.SendCalls[0].(tgbotapi.MessageConfig); ok {
 		if kb, ok := msg.ReplyMarkup.(tgbotapi.ReplyKeyboardMarkup); ok {
 			if len(kb.Keyboard) != 0 {
@@ -263,7 +248,7 @@ func TestContext_SendReplyKeyboard_EmptyButtons(t *testing.T) {
 }
 
 func TestContext_SendReplyKeyboard_BotAPIError(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{
 		SendFunc: func(c tgbotapi.Chattable) (tgbotapi.Message, error) {
 			return tgbotapi.Message{}, errors.New("API error")
@@ -275,10 +260,8 @@ func TestContext_SendReplyKeyboard_BotAPIError(t *testing.T) {
 	buttons := []string{"Test"}
 	buttonsPerRow := 1
 
-	// Execute
 	err := ctx.SendReplyKeyboard(buttons, buttonsPerRow)
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
@@ -288,16 +271,14 @@ func TestContext_SendReplyKeyboard_BotAPIError(t *testing.T) {
 }
 
 func TestContext_SendReplyKeyboard_NilBot(t *testing.T) {
-	// Create testable context with nil bot API
+
 	ctx := NewTestableContext(nil, NewTestFlowManager())
 
 	buttons := []string{"Test"}
 	buttonsPerRow := 1
 
-	// Execute
 	err := ctx.SendReplyKeyboard(buttons, buttonsPerRow)
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error for nil bot, got nil")
 	}
@@ -307,23 +288,19 @@ func TestContext_SendReplyKeyboard_NilBot(t *testing.T) {
 }
 
 func TestContext_SetFlowData_UserInFlow(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{}
 	flowManager := NewTestFlowManager()
 	ctx := NewTestableContext(botAPI, flowManager)
 
-	// Add user to flow
 	flowManager.addUserToFlow(ctx.UserID(), "test_flow")
 
-	// Execute
 	err := ctx.SetFlowData("test_key", "test_value")
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Verify data was set
 	state := flowManager.userFlowStates[ctx.UserID()]
 	if state == nil {
 		t.Error("Expected user flow state to exist")
@@ -336,17 +313,13 @@ func TestContext_SetFlowData_UserInFlow(t *testing.T) {
 }
 
 func TestContext_SetFlowData_UserNotInFlow(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{}
 	flowManager := NewTestFlowManager()
 	ctx := NewTestableContext(botAPI, flowManager)
 
-	// User is not in any flow
-
-	// Execute
 	err := ctx.SetFlowData("test_key", "test_value")
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error for user not in flow, got nil")
 	}
@@ -356,7 +329,7 @@ func TestContext_SetFlowData_UserNotInFlow(t *testing.T) {
 }
 
 func TestContext_SetFlowData_FlowManagerError(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{}
 	flowManager := NewTestFlowManager()
 	flowManager.setDataFunc = func(userID int64, key string, value interface{}) error {
@@ -364,13 +337,10 @@ func TestContext_SetFlowData_FlowManagerError(t *testing.T) {
 	}
 	ctx := NewTestableContext(botAPI, flowManager)
 
-	// Add user to flow
 	flowManager.addUserToFlow(ctx.UserID(), "test_flow")
 
-	// Execute
 	err := ctx.SetFlowData("test_key", "test_value")
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error from flow manager, got nil")
 	}
@@ -380,19 +350,16 @@ func TestContext_SetFlowData_FlowManagerError(t *testing.T) {
 }
 
 func TestContext_GetFlowData_UserInFlow(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{}
 	flowManager := NewTestFlowManager()
 	ctx := NewTestableContext(botAPI, flowManager)
 
-	// Add user to flow and set some data
 	flowManager.addUserToFlow(ctx.UserID(), "test_flow")
 	flowManager.userFlowStates[ctx.UserID()].Data["existing_key"] = "existing_value"
 
-	// Execute
 	value, found := ctx.GetFlowData("existing_key")
 
-	// Verify
 	if !found {
 		t.Error("Expected to find flow data")
 	}
@@ -402,17 +369,13 @@ func TestContext_GetFlowData_UserInFlow(t *testing.T) {
 }
 
 func TestContext_GetFlowData_UserNotInFlow(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{}
 	flowManager := NewTestFlowManager()
 	ctx := NewTestableContext(botAPI, flowManager)
 
-	// User is not in any flow
-
-	// Execute
 	value, found := ctx.GetFlowData("test_key")
 
-	// Verify
 	if found {
 		t.Error("Expected not to find flow data for user not in flow")
 	}
@@ -422,18 +385,15 @@ func TestContext_GetFlowData_UserNotInFlow(t *testing.T) {
 }
 
 func TestContext_GetFlowData_NonExistingKey(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{}
 	flowManager := NewTestFlowManager()
 	ctx := NewTestableContext(botAPI, flowManager)
 
-	// Add user to flow but don't set the key
 	flowManager.addUserToFlow(ctx.UserID(), "test_flow")
 
-	// Execute
 	value, found := ctx.GetFlowData("non_existing_key")
 
-	// Verify
 	if found {
 		t.Error("Expected not to find non-existing flow data key")
 	}
@@ -443,7 +403,7 @@ func TestContext_GetFlowData_NonExistingKey(t *testing.T) {
 }
 
 func TestContext_GetFlowData_FlowManagerCustomLogic(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{}
 	flowManager := NewTestFlowManager()
 	flowManager.getDataFunc = func(userID int64, key string) (interface{}, bool) {
@@ -454,13 +414,10 @@ func TestContext_GetFlowData_FlowManagerCustomLogic(t *testing.T) {
 	}
 	ctx := NewTestableContext(botAPI, flowManager)
 
-	// Add user to flow
 	flowManager.addUserToFlow(ctx.UserID(), "test_flow")
 
-	// Execute
 	value, found := ctx.GetFlowData("special_key")
 
-	// Verify
 	if !found {
 		t.Error("Expected to find special key")
 	}
@@ -470,15 +427,13 @@ func TestContext_GetFlowData_FlowManagerCustomLogic(t *testing.T) {
 }
 
 func TestContext_FlowDataIntegration(t *testing.T) {
-	// Setup
+
 	botAPI := &TestBotAPI{}
 	flowManager := NewTestFlowManager()
 	ctx := NewTestableContext(botAPI, flowManager)
 
-	// Add user to flow
 	flowManager.addUserToFlow(ctx.UserID(), "test_flow")
 
-	// Test setting multiple keys
 	testData := map[string]interface{}{
 		"string_key": "string_value",
 		"int_key":    42,
@@ -486,7 +441,6 @@ func TestContext_FlowDataIntegration(t *testing.T) {
 		"map_key":    map[string]string{"nested": "value"},
 	}
 
-	// Set all data
 	for key, value := range testData {
 		err := ctx.SetFlowData(key, value)
 		if err != nil {
@@ -494,7 +448,6 @@ func TestContext_FlowDataIntegration(t *testing.T) {
 		}
 	}
 
-	// Get and verify all data
 	for key, expectedValue := range testData {
 		actualValue, found := ctx.GetFlowData(key)
 		if !found {
@@ -502,7 +455,6 @@ func TestContext_FlowDataIntegration(t *testing.T) {
 			continue
 		}
 
-		// For complex types, do a type-specific comparison
 		switch expected := expectedValue.(type) {
 		case map[string]string:
 			if actual, ok := actualValue.(map[string]string); ok {
@@ -524,7 +476,6 @@ func TestContext_FlowDataIntegration(t *testing.T) {
 		}
 	}
 
-	// Test overwriting existing data
 	err := ctx.SetFlowData("string_key", "new_string_value")
 	if err != nil {
 		t.Errorf("Failed to overwrite flow data: %v", err)

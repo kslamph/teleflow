@@ -7,11 +7,10 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// TestBotAPI implements the BotAPI interface for testing
 type TestBotAPI struct {
 	SendFunc    func(c tgbotapi.Chattable) (tgbotapi.Message, error)
 	RequestFunc func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error)
-	// Track calls for verification
+
 	SendCalls    []tgbotapi.Chattable
 	RequestCalls []tgbotapi.Chattable
 }
@@ -32,7 +31,6 @@ func (t *TestBotAPI) Request(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error
 	return &tgbotapi.APIResponse{}, nil
 }
 
-// TestablePromptComposer extends PromptComposer to allow dependency injection for testing
 type TestablePromptComposer struct {
 	botAPI              BotAPI
 	testMessageRenderer *TestMessageRenderer
@@ -54,19 +52,16 @@ func (tpc *TestablePromptComposer) ComposeAndSend(ctx *Context, promptConfig *Pr
 		return err
 	}
 
-	// 1. Render Message Text & ParseMode
 	messageText, parseMode, err := tpc.testMessageRenderer.renderMessage(promptConfig, ctx)
 	if err != nil {
 		return err
 	}
 
-	// 2. Process Image
 	processedImg, err := tpc.testImageHandler.processImage(promptConfig.Image, ctx)
 	if err != nil {
 		return err
 	}
 
-	// 3. Build Inline Keyboard
 	var tgInlineKeyboard *tgbotapi.InlineKeyboardMarkup
 	if promptConfig.Keyboard != nil {
 		builtKeyboard, err := tpc.testKeyboardHandler.BuildKeyboard(ctx, promptConfig.Keyboard)
@@ -82,9 +77,8 @@ func (tpc *TestablePromptComposer) ComposeAndSend(ctx *Context, promptConfig *Pr
 		}
 	}
 
-	// 4. Determine message type and send
 	if processedImg != nil {
-		// Send as photo
+
 		photoMsg := tgbotapi.NewPhoto(ctx.ChatID(), nil)
 		if processedImg.data != nil {
 			photoMsg.File = tgbotapi.FileBytes{Name: "image.jpg", Bytes: processedImg.data}
@@ -104,7 +98,7 @@ func (tpc *TestablePromptComposer) ComposeAndSend(ctx *Context, promptConfig *Pr
 		_, err = tpc.botAPI.Send(photoMsg)
 		return err
 	} else if messageText != "" {
-		// Send as text message
+
 		textMsg := tgbotapi.NewMessage(ctx.ChatID(), messageText)
 		if parseMode != ParseModeNone {
 			textMsg.ParseMode = string(parseMode)
@@ -115,7 +109,7 @@ func (tpc *TestablePromptComposer) ComposeAndSend(ctx *Context, promptConfig *Pr
 		_, err = tpc.botAPI.Send(textMsg)
 		return err
 	} else if tgInlineKeyboard != nil {
-		// Send keyboard with an invisible message
+
 		invisibleMsg := tgbotapi.NewMessage(ctx.ChatID(), "\u200B")
 		invisibleMsg.ReplyMarkup = tgInlineKeyboard
 		_, err = tpc.botAPI.Send(invisibleMsg)
@@ -132,7 +126,6 @@ func (tpc *TestablePromptComposer) validatePromptConfig(config *PromptConfig) er
 	return nil
 }
 
-// Test message renderer
 type TestMessageRenderer struct {
 	RenderFunc  func(config *PromptConfig, ctx *Context) (string, ParseMode, error)
 	RenderCalls []struct {
@@ -152,7 +145,6 @@ func (t *TestMessageRenderer) renderMessage(config *PromptConfig, ctx *Context) 
 	return "", ParseModeNone, nil
 }
 
-// Test image handler
 type TestImageHandler struct {
 	ProcessFunc  func(imageSpec ImageSpec, ctx *Context) (*processedImage, error)
 	ProcessCalls []struct {
@@ -172,7 +164,6 @@ func (t *TestImageHandler) processImage(imageSpec ImageSpec, ctx *Context) (*pro
 	return nil, nil
 }
 
-// Test keyboard handler
 type TestPromptKeyboardHandler struct {
 	BuildFunc   func(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error)
 	GetFunc     func(userID int64, uuid string) (interface{}, bool)
@@ -217,7 +208,6 @@ func (t *TestPromptKeyboardHandler) CleanupUserMappings(userID int64) {
 	}
 }
 
-// Helper function to create a test context
 func createTestContext() *Context {
 	update := tgbotapi.Update{
 		Message: &tgbotapi.Message{
@@ -229,7 +219,7 @@ func createTestContext() *Context {
 }
 
 func TestPromptComposer_ComposeAndSend_TextOnlyMessage(t *testing.T) {
-	// Setup test components
+
 	testBotAPI := &TestBotAPI{}
 	composer := NewTestablePromptComposer(testBotAPI)
 
@@ -242,20 +232,16 @@ func TestPromptComposer_ComposeAndSend_TextOnlyMessage(t *testing.T) {
 		Message: "Hello World",
 	}
 
-	// Execute
 	err := composer.ComposeAndSend(ctx, promptConfig)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Check that Send was called
 	if len(testBotAPI.SendCalls) != 1 {
 		t.Errorf("Expected 1 Send call, got %d", len(testBotAPI.SendCalls))
 	}
 
-	// Verify the message sent
 	if msg, ok := testBotAPI.SendCalls[0].(tgbotapi.MessageConfig); ok {
 		if msg.Text != "Hello World" {
 			t.Errorf("Expected message text 'Hello World', got '%s'", msg.Text)
@@ -269,7 +255,7 @@ func TestPromptComposer_ComposeAndSend_TextOnlyMessage(t *testing.T) {
 }
 
 func TestPromptComposer_ComposeAndSend_ImageOnlyMessage(t *testing.T) {
-	// Setup test components
+
 	testBotAPI := &TestBotAPI{}
 	composer := NewTestablePromptComposer(testBotAPI)
 
@@ -288,27 +274,23 @@ func TestPromptComposer_ComposeAndSend_ImageOnlyMessage(t *testing.T) {
 		Image: "test.jpg",
 	}
 
-	// Execute
 	err := composer.ComposeAndSend(ctx, promptConfig)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Check that Send was called
 	if len(testBotAPI.SendCalls) != 1 {
 		t.Errorf("Expected 1 Send call, got %d", len(testBotAPI.SendCalls))
 	}
 
-	// Verify the photo message sent
 	if _, ok := testBotAPI.SendCalls[0].(tgbotapi.PhotoConfig); !ok {
 		t.Error("Expected PhotoConfig type")
 	}
 }
 
 func TestPromptComposer_ComposeAndSend_KeyboardOnlyMessage(t *testing.T) {
-	// Setup test components
+
 	testBotAPI := &TestBotAPI{}
 	composer := NewTestablePromptComposer(testBotAPI)
 
@@ -330,20 +312,16 @@ func TestPromptComposer_ComposeAndSend_KeyboardOnlyMessage(t *testing.T) {
 		Keyboard: keyboardFunc,
 	}
 
-	// Execute
 	err := composer.ComposeAndSend(ctx, promptConfig)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Check that Send was called
 	if len(testBotAPI.SendCalls) != 1 {
 		t.Errorf("Expected 1 Send call, got %d", len(testBotAPI.SendCalls))
 	}
 
-	// Verify the message sent with invisible character
 	if msg, ok := testBotAPI.SendCalls[0].(tgbotapi.MessageConfig); ok {
 		if msg.Text != "\u200B" {
 			t.Errorf("Expected invisible character, got '%s'", msg.Text)
@@ -354,7 +332,7 @@ func TestPromptComposer_ComposeAndSend_KeyboardOnlyMessage(t *testing.T) {
 }
 
 func TestPromptComposer_ComposeAndSend_CombinedMessage(t *testing.T) {
-	// Setup test components
+
 	testBotAPI := &TestBotAPI{}
 	composer := NewTestablePromptComposer(testBotAPI)
 
@@ -383,20 +361,16 @@ func TestPromptComposer_ComposeAndSend_CombinedMessage(t *testing.T) {
 		Keyboard: keyboardFunc,
 	}
 
-	// Execute
 	err := composer.ComposeAndSend(ctx, promptConfig)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Check that Send was called
 	if len(testBotAPI.SendCalls) != 1 {
 		t.Errorf("Expected 1 Send call, got %d", len(testBotAPI.SendCalls))
 	}
 
-	// Verify the photo message with caption and parse mode
 	if photoMsg, ok := testBotAPI.SendCalls[0].(tgbotapi.PhotoConfig); ok {
 		if photoMsg.Caption != "*Bold Text*" {
 			t.Errorf("Expected caption '*Bold Text*', got '%s'", photoMsg.Caption)
@@ -410,7 +384,7 @@ func TestPromptComposer_ComposeAndSend_CombinedMessage(t *testing.T) {
 }
 
 func TestPromptComposer_ComposeAndSend_MessageRenderError(t *testing.T) {
-	// Setup test components
+
 	testBotAPI := &TestBotAPI{}
 	composer := NewTestablePromptComposer(testBotAPI)
 
@@ -423,10 +397,8 @@ func TestPromptComposer_ComposeAndSend_MessageRenderError(t *testing.T) {
 		Message: "Hello World",
 	}
 
-	// Execute
 	err := composer.ComposeAndSend(ctx, promptConfig)
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
@@ -436,7 +408,7 @@ func TestPromptComposer_ComposeAndSend_MessageRenderError(t *testing.T) {
 }
 
 func TestPromptComposer_ComposeAndSend_ImageProcessingError(t *testing.T) {
-	// Setup test components
+
 	testBotAPI := &TestBotAPI{}
 	composer := NewTestablePromptComposer(testBotAPI)
 
@@ -452,10 +424,8 @@ func TestPromptComposer_ComposeAndSend_ImageProcessingError(t *testing.T) {
 		Image: "invalid.jpg",
 	}
 
-	// Execute
 	err := composer.ComposeAndSend(ctx, promptConfig)
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
@@ -465,7 +435,7 @@ func TestPromptComposer_ComposeAndSend_ImageProcessingError(t *testing.T) {
 }
 
 func TestPromptComposer_ComposeAndSend_KeyboardBuildingError(t *testing.T) {
-	// Setup test components
+
 	testBotAPI := &TestBotAPI{}
 	composer := NewTestablePromptComposer(testBotAPI)
 
@@ -484,10 +454,8 @@ func TestPromptComposer_ComposeAndSend_KeyboardBuildingError(t *testing.T) {
 		Keyboard: keyboardFunc,
 	}
 
-	// Execute
 	err := composer.ComposeAndSend(ctx, promptConfig)
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
@@ -549,7 +517,7 @@ func TestPromptComposer_ValidatePromptConfig(t *testing.T) {
 }
 
 func TestPromptComposer_SendAPIError(t *testing.T) {
-	// Setup test components
+
 	testBotAPI := &TestBotAPI{
 		SendFunc: func(c tgbotapi.Chattable) (tgbotapi.Message, error) {
 			return tgbotapi.Message{}, errors.New("API error")
@@ -566,10 +534,8 @@ func TestPromptComposer_SendAPIError(t *testing.T) {
 		Message: "Hello World",
 	}
 
-	// Execute
 	err := composer.ComposeAndSend(ctx, promptConfig)
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
@@ -579,7 +545,7 @@ func TestPromptComposer_SendAPIError(t *testing.T) {
 }
 
 func TestPromptComposer_NilKeyboardFunc(t *testing.T) {
-	// Setup test components
+
 	testBotAPI := &TestBotAPI{}
 	composer := NewTestablePromptComposer(testBotAPI)
 
@@ -590,23 +556,19 @@ func TestPromptComposer_NilKeyboardFunc(t *testing.T) {
 	ctx := createTestContext()
 	promptConfig := &PromptConfig{
 		Message:  "Hello World",
-		Keyboard: nil, // Nil keyboard
+		Keyboard: nil,
 	}
 
-	// Execute
 	err := composer.ComposeAndSend(ctx, promptConfig)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Check that keyboard handler was not called
 	if len(composer.testKeyboardHandler.BuildCalls) != 0 {
 		t.Errorf("Expected 0 keyboard build calls, got %d", len(composer.testKeyboardHandler.BuildCalls))
 	}
 
-	// Verify the message sent without keyboard
 	if msg, ok := testBotAPI.SendCalls[0].(tgbotapi.MessageConfig); ok {
 		if msg.Text != "Hello World" {
 			t.Errorf("Expected message text 'Hello World', got '%s'", msg.Text)

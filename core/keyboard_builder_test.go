@@ -10,7 +10,6 @@ func TestPromptKeyboardHandler_BuildKeyboard_ValidKeyboardFunc(t *testing.T) {
 	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 
-	// Create a keyboard function that returns a valid builder
 	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
 		return NewPromptKeyboard().
 			ButtonCallback("Button 1", "data1").
@@ -19,10 +18,8 @@ func TestPromptKeyboardHandler_BuildKeyboard_ValidKeyboardFunc(t *testing.T) {
 			ButtonCallback("Button 3", "data3")
 	}
 
-	// Execute
 	result, err := handler.BuildKeyboard(ctx, keyboardFunc)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -32,14 +29,12 @@ func TestPromptKeyboardHandler_BuildKeyboard_ValidKeyboardFunc(t *testing.T) {
 		return
 	}
 
-	// Verify the result is a tgbotapi.InlineKeyboardMarkup
 	keyboard, ok := result.(tgbotapi.InlineKeyboardMarkup)
 	if !ok {
 		t.Errorf("Expected tgbotapi.InlineKeyboardMarkup, got %T", result)
 		return
 	}
 
-	// Verify keyboard structure (2 rows: [Button1, Button2], [Button3])
 	if len(keyboard.InlineKeyboard) != 2 {
 		t.Errorf("Expected 2 rows, got %d", len(keyboard.InlineKeyboard))
 	}
@@ -52,7 +47,6 @@ func TestPromptKeyboardHandler_BuildKeyboard_ValidKeyboardFunc(t *testing.T) {
 		t.Errorf("Expected 1 button in second row, got %d", len(keyboard.InlineKeyboard[1]))
 	}
 
-	// Verify UUID mappings were stored
 	userMappings := handler.userUUIDMappings[ctx.UserID()]
 	if userMappings == nil {
 		t.Error("Expected user mappings to be created")
@@ -63,7 +57,6 @@ func TestPromptKeyboardHandler_BuildKeyboard_ValidKeyboardFunc(t *testing.T) {
 		t.Errorf("Expected 3 UUID mappings, got %d", len(userMappings))
 	}
 
-	// Verify button texts
 	if keyboard.InlineKeyboard[0][0].Text != "Button 1" {
 		t.Errorf("Expected 'Button 1', got '%s'", keyboard.InlineKeyboard[0][0].Text)
 	}
@@ -79,10 +72,8 @@ func TestPromptKeyboardHandler_BuildKeyboard_NilKeyboardFunc(t *testing.T) {
 	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 
-	// Execute with nil keyboard function
 	result, err := handler.BuildKeyboard(ctx, nil)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -91,7 +82,6 @@ func TestPromptKeyboardHandler_BuildKeyboard_NilKeyboardFunc(t *testing.T) {
 		t.Errorf("Expected nil result, got: %v", result)
 	}
 
-	// Verify no UUID mappings were created
 	userMappings := handler.userUUIDMappings[ctx.UserID()]
 	if userMappings != nil {
 		t.Error("Expected no user mappings to be created")
@@ -102,15 +92,12 @@ func TestPromptKeyboardHandler_BuildKeyboard_KeyboardFuncReturnsNil(t *testing.T
 	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 
-	// Create a keyboard function that returns nil
 	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
 		return nil
 	}
 
-	// Execute
 	result, err := handler.BuildKeyboard(ctx, keyboardFunc)
 
-	// Verify
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -119,7 +106,6 @@ func TestPromptKeyboardHandler_BuildKeyboard_KeyboardFuncReturnsNil(t *testing.T
 		t.Errorf("Expected nil result, got: %v", result)
 	}
 
-	// Verify no UUID mappings were created
 	userMappings := handler.userUUIDMappings[ctx.UserID()]
 	if userMappings != nil {
 		t.Error("Expected no user mappings to be created")
@@ -130,15 +116,12 @@ func TestPromptKeyboardHandler_BuildKeyboard_InvalidKeyboard(t *testing.T) {
 	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 
-	// Create a keyboard function that returns an empty keyboard (invalid)
 	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
-		return NewPromptKeyboard() // Empty keyboard, no buttons
+		return NewPromptKeyboard()
 	}
 
-	// Execute
 	result, err := handler.BuildKeyboard(ctx, keyboardFunc)
 
-	// Verify
 	if err == nil {
 		t.Error("Expected error for invalid keyboard, got nil")
 	}
@@ -147,7 +130,6 @@ func TestPromptKeyboardHandler_BuildKeyboard_InvalidKeyboard(t *testing.T) {
 		t.Errorf("Expected nil result, got: %v", result)
 	}
 
-	// Verify no UUID mappings were created
 	userMappings := handler.userUUIDMappings[ctx.UserID()]
 	if userMappings != nil {
 		t.Error("Expected no user mappings to be created for invalid keyboard")
@@ -159,7 +141,6 @@ func TestPromptKeyboardHandler_GetCallbackData_ExistingUUID(t *testing.T) {
 	ctx := createTestContext()
 	userID := ctx.UserID()
 
-	// First, build a keyboard to create UUID mappings
 	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
 		return NewPromptKeyboard().
 			ButtonCallback("Test Button", "test_data").
@@ -171,12 +152,10 @@ func TestPromptKeyboardHandler_GetCallbackData_ExistingUUID(t *testing.T) {
 		t.Fatalf("Failed to build keyboard: %v", err)
 	}
 
-	// Get the keyboard to extract UUIDs
 	keyboard := result.(tgbotapi.InlineKeyboardMarkup)
 	uuid1 := *keyboard.InlineKeyboard[0][0].CallbackData
 	uuid2 := *keyboard.InlineKeyboard[0][1].CallbackData
 
-	// Test getting existing callback data
 	data1, found1 := handler.GetCallbackData(userID, uuid1)
 	if !found1 {
 		t.Error("Expected to find callback data for uuid1")
@@ -202,10 +181,8 @@ func TestPromptKeyboardHandler_GetCallbackData_NonExistingUUID(t *testing.T) {
 	handler := newPromptKeyboardHandler()
 	userID := int64(12345)
 
-	// Test getting non-existing callback data
 	data, found := handler.GetCallbackData(userID, "non-existing-uuid")
 
-	// Verify
 	if found {
 		t.Error("Expected not to find callback data for non-existing UUID")
 	}
@@ -218,7 +195,6 @@ func TestPromptKeyboardHandler_GetCallbackData_NonExistingUser(t *testing.T) {
 	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 
-	// First, build a keyboard for one user
 	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
 		return NewPromptKeyboard().ButtonCallback("Test", "data")
 	}
@@ -228,15 +204,12 @@ func TestPromptKeyboardHandler_GetCallbackData_NonExistingUser(t *testing.T) {
 		t.Fatalf("Failed to build keyboard: %v", err)
 	}
 
-	// Get UUID from keyboard
 	keyboard := result.(tgbotapi.InlineKeyboardMarkup)
 	uuid := *keyboard.InlineKeyboard[0][0].CallbackData
 
-	// Try to get callback data for a different user
 	differentUserID := ctx.UserID() + 1000
 	data, found := handler.GetCallbackData(differentUserID, uuid)
 
-	// Verify
 	if found {
 		t.Error("Expected not to find callback data for different user")
 	}
@@ -250,7 +223,6 @@ func TestPromptKeyboardHandler_CleanupUserMappings(t *testing.T) {
 	ctx := createTestContext()
 	userID := ctx.UserID()
 
-	// First, build a keyboard to create UUID mappings
 	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
 		return NewPromptKeyboard().
 			ButtonCallback("Button 1", "data1").
@@ -262,16 +234,13 @@ func TestPromptKeyboardHandler_CleanupUserMappings(t *testing.T) {
 		t.Fatalf("Failed to build keyboard: %v", err)
 	}
 
-	// Verify mappings exist
 	userMappings := handler.userUUIDMappings[userID]
 	if userMappings == nil || len(userMappings) != 2 {
 		t.Fatalf("Expected 2 UUID mappings, got %d", len(userMappings))
 	}
 
-	// Cleanup user mappings
 	handler.CleanupUserMappings(userID)
 
-	// Verify mappings are removed
 	userMappings = handler.userUUIDMappings[userID]
 	if userMappings != nil {
 		t.Error("Expected user mappings to be removed")
@@ -281,13 +250,10 @@ func TestPromptKeyboardHandler_CleanupUserMappings(t *testing.T) {
 func TestPromptKeyboardHandler_CleanupUserMappings_NonExistingUser(t *testing.T) {
 	handler := newPromptKeyboardHandler()
 
-	// Try to cleanup mappings for a user that doesn't exist
 	nonExistingUserID := int64(99999)
 
-	// This should not panic or cause issues
 	handler.CleanupUserMappings(nonExistingUserID)
 
-	// Verify handler is still functional
 	if handler.userUUIDMappings == nil {
 		t.Error("Expected userUUIDMappings to remain initialized")
 	}
@@ -296,7 +262,6 @@ func TestPromptKeyboardHandler_CleanupUserMappings_NonExistingUser(t *testing.T)
 func TestPromptKeyboardHandler_MultipleUsers(t *testing.T) {
 	handler := newPromptKeyboardHandler()
 
-	// Create contexts for two different users
 	update1 := tgbotapi.Update{
 		Message: &tgbotapi.Message{
 			Chat: &tgbotapi.Chat{ID: 123},
@@ -313,7 +278,6 @@ func TestPromptKeyboardHandler_MultipleUsers(t *testing.T) {
 	}
 	ctx2 := newContext(&Bot{}, update2)
 
-	// Build keyboards for both users
 	keyboardFunc1 := func(ctx *Context) *PromptKeyboardBuilder {
 		return NewPromptKeyboard().ButtonCallback("User1 Button", "user1_data")
 	}
@@ -331,14 +295,12 @@ func TestPromptKeyboardHandler_MultipleUsers(t *testing.T) {
 		t.Fatalf("Failed to build keyboard for user2: %v", err2)
 	}
 
-	// Get UUIDs from keyboards
 	keyboard1 := result1.(tgbotapi.InlineKeyboardMarkup)
 	uuid1 := *keyboard1.InlineKeyboard[0][0].CallbackData
 
 	keyboard2 := result2.(tgbotapi.InlineKeyboardMarkup)
 	uuid2 := *keyboard2.InlineKeyboard[0][0].CallbackData
 
-	// Verify each user can only access their own data
 	data1, found1 := handler.GetCallbackData(ctx1.UserID(), uuid1)
 	if !found1 || data1 != "user1_data" {
 		t.Errorf("User1 should access their own data, got %v, found=%v", data1, found1)
@@ -349,7 +311,6 @@ func TestPromptKeyboardHandler_MultipleUsers(t *testing.T) {
 		t.Errorf("User2 should access their own data, got %v, found=%v", data2, found2)
 	}
 
-	// Verify users cannot access each other's data
 	_, found1Cross := handler.GetCallbackData(ctx1.UserID(), uuid2)
 	if found1Cross {
 		t.Error("User1 should not access User2's data")
@@ -360,16 +321,13 @@ func TestPromptKeyboardHandler_MultipleUsers(t *testing.T) {
 		t.Error("User2 should not access User1's data")
 	}
 
-	// Cleanup one user and verify the other is unaffected
 	handler.CleanupUserMappings(ctx1.UserID())
 
-	// User1's data should be gone
 	_, found1After := handler.GetCallbackData(ctx1.UserID(), uuid1)
 	if found1After {
 		t.Error("User1's data should be cleaned up")
 	}
 
-	// User2's data should still exist
 	data2After, found2After := handler.GetCallbackData(ctx2.UserID(), uuid2)
 	if !found2After || data2After != "user2_data" {
 		t.Error("User2's data should still exist after User1 cleanup")
