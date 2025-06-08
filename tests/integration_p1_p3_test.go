@@ -544,7 +544,7 @@ func TestIntegrationP1P3TemplateSystemIntegration(t *testing.T) {
 		ctx := teleflow.NewContext(bot, update)
 
 		// These should compile without error (methods exist)
-		_ = ctx.ReplyTemplate
+
 		_ = ctx.SendPromptWithTemplate
 
 		// Test that the methods can be called (though they may fail without proper setup)

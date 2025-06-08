@@ -222,7 +222,7 @@ func testConvenienceMethods(t *testing.T, bot *teleflow.Bot) {
 	ctx := teleflow.NewContext(bot, update)
 
 	// These should compile without error (methods exist)
-	_ = ctx.ReplyTemplate
+
 	_ = ctx.SendPromptWithTemplate
 
 	t.Log("✅ Convenience methods exist and compile correctly")

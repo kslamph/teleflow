@@ -58,7 +58,7 @@ func TestPhase5TemplateConvenienceMethods(t *testing.T) {
 
 	// Test that convenience methods exist and can be called
 	// The actual sending would require a full bot setup with flow manager
-	_ = ctx.ReplyTemplate
+
 	_ = ctx.SendPromptWithTemplate
 
 	// Verify the template data merging works with TemplateData field

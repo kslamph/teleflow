@@ -47,7 +47,7 @@ func TestInlineKeyboardEmptyHandling(t *testing.T) {
 	}
 
 	// Test that the convenience methods exist and can be called without error
-	_ = ctx.ReplyTemplate
+
 	_ = ctx.SendPromptWithTemplate
 
 	t.Log("✅ Template rendering without keyboard works correctly")

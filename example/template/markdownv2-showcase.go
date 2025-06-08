@@ -364,11 +364,11 @@ func setupCommands(bot *teleflow.Bot) {
 
 	// Demo individual templates using convenience methods
 	bot.HandleCommand("demo_basic", func(ctx *teleflow.Context, command string, args string) error {
-		return ctx.ReplyTemplate("basic_formatting", nil)
+		return ctx.SendPromptWithTemplate("basic_formatting", nil)
 	})
 
 	bot.HandleCommand("demo_code", func(ctx *teleflow.Context, command string, args string) error {
-		return ctx.ReplyTemplate("code_example", map[string]interface{}{
+		return ctx.SendPromptWithTemplate("code_example", map[string]interface{}{
 			"Name": "TeleFlow",
 		})
 	})
@@ -414,7 +414,7 @@ func setupCommands(bot *teleflow.Bot) {
 		log.Fatalf("Failed to add not_understood template: %v", err)
 	}
 	bot.DefaultHandler(func(ctx *teleflow.Context, text string) error {
-		return ctx.ReplyTemplate("not_understood", map[string]interface{}{
+		return ctx.SendPromptWithTemplate("not_understood", map[string]interface{}{
 			"Input": text,
 		})
 	})

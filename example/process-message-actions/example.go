@@ -84,7 +84,7 @@ func main() {
 			return teleflow.Retry()
 		}).
 		OnComplete(func(ctx *teleflow.Context) error {
-			return ctx.Reply("✅ Flow completed! All previous messages were deleted when you clicked buttons.")
+			return ctx.SendPromptText("✅ Flow completed! All previous messages were deleted when you clicked buttons.")
 		}).
 		Build()
 
@@ -132,7 +132,7 @@ func main() {
 			return teleflow.Retry()
 		}).
 		OnComplete(func(ctx *teleflow.Context) error {
-			return ctx.Reply("✅ Completed! Notice how previous message text remained but keyboards were disabled.")
+			return ctx.SendPromptText("✅ Completed! Notice how previous message text remained but keyboards were disabled.")
 		}).
 		Build()
 
@@ -164,7 +164,7 @@ func main() {
 			return teleflow.Retry()
 		}).
 		OnComplete(func(ctx *teleflow.Context) error {
-			return ctx.Reply("✅ Demo completed! All previous keyboards remained functional throughout the flow.")
+			return ctx.SendPromptText("✅ Demo completed! All previous keyboards remained functional throughout the flow.")
 		}).
 		Build()
 
@@ -191,7 +191,7 @@ func main() {
 	})
 
 	bot.HandleCommand("help", func(ctx *teleflow.Context, command string, args string) error {
-		return ctx.Reply(`🎛️ **Message Handling Demo**
+		return ctx.SendPromptText(`🎛️ **Message Handling Demo**
 
 Choose a demo to see different keyboard behaviors:
 
