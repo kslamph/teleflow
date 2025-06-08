@@ -52,20 +52,23 @@ func newImageHandler() *imageHandler {
 // Supported ImageSpec Types:
 //   - string: Static image reference (file path, URL, or base64 data URI)
 //   - func(*Context) string: Dynamic function that returns image reference based on context
+//   - []byte: Raw image data bytes (e.g., from dynamically generated images like QR codes)
+//   - func(*Context) []byte: Dynamic function that returns raw image bytes based on context
 //
 // Image Source Detection:
 //   - Base64 data URIs: Detected by "data:image/" prefix, decoded to bytes
 //   - Local files: Detected by file existence check, validated and loaded
 //   - URLs/Remote: Everything else treated as URL for Telegram to fetch
+//   - Raw bytes: Direct byte data processed for transmission
 //
 // Validation and Processing:
-//   - File size limits: Enforces Telegram's 50MB limit for local files
+//   - File size limits: Enforces Telegram's 50MB limit for local files and raw bytes
 //   - Format validation: Checks file extensions for supported image formats
 //   - Error handling: Returns descriptive errors for invalid or inaccessible images
 //
 // Parameters:
-//   - imageSpec: The image specification to process (string or function)
-//   - ctx: Context for dynamic image functions (unused for static strings)
+//   - imageSpec: The image specification to process (string, []byte, or function)
+//   - ctx: Context for dynamic image functions (unused for static types)
 //
 // Returns:
 //   - *processedImage: Processed image ready for Telegram API, or nil if no image
@@ -88,8 +91,20 @@ func (ih *imageHandler) processImage(imageSpec ImageSpec, ctx *Context) (*proces
 		}
 		return ih.processStaticImage(imagePath)
 
+	case []byte:
+		// Raw image bytes - process directly
+		return ih.processRawBytes(img)
+
+	case func(*Context) []byte:
+		// Dynamic raw bytes function - evaluate with context first
+		imageBytes := img(ctx)
+		if len(imageBytes) == 0 {
+			return nil, nil // Function returned empty, no image to process
+		}
+		return ih.processRawBytes(imageBytes)
+
 	default:
-		return nil, fmt.Errorf("unsupported image type: %T (expected string or func(*Context) string)", img)
+		return nil, fmt.Errorf("unsupported image type: %T (expected string, []byte, func(*Context) string, or func(*Context) []byte)", img)
 	}
 }
 
@@ -254,6 +269,53 @@ func (ih *imageHandler) processURLImage(imageURL string) (*processedImage, error
 	// Store URL for Telegram to fetch directly - no local processing needed
 	return &processedImage{
 		filePath: imageURL,
+		isBase64: false,
+	}, nil
+}
+
+// processRawBytes processes raw image byte data by validating size limits
+// and preparing the bytes for transmission to Telegram.
+//
+// Raw Bytes Processing:
+//   - Validates byte array is not empty
+//   - Enforces Telegram's 50MB file size limit
+//   - No format validation (assumes caller provides valid image data)
+//   - Stores bytes directly for transmission
+//
+// This method is particularly useful for:
+//   - Dynamically generated images (QR codes, charts, etc.)
+//   - Images processed or modified in memory
+//   - Images received from external APIs as byte arrays
+//   - Custom image generation workflows
+//
+// Size Validation:
+//   - Checks against Telegram's 50MB limit for photo uploads
+//   - Returns descriptive error if size exceeds limit
+//   - Empty byte arrays are treated as no image
+//
+// Format Considerations:
+//   - No automatic format detection or validation
+//   - Caller is responsible for providing valid image format
+//   - Supported formats depend on Telegram's capabilities (JPEG, PNG, GIF, WebP, etc.)
+//   - Invalid formats will be rejected by Telegram API during send
+//
+// Parameters:
+//   - imageBytes: Raw image data as byte array
+//
+// Returns processedImage with raw bytes ready for transmission or error if validation fails.
+func (ih *imageHandler) processRawBytes(imageBytes []byte) (*processedImage, error) {
+	// Validate byte array is not empty
+	if len(imageBytes) == 0 {
+		return nil, nil // Empty bytes, no image to process
+	}
+
+	// Check size against Telegram's 50MB limit
+	if len(imageBytes) > 50*1024*1024 { // 50MB
+		return nil, fmt.Errorf("image data too large: %d bytes (max 50MB)", len(imageBytes))
+	}
+
+	return &processedImage{
+		data:     imageBytes,
 		isBase64: false,
 	}, nil
 }

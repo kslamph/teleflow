@@ -136,7 +136,7 @@ func NewTestableContext(botAPI *TestBotAPI, flowManager *TestFlowManager) *Testa
 		},
 	}
 
-	baseContext := NewContext(&Bot{}, update)
+	baseContext := newContext(&Bot{}, update)
 
 	return &TestableContext{
 		Context: baseContext,

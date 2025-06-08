@@ -86,7 +86,7 @@ type Context struct {
 	isChannel bool  // True if the chat is a channel
 }
 
-// NewContext creates a new Context instance for the given bot and Telegram update.
+// newContext creates a new Context instance for the given bot and Telegram update.
 // It automatically extracts user ID, chat ID, and chat type information from the update.
 // The context is initialized with an empty request-scoped data map.
 //
@@ -95,7 +95,7 @@ type Context struct {
 //   - update: The Telegram update to process
 //
 // Returns a fully initialized Context ready for use in handlers and flows.
-func NewContext(bot *Bot, update tgbotapi.Update) *Context {
+func newContext(bot *Bot, update tgbotapi.Update) *Context {
 	ctx := &Context{
 		bot:    bot,
 		update: update,

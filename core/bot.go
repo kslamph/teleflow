@@ -218,9 +218,8 @@ type Bot struct {
 	middleware []MiddlewareFunc // Unified middleware stack applied to all handler types
 
 	// Configuration and access control
-	menuButton    *MenuButtonConfig // Bot menu button configuration (web_app or default types only)
-	accessManager AccessManager     // Permission checking and automatic UI management
-	flowConfig    FlowConfig        // Flow behavior configuration (exit commands, global commands, etc.)
+	accessManager AccessManager // Permission checking and automatic UI management
+	flowConfig    FlowConfig    // Flow behavior configuration (exit commands, global commands, etc.)
 }
 
 // NewBot creates a new Bot instance with the specified Telegram bot token and optional configuration.
@@ -266,7 +265,7 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		callbackRegistry:      newCallbackRegistry(),
 		stateManager:          NewInMemoryStateManager(),
 		flowManager:           newFlowManager(NewInMemoryStateManager()),
-		promptKeyboardHandler: NewPromptKeyboardHandler(),
+		promptKeyboardHandler: newPromptKeyboardHandler(),
 		middleware:            make([]MiddlewareFunc, 0),
 		flowConfig: FlowConfig{
 			ExitCommands:        []string{"/cancel"},
@@ -280,7 +279,7 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 	// Initialize PromptComposer with required dependencies
 	messageRenderer := newMessageRenderer()
 	imageHandler := newImageHandler()
-	b.promptComposer = NewPromptComposer(api, messageRenderer, imageHandler, b.promptKeyboardHandler)
+	b.promptComposer = newPromptComposer(api, messageRenderer, imageHandler, b.promptKeyboardHandler)
 
 	// Apply options
 	for _, opt := range options {
@@ -290,33 +289,6 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 	// initialize the flow system
 	b.flowManager.initialize(b)
 	return b, nil
-}
-
-// WithMenuButton sets the default menu button configuration for web_app or default types only.
-// This BotOption configures the persistent menu button that appears next to the text input field.
-//
-// Note: For bot command menus, use SetBotCommands() method instead, as it provides
-// a different UI element (the "/" command menu).
-//
-// Parameters:
-//   - config: Menu button configuration. Only web_app and default types are supported.
-//
-// Returns:
-//   - BotOption: Configuration function to be used with NewBot
-//
-// Example:
-//
-//	bot, err := NewBot(token, WithMenuButton(&MenuButtonConfig{
-//	  Type: menuButtonTypeDefault,
-//	  // additional config...
-//	}))
-func WithMenuButton(config *MenuButtonConfig) BotOption {
-	return func(b *Bot) {
-		// Only allow web_app or default types for WithMenuButton
-		if config != nil && config.Type == menuButtonTypeDefault {
-			b.menuButton = config
-		}
-	}
 }
 
 // WithFlowConfig sets the flow configuration that controls conversational flow behavior.
@@ -563,7 +535,7 @@ func (b *Bot) applyMiddleware(handler HandlerFunc) HandlerFunc {
 // Parameters:
 //   - update: The Telegram update object containing the message/callback/etc.
 func (b *Bot) processUpdate(update tgbotapi.Update) {
-	ctx := NewContext(b, update)
+	ctx := newContext(b, update)
 	var err error
 
 	// Check for global flow exit commands first
@@ -761,7 +733,7 @@ func (b *Bot) SetBotCommands(commands map[string]string) error {
 		log.Printf("Warning: Failed to set bot commands: %v", err)
 		return fmt.Errorf("failed to set bot commands: %w", err)
 	}
-	log.Printf("Successfully set %d bot commands.", len(tgCommands))
+	// log.Printf("Successfully set %d bot commands.", len(tgCommands))
 	return nil
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"image/color"
 	"log"
 	"os"
 
@@ -31,7 +32,9 @@ func main() {
 		log.Fatal("TELEGRAM_BOT_TOKEN environment variable is required")
 	}
 
-	mainMenuKeyboard := teleflow.BuildReplyKeyboard([]string{"📝 Register", "🏠 Home", "⚙️ Settings", "❓ Help"}, 3).Resize()
+	mainMenuKeyboard := teleflow.BuildReplyKeyboard([]string{
+		"📝 Register", "🏠 Home", "⚙️ Settings", "❓ Help"},
+		3).Resize()
 
 	// Initialize AccessManager
 	accessManager := &MyAccessManager{
@@ -74,7 +77,7 @@ func main() {
 			}
 
 			// Store the name
-			ctx.SetFlowData("user_name", input)
+			_ = ctx.SetFlowData("user_name", input)
 
 			return teleflow.NextStep().WithPrompt("✅ Name saved! Moving to the next step...")
 		}).
@@ -92,7 +95,7 @@ func main() {
 
 			}
 			// Store the age
-			ctx.SetFlowData("user_age", input)
+			_ = ctx.SetFlowData("user_age", input)
 			return teleflow.NextStep().
 				WithPrompt("✅ Age recorded! Let's confirm your details...")
 		}).
@@ -132,9 +135,16 @@ func main() {
 			name, _ := ctx.GetFlowData("user_name")
 			age, _ := ctx.GetFlowData("user_age")
 
+			imageBytes, err := generateSimpleImage(500, 100, color.RGBA{R: 100, G: 100, B: 100, A: 155}, fmt.Sprintf("Registration complete for %s, age %s", name, age), color.RGBA{R: 50, G: 205, B: 50, A: 255})
+			if err != nil {
+				log.Printf("Failed to generate image for %s: %v", name, err)
+				return nil
+			}
+
 			// Use SendPrompt with a celebration image
 			return ctx.SendPrompt(&teleflow.PromptConfig{
 				Message: fmt.Sprintf("🎉 Registration complete!\nName: %s\nAge: %s\n\nWelcome to our service!", name, age),
+				Image:   imageBytes,
 			})
 		}).Build()
 

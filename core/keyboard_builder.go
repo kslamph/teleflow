@@ -75,7 +75,7 @@ type PromptKeyboardHandler struct {
 	mu sync.RWMutex
 }
 
-// NewPromptKeyboardHandler creates a new PromptKeyboardHandler instance.
+// newPromptKeyboardHandler creates a new PromptKeyboardHandler instance.
 //
 // This constructor initializes an empty handler with no user mappings.
 // The handler is ready to process KeyboardFunc functions and manage
@@ -85,9 +85,9 @@ type PromptKeyboardHandler struct {
 //
 // Example:
 //
-//	handler := NewPromptKeyboardHandler()
+//	handler := newPromptKeyboardHandler()
 //	// Handler is now ready to process keyboards in prompts
-func NewPromptKeyboardHandler() *PromptKeyboardHandler {
+func newPromptKeyboardHandler() *PromptKeyboardHandler {
 	return &PromptKeyboardHandler{
 		userUUIDMappings: make(map[int64]map[string]interface{}),
 	}

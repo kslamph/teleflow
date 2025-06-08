@@ -73,11 +73,13 @@ type PromptConfig struct {
 type MessageSpec interface{}
 
 // ImageSpec defines the flexible type for image content in prompts.
-// Supports static URLs, dynamic image generation, and various image formats.
+// Supports static URLs, dynamic image generation, raw bytes, and various image formats.
 //
 // Supported Types:
 //   - string: Static URL, file path, or base64-encoded image data
 //   - func(*Context) string: Dynamic image URL/path based on current context
+//   - []byte: Raw image data bytes (e.g., from dynamically generated images like QR codes)
+//   - func(*Context) []byte: Dynamic function returning raw image bytes based on context
 //   - nil: No image for this prompt
 //
 // Examples:
@@ -87,6 +89,10 @@ type MessageSpec interface{}
 //	ImageSpec("data:image/png;base64,...")        // Base64 data
 //	ImageSpec(func(ctx *Context) string {         // Dynamic image
 //	  return fmt.Sprintf("https://api.avatar/%s", ctx.Get("username"))
+//	})
+//	ImageSpec(qrCodeBytes)                        // Raw image bytes
+//	ImageSpec(func(ctx *Context) []byte {         // Dynamic raw bytes
+//	  return generateQRCode(ctx.Get("data"))
 //	})
 type ImageSpec interface{}
 

@@ -7,7 +7,7 @@ import (
 )
 
 func TestPromptKeyboardHandler_BuildKeyboard_ValidKeyboardFunc(t *testing.T) {
-	handler := NewPromptKeyboardHandler()
+	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 
 	// Create a keyboard function that returns a valid builder
@@ -76,7 +76,7 @@ func TestPromptKeyboardHandler_BuildKeyboard_ValidKeyboardFunc(t *testing.T) {
 }
 
 func TestPromptKeyboardHandler_BuildKeyboard_NilKeyboardFunc(t *testing.T) {
-	handler := NewPromptKeyboardHandler()
+	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 
 	// Execute with nil keyboard function
@@ -99,7 +99,7 @@ func TestPromptKeyboardHandler_BuildKeyboard_NilKeyboardFunc(t *testing.T) {
 }
 
 func TestPromptKeyboardHandler_BuildKeyboard_KeyboardFuncReturnsNil(t *testing.T) {
-	handler := NewPromptKeyboardHandler()
+	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 
 	// Create a keyboard function that returns nil
@@ -127,7 +127,7 @@ func TestPromptKeyboardHandler_BuildKeyboard_KeyboardFuncReturnsNil(t *testing.T
 }
 
 func TestPromptKeyboardHandler_BuildKeyboard_InvalidKeyboard(t *testing.T) {
-	handler := NewPromptKeyboardHandler()
+	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 
 	// Create a keyboard function that returns an empty keyboard (invalid)
@@ -155,7 +155,7 @@ func TestPromptKeyboardHandler_BuildKeyboard_InvalidKeyboard(t *testing.T) {
 }
 
 func TestPromptKeyboardHandler_GetCallbackData_ExistingUUID(t *testing.T) {
-	handler := NewPromptKeyboardHandler()
+	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 	userID := ctx.UserID()
 
@@ -199,7 +199,7 @@ func TestPromptKeyboardHandler_GetCallbackData_ExistingUUID(t *testing.T) {
 }
 
 func TestPromptKeyboardHandler_GetCallbackData_NonExistingUUID(t *testing.T) {
-	handler := NewPromptKeyboardHandler()
+	handler := newPromptKeyboardHandler()
 	userID := int64(12345)
 
 	// Test getting non-existing callback data
@@ -215,7 +215,7 @@ func TestPromptKeyboardHandler_GetCallbackData_NonExistingUUID(t *testing.T) {
 }
 
 func TestPromptKeyboardHandler_GetCallbackData_NonExistingUser(t *testing.T) {
-	handler := NewPromptKeyboardHandler()
+	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 
 	// First, build a keyboard for one user
@@ -246,7 +246,7 @@ func TestPromptKeyboardHandler_GetCallbackData_NonExistingUser(t *testing.T) {
 }
 
 func TestPromptKeyboardHandler_CleanupUserMappings(t *testing.T) {
-	handler := NewPromptKeyboardHandler()
+	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 	userID := ctx.UserID()
 
@@ -279,7 +279,7 @@ func TestPromptKeyboardHandler_CleanupUserMappings(t *testing.T) {
 }
 
 func TestPromptKeyboardHandler_CleanupUserMappings_NonExistingUser(t *testing.T) {
-	handler := NewPromptKeyboardHandler()
+	handler := newPromptKeyboardHandler()
 
 	// Try to cleanup mappings for a user that doesn't exist
 	nonExistingUserID := int64(99999)
@@ -294,7 +294,7 @@ func TestPromptKeyboardHandler_CleanupUserMappings_NonExistingUser(t *testing.T)
 }
 
 func TestPromptKeyboardHandler_MultipleUsers(t *testing.T) {
-	handler := NewPromptKeyboardHandler()
+	handler := newPromptKeyboardHandler()
 
 	// Create contexts for two different users
 	update1 := tgbotapi.Update{
@@ -303,7 +303,7 @@ func TestPromptKeyboardHandler_MultipleUsers(t *testing.T) {
 			From: &tgbotapi.User{ID: 456},
 		},
 	}
-	ctx1 := NewContext(&Bot{}, update1)
+	ctx1 := newContext(&Bot{}, update1)
 
 	update2 := tgbotapi.Update{
 		Message: &tgbotapi.Message{
@@ -311,7 +311,7 @@ func TestPromptKeyboardHandler_MultipleUsers(t *testing.T) {
 			From: &tgbotapi.User{ID: 101112},
 		},
 	}
-	ctx2 := NewContext(&Bot{}, update2)
+	ctx2 := newContext(&Bot{}, update2)
 
 	// Build keyboards for both users
 	keyboardFunc1 := func(ctx *Context) *PromptKeyboardBuilder {

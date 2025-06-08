@@ -48,7 +48,7 @@ type PromptComposer struct {
 	keyboardHandler *PromptKeyboardHandler
 }
 
-// NewPromptComposer creates and initializes a new PromptComposer with the required dependencies.
+// newPromptComposer creates and initializes a new PromptComposer with the required dependencies.
 //
 // Parameters:
 //   - botAPI: Interface to Telegram Bot API for message sending
@@ -57,7 +57,7 @@ type PromptComposer struct {
 //   - kbdHandler: Component for building keyboards and managing callback mappings
 //
 // Returns a fully configured PromptComposer ready to process PromptConfig instances.
-func NewPromptComposer(botAPI BotAPI, msgRenderer *messageRenderer, imgHandler *imageHandler, kbdHandler *PromptKeyboardHandler) *PromptComposer {
+func newPromptComposer(botAPI BotAPI, msgRenderer *messageRenderer, imgHandler *imageHandler, kbdHandler *PromptKeyboardHandler) *PromptComposer {
 	return &PromptComposer{
 		botAPI:          botAPI,
 		messageRenderer: msgRenderer,

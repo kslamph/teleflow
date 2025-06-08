@@ -225,7 +225,7 @@ func createTestContext() *Context {
 			From: &tgbotapi.User{ID: 456},
 		},
 	}
-	return NewContext(&Bot{}, update)
+	return newContext(&Bot{}, update)
 }
 
 func TestPromptComposer_ComposeAndSend_TextOnlyMessage(t *testing.T) {
