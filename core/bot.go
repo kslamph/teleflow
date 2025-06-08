@@ -21,7 +21,7 @@
 //	bot.InitializeFlowSystem()
 //
 //	bot.HandleCommand("start", func(ctx *teleflow.Context, command string, args string) error {
-//		return ctx.Reply("Hello! Welcome to Teleflow!")
+//		return ctx.SendPromptText("Hello! Welcome to Teleflow!")
 //	})
 //
 //	log.Fatal(bot.Start())
@@ -50,7 +50,7 @@
 //		OnComplete(func(ctx *teleflow.Context, flowData map[string]interface{}) error {
 //			name, _ := flowData["name"].(string)
 //			age, _ := flowData["age"].(string)
-//			return ctx.Reply(fmt.Sprintf("Welcome %s, age %s!", name, age))
+//			return ctx.SendPromptText(fmt.Sprintf("Welcome %s, age %s!", name, age))
 //		}).
 //		Build()
 //
@@ -570,7 +570,7 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 	if b.flowManager.isUserInFlow(ctx.UserID()) {
 		if ctx.update.Message != nil && b.isGlobalExitCommand(ctx.update.Message.Text) {
 			b.flowManager.cancelFlow(ctx.UserID()) // Consider if OnCancel should be triggered
-			err = ctx.Reply(b.flowConfig.ExitMessage)
+			err = ctx.sendSimpleText(b.flowConfig.ExitMessage)
 			if err != nil {
 				log.Printf("Error sending flow exit message: %v", err)
 			}
@@ -635,7 +635,7 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 
 	if err != nil {
 		log.Printf("Handler error for UserID %d: %v", ctx.UserID(), err)
-		if replyErr := ctx.Reply("An error occurred. Please try again."); replyErr != nil {
+		if replyErr := ctx.sendSimpleText("An error occurred. Please try again."); replyErr != nil {
 			log.Printf("Failed to send error reply to UserID %d: %v", ctx.UserID(), replyErr)
 		}
 	}

@@ -328,7 +328,7 @@ func (fm *flowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName strin
 	}
 
 	// Attempt to render with error handling
-	err := fm.bot.promptComposer.ComposeAndSend(ctx, step.PromptConfig)
+	err := fm.bot.promptComposer.composeAndSend(ctx, step.PromptConfig)
 	if err != nil {
 		return fm.handleRenderError(ctx, err, flow, stepName, userState)
 	}
@@ -512,7 +512,7 @@ func (fm *flowManager) renderInformationalPrompt(ctx *Context, config *PromptCon
 		// Keyboard is intentionally omitted for informational messages
 	}
 
-	return fm.bot.promptComposer.ComposeAndSend(ctx, infoPrompt)
+	return fm.bot.promptComposer.composeAndSend(ctx, infoPrompt)
 }
 
 // advanceToNextStep moves to the next step in sequence
@@ -655,7 +655,7 @@ func (fm *flowManager) handleErrorStrategyIgnore(ctx *Context, config *ErrorConf
 		}
 
 		// Try to render without image using PromptComposer - if this fails, we'll advance to next step
-		if err := fm.bot.promptComposer.ComposeAndSend(ctx, fallbackPrompt); err != nil {
+		if err := fm.bot.promptComposer.composeAndSend(ctx, fallbackPrompt); err != nil {
 			// If even the fallback fails, advance to next step
 			_, err := fm.advanceToNextStep(ctx, userState, flow)
 			return err
@@ -681,7 +681,7 @@ func (fm *flowManager) notifyUserIfNeeded(ctx *Context, message string) {
 	ctx.Set("__render_parse_mode", ParseModeNone)
 
 	// Use a simple text reply for error notifications to avoid additional render errors
-	if err := ctx.Reply(message); err != nil {
+	if err := ctx.sendSimpleText(message); err != nil {
 		log.Printf("[FLOW_ERROR_NOTIFY_FAILED] Failed to notify user %d: %v", ctx.UserID(), err)
 	}
 }

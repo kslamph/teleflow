@@ -66,7 +66,7 @@ func NewPromptComposer(botAPI BotAPI, msgRenderer *messageRenderer, imgHandler *
 	}
 }
 
-// ComposeAndSend is the main method that processes a PromptConfig and sends the corresponding
+// composeAndSend is the main method that processes a PromptConfig and sends the corresponding
 // Telegram message. This method orchestrates the entire message composition and delivery process.
 //
 // The method follows a sequential four-step process:
@@ -87,7 +87,7 @@ func NewPromptComposer(botAPI BotAPI, msgRenderer *messageRenderer, imgHandler *
 //   - promptConfig: Configuration specifying message content, image, and keyboard
 //
 // Returns error if any step fails: validation, rendering, processing, building, or sending.
-func (pc *PromptComposer) ComposeAndSend(ctx *Context, promptConfig *PromptConfig) error {
+func (pc *PromptComposer) composeAndSend(ctx *Context, promptConfig *PromptConfig) error {
 	if err := pc.validatePromptConfig(promptConfig); err != nil {
 		return fmt.Errorf("invalid PromptConfig: %w", err)
 	}

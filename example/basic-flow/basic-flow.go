@@ -70,48 +70,36 @@ func main() {
 		).
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			if input == "" {
-				return teleflow.Retry().
-					WithPrompt("Please enter your name:").
-					WithImage("https://via.placeholder.com/300x150/FF9800/white?text=Name+Required")
+				return teleflow.Retry().WithPrompt("Please enter your name:")
 			}
 
 			// Store the name
-			ctx.Set("user_name", input)
-			return teleflow.NextStep().
-				WithPrompt("✅ Name saved! Moving to the next step...").
-				WithImage("https://via.placeholder.com/300x150/2196F3/white?text=Name+Saved")
+			ctx.SetFlowData("user_name", input)
+			return teleflow.NextStep().WithPrompt("✅ Name saved! Moving to the next step...")
 		}).
 		Step("age").
 		Prompt(
 			func(ctx *teleflow.Context) string {
-				name, _ := ctx.Get("user_name")
+				name, _ := ctx.GetFlowData("user_name")
 				return fmt.Sprintf("Nice to meet you, %s! How old are you?", name)
-			}).
-		WithImage(
-			func(ctx *teleflow.Context) string {
-				// Dynamic image based on context
-				name, _ := ctx.Get("user_name")
-				return fmt.Sprintf("https://via.placeholder.com/400x200/9C27B0/white?text=Hello+%s", name)
 			}).
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			// Simple age validation
 			if len(input) == 0 || len(input) > 3 {
 				return teleflow.Retry().
-					WithPrompt("Please enter a valid age (1-3 digits):").
-					WithImage("https://via.placeholder.com/300x150/F44336/white?text=Invalid+Age")
-			}
+					WithPrompt("Please enter a valid age (1-3 digits):")
 
+			}
 			// Store the age
-			ctx.Set("user_age", input)
+			ctx.SetFlowData("user_age", input)
 			return teleflow.NextStep().
-				WithPrompt("✅ Age recorded! Let's confirm your details...").
-				WithImage("https://via.placeholder.com/300x150/4CAF50/white?text=Age+Saved")
+				WithPrompt("✅ Age recorded! Let's confirm your details...")
 		}).
 		Step("confirmation").
 		Prompt(
 			func(ctx *teleflow.Context) string {
-				name, _ := ctx.Get("user_name")
-				age, _ := ctx.Get("user_age")
+				name, _ := ctx.GetFlowData("user_name")
+				age, _ := ctx.GetFlowData("user_age")
 				return fmt.Sprintf("Great! So your name is %s and you're %s years old. Is this correct?", name, age)
 			}).
 		WithInlineKeyboard(
@@ -122,7 +110,11 @@ func main() {
 			},
 		).
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
-
+			if buttonClick != nil && buttonClick.Data.(string) != "" {
+				input = buttonClick.Data.(string) // Use button click data if available
+			} else if input == "" {
+				return teleflow.Retry().WithPrompt("Please click one of the buttons above.")
+			}
 			switch input {
 			case "confirm":
 				return teleflow.CompleteFlow().
@@ -136,16 +128,15 @@ func main() {
 			}
 		}).
 		OnComplete(func(ctx *teleflow.Context) error {
-			name, _ := ctx.Get("user_name")
-			age, _ := ctx.Get("user_age")
+			name, _ := ctx.GetFlowData("user_name")
+			age, _ := ctx.GetFlowData("user_age")
 
 			// Use SendPrompt with a celebration image
+			log.Println("Registration complete for user:", name, "Age:", age)
 			return ctx.SendPrompt(&teleflow.PromptConfig{
 				Message: fmt.Sprintf("🎉 Registration complete!\nName: %s\nAge: %s\n\nWelcome to our service!", name, age),
-				Image:   "https://via.placeholder.com/500x300/4CAF50/white?text=🎉+Welcome+Aboard!",
 			})
-		}).
-		Build()
+		}).Build()
 
 	if err != nil {
 		log.Fatal("Failed to build flow:", err)

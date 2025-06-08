@@ -53,17 +53,17 @@ func main() {
 	// Handle the /start command
 	// Handle the /start command
 	bot.HandleCommand("start", func(ctx *core.Context) error {
-		return ctx.Reply("👋 Hello! I'm your new Teleflow bot. Send me any message and I'll echo it back!")
+		return ctx.SendPromptText("👋 Hello! I'm your new Teleflow bot. Send me any message and I'll echo it back!")
 	})
 
 	// Handle the /help command
 	bot.HandleCommand("help", func(ctx *core.Context) error {
-		return ctx.Reply("🤖 Available commands:\n/start - Start the bot\n/help - Show this help\n\nSend me any text and I'll echo it back!")
+		return ctx.SendPromptText("🤖 Available commands:\n/start - Start the bot\n/help - Show this help\n\nSend me any text and I'll echo it back!")
 	})
 
 	// Echo all text messages
 	bot.DefaultHandler(func(ctx *core.Context, text string) error {
-		return ctx.Reply("You said: " + text)
+		return ctx.SendPromptText("You said: " + text)
 	})
 	// Start the bot
 	log.Println("🚀 Bot starting...")
@@ -180,7 +180,7 @@ func main() {
 			age, _ := ctx.Get("user_age")
 			
 			message := fmt.Sprintf("🎉 Welcome to our service!\n\n👤 Name: %s\n🎂 Age: %s\n\nYou're all set!", name, age)
-			return ctx.Reply(message)
+			return ctx.SendPromptText(message)
 		}).
 		Build()
 
@@ -202,7 +202,7 @@ func main() {
 	})
 
 	bot.HandleCommand("help", func(ctx *core.Context) error {
-		return ctx.Reply("🤖 Available commands:\n/start - Begin registration\n/register - Start registration flow\n/cancel - Cancel current operation\n/help - Show this help")
+		return ctx.SendPromptText("🤖 Available commands:\n/start - Begin registration\n/register - Start registration flow\n/cancel - Cancel current operation\n/help - Show this help")
 	})
 	// Set bot commands for the menu
 	if err := bot.SetBotCommands(map[string]string{
@@ -231,7 +231,7 @@ The [`NewBot()`](core/bot.go:15) function creates a new bot instance with your t
 ### 2. Command Handlers
 ```go
 bot.HandleCommand("start", func(ctx *core.Context) error {
-    return ctx.Reply("Hello!")
+    return ctx.SendPromptText("Hello!")
 })
 ```
 Command handlers respond to `/command` messages. The [`Context`](core/context.go:12) provides access to user info, chat details, and helper methods.

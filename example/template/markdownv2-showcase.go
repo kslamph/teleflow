@@ -197,7 +197,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 					Message: "Please click one of the buttons above to see a template example.",
 				})
 			}
-
+			log.Println("Button clicked:", buttonClick.Data)
 			// Demonstrate handling different data types
 			switch data := buttonClick.Data.(type) {
 			case map[string]interface{}:

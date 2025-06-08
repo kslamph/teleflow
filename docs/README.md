@@ -60,7 +60,7 @@ func main() {
 
     // Simple command handler
     bot.HandleCommand("start", func(ctx *core.Context) error {
-        return ctx.Reply("Hello! Welcome to my bot.")
+        return ctx.SendPromptText("Hello! Welcome to my bot.")
     })
 
     // Start a conversation flow

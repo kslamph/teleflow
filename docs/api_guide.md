@@ -121,23 +121,18 @@ For detailed implementation specifics, refer to the [GoDoc documentation](https:
 
 ### Response Methods
 
-**[`Context.Reply(text string, keyboardMarkup ...interface{}) error`](https://pkg.go.dev/github.com/kslamph/teleflow/core#Context.Reply)**
-- Sends text message with optional keyboard
-- Automatically applies AccessManager keyboards if configured
-
-**[`Context.ReplyWithParseMode(text string, parseMode ParseMode, keyboardMarkup ...interface{}) error`](https://pkg.go.dev/github.com/kslamph/teleflow/core#Context.ReplyWithParseMode)**
-- Sends formatted message with specific parse mode (Markdown, MarkdownV2, HTML)
-
-**[`Context.ReplyTemplate(templateName string, data map[string]interface{}, keyboard ...interface{}) error`](https://pkg.go.dev/github.com/kslamph/teleflow/core#Context.ReplyTemplate)**
-- Renders and sends message using template system
-- Supports optional keyboard attachment
-
 **[`Context.SendPrompt(prompt *PromptConfig) error`](https://pkg.go.dev/github.com/kslamph/teleflow/core#Context.SendPrompt)**
 - Sends informational messages using prompt composition
 - Supports templates and images without keyboards
+- Primary method for sending messages outside of flows
+
+**[`Context.SendPromptText(text string) error`](https://pkg.go.dev/github.com/kslamph/teleflow/core#Context.SendPromptText)**
+- Convenience method for sending simple text messages
+- Recommended approach for basic text responses in command handlers
 
 **[`Context.SendPromptWithTemplate(templateName string, data map[string]interface{}) error`](https://pkg.go.dev/github.com/kslamph/teleflow/core#Context.SendPromptWithTemplate)**
 - Convenience method for template-based informational messages
+- Renders templates and sends the result as informational content
 
 ## 4. Conversation Flows (Step-Prompt-Process API)
 

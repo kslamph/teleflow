@@ -39,7 +39,7 @@ The [`Bot`](../core/bot.go) serves as the central orchestrator of the entire sys
 The [`Context`](../core/context.go) is the heart of all bot interactions, providing:
 
 - **Request Data**: Access to current Telegram update, user info, and chat details
-- **Helper Methods**: Convenient methods for replies, keyboards, templates, and flow control
+- **Helper Methods**: Convenient methods for sending messages, templates, and flow control
 - **Data Storage**: Two-tier storage system for request-scoped and flow-persistent data
 - **Bot Operations**: Direct access to bot capabilities through helper methods
 

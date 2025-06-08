@@ -249,7 +249,7 @@ func AuthMiddleware(accessManager AccessManager) MiddlewareFunc {
 			}
 
 			if err := accessManager.CheckPermission(permCtx); err != nil {
-				return ctx.Reply("🚫 " + err.Error())
+				return ctx.sendSimpleText("🚫 " + err.Error())
 			}
 			return next(ctx)
 		}
@@ -332,7 +332,7 @@ func RateLimitMiddleware(requestsPerMinute int) MiddlewareFunc {
 
 			if lastRequest, exists := userLastRequest[userID]; exists {
 				if now.Sub(lastRequest) < minInterval {
-					return ctx.Reply("⏳ Please wait before sending another message.")
+					return ctx.sendSimpleText("⏳ Please wait before sending another message.")
 				}
 			}
 
@@ -384,7 +384,7 @@ func RateLimitMiddleware(requestsPerMinute int) MiddlewareFunc {
 // Error Messages:
 //
 // When a panic is recovered:
-//   - User receives: "An unexpected error occurred. Please try again."
+//   - User receives: "❗An unexpected error occurred. Please try again."
 //   - Logs contain: "Panic in handler for user [ID]: [panic details]"
 //   - Bot continues operating normally for other users
 //
@@ -406,7 +406,7 @@ func RecoveryMiddleware() MiddlewareFunc {
 			defer func() {
 				if r := recover(); r != nil {
 					log.Printf("Panic in handler for user %d: %v", ctx.UserID(), r)
-					err = ctx.Reply("An unexpected error occurred. Please try again.")
+					err = ctx.sendSimpleText("❗An unexpected error occurred. Please try again.")
 				}
 			}()
 			return next(ctx)
