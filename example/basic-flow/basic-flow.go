@@ -191,11 +191,13 @@ func main() {
 		})
 	})
 
-	bot.SetBotCommands(map[string]string{
+	if err := bot.SetBotCommands(map[string]string{
 		"start":  "Start the user registration flow",
 		"cancel": "Cancel the current flow",
 		"help":   "Show help information!!!",
-	})
+	}); err != nil {
+		log.Fatalf("Failed to set bot commands: %v", err)
+	}
 
 	// Start the bot
 	log.Println("🤖 Bot starting with new Step-Prompt-Process API...")

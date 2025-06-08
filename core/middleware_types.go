@@ -1,40 +1,91 @@
-// Simplified Middleware System provides a unified middleware approach
-// for intercepting any type of message in TeleFlow. This replaces the
-// complex type-specific middleware system with a single, general-purpose
-// middleware that can handle all message types.
+// Package teleflow provides middleware type definitions for the unified middleware system.
 //
-// The unified middleware intercepts all incoming updates before they
-// reach specific handlers, allowing for consistent logging, auth,
-// rate limiting, and other cross-cutting concerns.
+// The middleware system in Teleflow uses a unified approach where a single MiddlewareFunc
+// type can intercept and process any type of update (commands, text messages, callbacks, etc.).
+// This eliminates the complexity of type-specific middleware and provides a consistent
+// interface for cross-cutting concerns like authentication, logging, and rate limiting.
 //
-// Basic Usage:
+// Middleware Execution Order:
 //
-//	// Define general middleware that handles all message types
-//	func loggingMiddleware(next teleflow.HandlerFunc) teleflow.HandlerFunc {
-//		return func(ctx *teleflow.Context) error {
-//			log.Printf("Update from user %d: %+v", ctx.UserID(), ctx.Update)
-//			return next(ctx)
-//		}
-//	}
+// Middleware functions are applied in reverse order of registration (LIFO - Last In, First Out).
+// If you register middleware A, B, C in that order, they execute as:
+// C -> B -> A -> handler -> A -> B -> C
 //
-//	// Apply to bot - will intercept all messages
-//	bot.UseMiddleware(loggingMiddleware)
+// This allows the last registered middleware to be the outermost wrapper, which is
+// typically desired for security middleware like authentication and rate limiting.
 //
-// Authentication Example:
+// Basic Custom Middleware:
 //
-//	func authMiddleware(next teleflow.HandlerFunc) teleflow.HandlerFunc {
-//		return func(ctx *teleflow.Context) error {
-//			if !isAuthorized(ctx.UserID()) {
-//				return ctx.Reply("Access denied")
+//	func CustomLoggingMiddleware() teleflow.MiddlewareFunc {
+//		return func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
+//			return func(ctx *teleflow.Context) error {
+//				log.Printf("Processing update from user %d", ctx.UserID())
+//				err := next(ctx)
+//				if err != nil {
+//					log.Printf("Handler error: %v", err)
+//				}
+//				return err
 //			}
-//			return next(ctx)
 //		}
 //	}
+//
+//	// Apply to bot - will intercept all handler executions
+//	bot.UseMiddleware(CustomLoggingMiddleware())
+//
+// Context-Aware Middleware:
+//
+//	func AuthMiddleware(accessManager AccessManager) teleflow.MiddlewareFunc {
+//		return func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
+//			return func(ctx *teleflow.Context) error {
+//				// Access user info, update type, etc. from context
+//				if !isAuthorized(ctx.UserID(), ctx.ChatID()) {
+//					return ctx.Reply("🚫 Access denied")
+//				}
+//				return next(ctx)
+//			}
+//		}
+//	}
+//
+// Built-in Middleware Usage:
+//
+//	// Apply multiple middleware in registration order
+//	bot.UseMiddleware(teleflow.RecoveryMiddleware())     // Outermost
+//	bot.UseMiddleware(teleflow.LoggingMiddleware())      // Middle
+//	bot.UseMiddleware(teleflow.RateLimitMiddleware(10))  // Innermost
+//
+// The unified approach ensures that all handler types (commands, text, callbacks, flows)
+// receive the same middleware processing, providing consistent behavior across your bot.
 package teleflow
 
-// MiddlewareFunc defines the unified middleware signature that can intercept
-// any type of message or update. This replaces all type-specific middleware.
+// MiddlewareFunc defines the unified middleware function signature for the Teleflow framework.
+//
+// This function type enables intercepting and processing any type of update before it reaches
+// specific handlers. The middleware receives the next handler in the chain and returns a
+// new handler that wraps the original with additional functionality.
+//
+// The middleware pattern allows for:
+//   - Pre-processing: Execute code before the handler (logging, auth checks, validation)
+//   - Post-processing: Execute code after the handler (cleanup, response modification)
+//   - Error handling: Catch and handle errors from downstream handlers
+//   - Request modification: Modify the context before passing to the next handler
+//
+// Parameters:
+//   - next: The next HandlerFunc in the middleware chain or the final handler
+//
+// Returns:
+//   - HandlerFunc: A new handler that wraps the next handler with middleware logic
+//
+// Example Implementation:
+//
+//	func TimingMiddleware() MiddlewareFunc {
+//		return func(next HandlerFunc) HandlerFunc {
+//			return func(ctx *Context) error {
+//				start := time.Now()
+//				err := next(ctx)
+//				duration := time.Since(start)
+//				log.Printf("Handler took %v", duration)
+//				return err
+//			}
+//		}
+//	}
 type MiddlewareFunc func(next HandlerFunc) HandlerFunc
-
-// Internal middleware types (not exposed to users)
-// These are used internally for callback and flow system operations

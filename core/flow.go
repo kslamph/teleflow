@@ -9,35 +9,65 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Flow system enables the creation of sophisticated multi-step conversational
-// interfaces using the new Step-Prompt-Process API. This system provides:
-//   - Declarative prompt configuration (Message, Image, Keyboard)
-//   - Unified input processing with ProcessFunc
-//   - Clear flow control with ProcessResult actions
-//   - Simplified developer experience with zero learning curve
-//   - Built-in error handling with configurable recovery strategies
+// Package core/flow.go implements the Step-Prompt-Process API runtime for multi-step conversational flows.
+//
+// The Flow System provides a declarative approach to building sophisticated conversational interfaces
+// with built-in error handling, state management, and lifecycle control. The runtime manages flow
+// execution, user state tracking, prompt rendering, and input processing through a unified API.
+//
+// Key Runtime Components:
+//   - Flow execution engine with step sequencing and navigation
+//   - User state management with automatic context synchronization
+//   - Error handling with configurable recovery strategies (cancel, retry, ignore)
+//   - Message action processing for clean UI interactions
+//   - Automatic cleanup of keyboard mappings and user sessions
+//
+// Example Usage:
+//   // Error handling configuration
+//   flow := NewFlow("example").
+//     OnError(OnErrorRetry("Please try again")).
+//     Step("input").Prompt("Enter name:").Process(func(ctx *Context, input string, click *ButtonClick) ProcessResult {
+//       return NextStep()
+//     }).Build()
+//
+//   bot.RegisterFlow(flow)
+//   ctx.StartFlow("example")
 
-// errorStrategy defines how to handle runtime errors during flow execution
+// errorStrategy defines how runtime errors are handled during flow execution.
+// The strategy determines whether to cancel the flow, retry the current step,
+// or ignore the error and continue processing.
 type errorStrategy int
 
 const (
-	errorStrategyCancel errorStrategy = iota // Cancel flow (default)
-	errorStrategyRetry                       // Retry current step
-	errorStrategyIgnore                      // Continue with flow
+	errorStrategyCancel errorStrategy = iota // Cancel flow immediately (default behavior)
+	errorStrategyRetry                       // Retry current step, re-render prompt
+	errorStrategyIgnore                      // Continue execution, skip problematic step
 )
 
-// ErrorConfig defines error handling behavior for flows
+// ErrorConfig defines comprehensive error handling behavior for flows.
+// It specifies both the recovery strategy and user notification message.
+// Used for flow-level error configuration through OnError() methods.
 type ErrorConfig struct {
-	Action  errorStrategy
-	Message string // Custom message or ON_ERROR_SILENT for silent operation
+	Action  errorStrategy // Recovery strategy to apply when errors occur
+	Message string        // User notification message, or ON_ERROR_SILENT for silent handling
 }
 
-// Predefined constant for silent error handling
+// ON_ERROR_SILENT is a special constant for silent error handling.
+// When used as ErrorConfig.Message, no user notification is sent during error recovery.
 const ON_ERROR_SILENT = "__SILENT__"
 
-// Convenience constructors for error handling configuration
-
-// OnErrorCancel cancels the flow when an error occurs (default behavior)
+// OnErrorCancel creates an ErrorConfig that cancels the flow when rendering errors occur.
+// This is the default error handling strategy that provides safe failure behavior.
+//
+// Parameters:
+//   - message: Optional custom error message. If empty, uses default cancellation message.
+//
+// Returns:
+//   - *ErrorConfig configured for flow cancellation with user notification.
+//
+// Example:
+//
+//	flow := NewFlow("example").OnError(OnErrorCancel("Custom error occurred")).Build()
 func OnErrorCancel(message ...string) *ErrorConfig {
 	msg := "❗ A technical error occurred. Flow has been cancelled."
 	if len(message) > 0 && message[0] != "" {
@@ -49,7 +79,19 @@ func OnErrorCancel(message ...string) *ErrorConfig {
 	}
 }
 
-// OnErrorRetry retries the current step when an error occurs
+// OnErrorRetry creates an ErrorConfig that retries the current step when rendering errors occur.
+// The step's prompt is re-rendered, giving the user another opportunity to interact with it.
+// Useful for temporary issues like network connectivity or transient rendering problems.
+//
+// Parameters:
+//   - message: Optional custom retry message. If empty, uses default retry message.
+//
+// Returns:
+//   - *ErrorConfig configured for step retry with user notification.
+//
+// Example:
+//
+//	flow := NewFlow("example").OnError(OnErrorRetry("Retrying...")).Build()
 func OnErrorRetry(message ...string) *ErrorConfig {
 	msg := "🔄 A technical error occurred. Retrying current step..."
 	if len(message) > 0 && message[0] != "" {
@@ -61,7 +103,19 @@ func OnErrorRetry(message ...string) *ErrorConfig {
 	}
 }
 
-// OnErrorIgnore ignores the error and continues with the flow
+// OnErrorIgnore creates an ErrorConfig that ignores rendering errors and continues flow execution.
+// When errors occur, a fallback prompt (without problematic elements) is rendered, or the flow
+// advances to the next step. Useful for non-critical rendering issues where flow continuation is preferred.
+//
+// Parameters:
+//   - message: Optional custom warning message. If empty, uses default warning message.
+//
+// Returns:
+//   - *ErrorConfig configured to ignore errors with optional user notification.
+//
+// Example:
+//
+//	flow := NewFlow("example").OnError(OnErrorIgnore("Minor issue, continuing...")).Build()
 func OnErrorIgnore(message ...string) *ErrorConfig {
 	msg := "⚠️ A technical error occurred. Continuing with flow..."
 	if len(message) > 0 && message[0] != "" {
@@ -73,25 +127,38 @@ func OnErrorIgnore(message ...string) *ErrorConfig {
 	}
 }
 
-// FlowConfig holds configuration for flow behavior
+// FlowConfig holds global configuration for flow behavior across the entire bot.
+// It defines bot-wide settings that affect all flows, including exit commands,
+// global command handling, and default message processing behavior.
 type FlowConfig struct {
-	ExitCommands        []string
-	ExitMessage         string
-	AllowGlobalCommands bool
-	HelpCommands        []string
-	OnProcessAction     ProcessMessageAction // How to handle previous messages on button clicks
+	ExitCommands        []string             // Commands that cancel any active flow (e.g., "/cancel", "/exit")
+	ExitMessage         string               // Message shown when user exits a flow via command
+	AllowGlobalCommands bool                 // Whether global commands are processed during flows
+	HelpCommands        []string             // Commands that show help without affecting flow state
+	OnProcessAction     ProcessMessageAction // Default behavior for handling previous messages on button clicks
 }
 
-// flowManager manages all flows and user flow states
+// flowManager manages all registered flows and tracks user flow states across the bot.
+// It serves as the central orchestrator for flow execution, handling registration,
+// lifecycle management, user state tracking, and error recovery. The manager coordinates
+// between flows, user sessions, and the bot's prompt rendering system.
 type flowManager struct {
-	flows        map[string]*Flow
-	userFlows    map[int64]*userFlowState
-	stateManager StateManager
-	botConfig    *FlowConfig
-	bot          *Bot // Reference to bot for accessing promptComposer
+	flows        map[string]*Flow         // Registry of all available flows by name
+	userFlows    map[int64]*userFlowState // Active user sessions mapped by user ID
+	stateManager StateManager             // Persistent state storage interface
+	botConfig    *FlowConfig              // Global flow configuration settings
+	bot          *Bot                     // Reference to parent bot for accessing promptComposer and other services
 }
 
-// newFlowManager creates a new flow manager
+// newFlowManager creates a new flow manager with the specified state manager.
+// Initializes empty registries for flows and user sessions, preparing the manager
+// for flow registration and user interaction handling.
+//
+// Parameters:
+//   - stateManager: StateManager interface for persistent state storage
+//
+// Returns:
+//   - *flowManager: New flow manager instance ready for initialization
 func newFlowManager(stateManager StateManager) *flowManager {
 	return &flowManager{
 		flows:        make(map[string]*Flow),
@@ -100,58 +167,97 @@ func newFlowManager(stateManager StateManager) *flowManager {
 	}
 }
 
+// initialize completes flow manager setup by linking it to the parent bot.
+// This method provides access to the bot's prompt composer and configuration,
+// enabling full flow execution capabilities.
+//
+// Parameters:
+//   - bot: Parent Bot instance providing prompt composer and configuration
 func (fm *flowManager) initialize(bot *Bot) {
 	fm.bot = bot
 	fm.botConfig = &bot.flowConfig
 }
 
-// isUserInFlow checks if a user is currently in a flow
+// isUserInFlow checks whether a specific user is currently participating in any active flow.
+// Used to determine if incoming updates should be processed by the flow system.
+//
+// Parameters:
+//   - userID: Telegram user ID to check
+//
+// Returns:
+//   - bool: true if user has an active flow session, false otherwise
 func (fm *flowManager) isUserInFlow(userID int64) bool {
 	_, exists := fm.userFlows[userID]
 	return exists
 }
 
-// cancelFlow cancels the current flow for a user
+// cancelFlow immediately cancels and removes any active flow session for the specified user.
+// This cleans up user state but does not send notifications or handle cleanup callbacks.
+// Use for emergency cancellation or when user state becomes invalid.
+//
+// Parameters:
+//   - userID: Telegram user ID whose flow should be cancelled
 func (fm *flowManager) cancelFlow(userID int64) {
 	delete(fm.userFlows, userID)
 }
 
-// Flow represents a structured multi-step conversation using the new Step-Prompt-Process API
+// Flow represents a complete multi-step conversational flow built with the Step-Prompt-Process API.
+// Each flow encapsulates a series of interactive steps that guide users through a structured process,
+// with comprehensive error handling, lifecycle management, and customizable behavior for message processing.
 type Flow struct {
-	Name            string
-	Steps           map[string]*flowStep // Map for easier lookup by step name
-	Order           []string             // Maintains step execution order
-	OnComplete      func(*Context) error // Simplified completion handler
-	OnError         *ErrorConfig         // Flow-level error handling configuration
-	OnProcessAction ProcessMessageAction // How to handle previous messages on button clicks
-	Timeout         time.Duration
+	Name            string               // Unique identifier for the flow, used for registration and starting
+	Steps           map[string]*flowStep // Map of all steps indexed by name for efficient lookup
+	Order           []string             // Ordered list of step names defining execution sequence
+	OnComplete      func(*Context) error // Optional handler executed when flow completes successfully
+	OnError         *ErrorConfig         // Flow-level error handling strategy for rendering failures
+	OnProcessAction ProcessMessageAction // Defines how previous messages are handled during button interactions
+	Timeout         time.Duration        // Maximum duration before flow auto-cancellation
 }
 
-// flowStep represents a single step in a flow using the new API
+// flowStep represents a single interactive step within a flow using the Step-Prompt-Process API.
+// Each step defines what the user sees (prompt), how input is processed (function), and optional
+// completion handling. Steps are executed sequentially according to the flow's Order.
 type flowStep struct {
-	Name         string
-	PromptConfig *PromptConfig        // New: declarative prompt specification
-	ProcessFunc  ProcessFunc          // New: unified input processing
-	OnComplete   func(*Context) error // Optional step completion handler
-	Timeout      time.Duration
+	Name         string               // Unique step identifier within the flow
+	PromptConfig *PromptConfig        // Declarative specification of what to display (message, image, keyboard)
+	ProcessFunc  ProcessFunc          // Function that processes user input and determines next action
+	OnComplete   func(*Context) error // Optional handler executed after successful step processing
+	Timeout      time.Duration        // Maximum time to wait for user input before timeout
 }
 
-// userFlowState tracks a user's current position in a flow
+// userFlowState tracks an individual user's current position and data within an active flow.
+// This state is maintained throughout the flow execution and automatically synchronized
+// with the Context for seamless data access in prompts and process functions.
 type userFlowState struct {
-	FlowName      string
-	CurrentStep   string
-	Data          map[string]interface{}
-	StartedAt     time.Time
-	LastActive    time.Time
-	LastMessageID int // Track last message ID for deletion options
+	FlowName      string                 // Name of the currently active flow
+	CurrentStep   string                 // Name of the current step being executed
+	Data          map[string]interface{} // User-specific data accumulated during flow execution
+	StartedAt     time.Time              // Timestamp when the flow was initiated
+	LastActive    time.Time              // Timestamp of the most recent user interaction
+	LastMessageID int                    // Message ID of the last sent message for cleanup operations
 }
 
-// registerFlow registers a flow with the manager
+// registerFlow registers a flow with the manager, making it available for user interaction.
+// The flow must have a unique name and be fully configured before registration.
+// Once registered, the flow can be started using Context.StartFlow() or bot.StartFlow().
+//
+// Parameters:
+//   - flow: Fully configured Flow instance to register
 func (fm *flowManager) registerFlow(flow *Flow) {
 	fm.flows[flow.Name] = flow
 }
 
-// startFlow starts a flow for a user
+// startFlow initiates a new flow session for the specified user with optional initial context data.
+// Creates user state, validates flow configuration, and renders the first step's prompt.
+// If context data is provided, it's copied into the flow's initial state for use in prompts and processing.
+//
+// Parameters:
+//   - userID: Telegram user ID to start the flow for
+//   - flowName: Name of the registered flow to start
+//   - ctx: Context containing optional initial data and providing rendering capabilities
+//
+// Returns:
+//   - error: any error that occurred during flow initialization or first step rendering
 func (fm *flowManager) startFlow(userID int64, flowName string, ctx *Context) error {
 	flow, exists := fm.flows[flowName]
 	if !exists {
@@ -188,7 +294,19 @@ func (fm *flowManager) startFlow(userID int64, flowName string, ctx *Context) er
 	return nil
 }
 
-// renderStepPrompt renders the prompt for a given step
+// renderStepPrompt renders the declarative prompt configuration for a specific step.
+// Loads user state data into the context, then uses the bot's PromptComposer to render
+// the step's message, image, and keyboard. Applies comprehensive error handling based
+// on the flow's OnError configuration if rendering fails.
+//
+// Parameters:
+//   - ctx: Context for rendering and user interaction
+//   - flow: Flow containing the step to render
+//   - stepName: Name of the step whose prompt should be rendered
+//   - userState: Current user state for data synchronization
+//
+// Returns:
+//   - error: any error that occurred during prompt rendering, after applying error handling strategies
 func (fm *flowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName string, userState *userFlowState) error {
 	step := flow.Steps[stepName]
 	if step == nil {
@@ -218,7 +336,33 @@ func (fm *flowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName strin
 	return nil
 }
 
-// HandleUpdate processes an update for a user in a flow using the new API
+// HandleUpdate is the central method that processes incoming Telegram updates for users in active flows.
+// This method orchestrates the complete flow execution cycle: input extraction, state management,
+// step processing, result handling, and error recovery. It returns whether the update was handled
+// by the flow system and any errors that occurred during processing.
+//
+// Processing Flow:
+//  1. Validates user has active flow session
+//  2. Extracts input data (text messages or button clicks)
+//  3. Synchronizes user state data with Context
+//  4. Executes current step's ProcessFunc
+//  5. Handles button click callbacks and message cleanup
+//  6. Processes returned ProcessResult for flow navigation
+//  7. Applies error handling strategies if issues occur
+//
+// Parameters:
+//   - ctx: Context containing the Telegram update and user session
+//
+// Returns:
+//   - bool: true if update was processed by flow system, false if user not in flow
+//   - error: any error that occurred during processing
+//
+// Example Usage:
+//
+//	handled, err := flowManager.HandleUpdate(ctx)
+//	if handled {
+//	  return // Update was processed by flow system
+//	}
 func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 	userID := ctx.UserID()
 	userState, exists := fm.userFlows[userID]

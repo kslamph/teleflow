@@ -4,21 +4,21 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Keyboard system provides intuitive abstractions for creating and managing
-// Telegram reply keyboards and inline keyboards. The Step-Prompt-Process API
-// greatly simplifies keyboard creation using map-based approaches for common use cases.
+// Package teleflow/core provides keyboard systems for creating Telegram reply keyboards and inline keyboards.
 //
-// Reply Keyboards appear below the message input field and send their text
-// as regular messages when pressed. They're ideal for main menus, options
-// selection, and persistent navigation elements.
+// This file contains core keyboard structures and utility functions that support both traditional
+// keyboard builders and modern map-based keyboard approaches used in flow steps.
 //
-// Inline Keyboards appear directly below messages as clickable buttons.
-// They support callback data, URLs, and other interactive elements
-// without sending text messages.
+// # Keyboard Types
 //
-// Simple Map-based Keyboards :
+// Two main keyboard types are supported:
+//   - Reply Keyboards: Appear below the message input field, send text when pressed
+//   - Inline Keyboards: Appear below messages as clickable buttons with callback data
 //
-//	// In flow steps, use simple map syntax for inline keyboards
+// # Modern Map-based Approach (Recommended)
+//
+// For flow steps, use the simple map-based syntax in Prompt() calls:
+//
 //	.Prompt(
 //		"Please choose an option:",
 //		nil, // optional image
@@ -44,65 +44,101 @@ import (
 //		return teleflow.NextStep()
 //	})
 //
-
-// Special Button Types (Still supported for complex use cases):
+// # Traditional Builder Approach (Advanced Use Cases)
+//
+// For complex keyboards requiring special button types:
 //
 //	// Request contact information
-//	keyboard.AddRow(teleflow.NewReplyButton("📱 Share Contact").SetRequestContact())
-//
-//	// Request location
-//	keyboard.AddRow(teleflow.NewReplyButton("📍 Share Location").SetRequestLocation())
+//	keyboard := teleflow.NewReplyKeyboard().
+//		AddRow(teleflow.NewReplyButton("📱 Share Contact").SetRequestContact()).
+//		AddRow(teleflow.NewReplyButton("📍 Share Location").SetRequestLocation())
 //
 
-// ReplyKeyboardButton represents a button in a reply keyboard
+// ReplyKeyboardButton represents a single button in a reply keyboard.
+//
+// Reply keyboard buttons appear below the message input field and send their
+// text content when pressed. They can optionally request contact or location
+// information from the user.
 type ReplyKeyboardButton struct {
-	Text            string `json:"text"`
-	RequestContact  bool   `json:"request_contact,omitempty"`
-	RequestLocation bool   `json:"request_location,omitempty"`
+	Text            string `json:"text"`                       // Button text displayed to user
+	RequestContact  bool   `json:"request_contact,omitempty"`  // Request user's contact when pressed
+	RequestLocation bool   `json:"request_location,omitempty"` // Request user's location when pressed
 }
 
-// ReplyKeyboard represents a custom reply keyboard
+// ReplyKeyboard represents a custom reply keyboard with multiple buttons arranged in rows.
+//
+// Reply keyboards appear below the message input area and remain visible until
+// hidden or replaced. They're ideal for main menus and persistent navigation.
+//
+// Use fluent methods for configuration:
+//
+//	keyboard := BuildReplyKeyboard([]string{"Option A", "Option B"}, 2).
+//		Resize().
+//		OneTime().
+//		Placeholder("Choose an option...")
 type ReplyKeyboard struct {
-	Keyboard              [][]ReplyKeyboardButton `json:"keyboard"`
-	ResizeKeyboard        bool                    `json:"resize_keyboard,omitempty"`
-	OneTimeKeyboard       bool                    `json:"one_time_keyboard,omitempty"`
-	InputFieldPlaceholder string                  `json:"input_field_placeholder,omitempty"`
-	Selective             bool                    `json:"selective,omitempty"`
+	Keyboard              [][]ReplyKeyboardButton `json:"keyboard"`                          // 2D array of keyboard buttons
+	ResizeKeyboard        bool                    `json:"resize_keyboard,omitempty"`         // Resize keyboard to fit buttons
+	OneTimeKeyboard       bool                    `json:"one_time_keyboard,omitempty"`       // Hide keyboard after use
+	InputFieldPlaceholder string                  `json:"input_field_placeholder,omitempty"` // Placeholder text in input field
+	Selective             bool                    `json:"selective,omitempty"`               // Show keyboard only to mentioned users
 }
 
-// InlineKeyboardButton represents a button in an inline keyboard
+// InlineKeyboardButton represents a single button in an inline keyboard.
+//
+// Inline keyboard buttons appear directly below messages and support various
+// interaction types including callbacks, URLs, and inline query switching.
 type InlineKeyboardButton struct {
-	Text                         string `json:"text"`
-	URL                          string `json:"url,omitempty"`
-	CallbackData                 string `json:"callback_data,omitempty"`
-	SwitchInlineQuery            string `json:"switch_inline_query,omitempty"`
-	SwitchInlineQueryCurrentChat string `json:"switch_inline_query_current_chat,omitempty"`
+	Text                         string `json:"text"`                                       // Button text displayed to user
+	URL                          string `json:"url,omitempty"`                              // URL to open when pressed
+	CallbackData                 string `json:"callback_data,omitempty"`                    // Data sent in callback query
+	SwitchInlineQuery            string `json:"switch_inline_query,omitempty"`              // Switch to inline mode in any chat
+	SwitchInlineQueryCurrentChat string `json:"switch_inline_query_current_chat,omitempty"` // Switch to inline mode in current chat
 }
 
-// InlineKeyboard represents an inline keyboard
+// InlineKeyboard represents an inline keyboard with buttons arranged in rows.
+//
+// Inline keyboards appear directly below messages and provide interactive
+// elements without cluttering the input area. They're ideal for quick actions,
+// confirmations, and navigation within conversations.
+//
+// Use InlineKeyboardBuilder for construction:
+//
+//	keyboard := NewInlineKeyboard().
+//		ButtonCallback("Approve", "approve_data").
+//		ButtonCallback("Reject", "reject_data").
+//		Row().
+//		ButtonUrl("Learn More", "https://example.com")
 type InlineKeyboard struct {
-	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
+	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"` // 2D array of inline keyboard buttons
 }
 
-// BuildMenuButton creates a default menu button configuration.
-// For bot commands, use Bot.SetBotCommands() method instead.
+// BuildMenuButton is DEPRECATED and has been removed.
 //
-// This function is deprecated for command-type menu buttons. Use the following pattern instead:
+// MIGRATION: Use Bot.SetBotCommands() for command management or
+// NewDefaultMenuButton() from menu_button.go for default menu buttons.
 //
-//	// Old way (deprecated):
-//	// menuButton := teleflow.BuildMenuButton() // Assuming it previously took commandMap
+//	// Old way (removed):
+//	// menuButton := teleflow.BuildMenuButton()
 //
-//	// New way:
-//	// err := bot.SetBotCommands(map[string]string{"help": "📖 Help"})
+//	// New way (recommended):
+//	err := bot.SetBotCommands(map[string]string{
+//		"help":  "📖 Show help information",
+//		"start": "🚀 Start the bot",
+//	})
 //
-// BuildMenuButton now only supports creating default menu button configurations.
-func BuildMenuButton() *MenuButtonConfig {
-	// BuildMenuButton is now deprecated for commands - return default type
-	// Users should use Bot.SetBotCommands() for setting bot commands
-	return &MenuButtonConfig{Type: menuButtonTypeDefault}
-}
+//	// Or for default menu button:
+//	menuButton := teleflow.NewDefaultMenuButton()
 
-// newReplyKeyboard creates a new reply keyboard (internal use)
+// newReplyKeyboard creates a new reply keyboard from button rows.
+//
+// This is an internal constructor function used by other keyboard creation
+// utilities. For public API, use BuildReplyKeyboard instead.
+//
+// Parameters:
+//   - rows: Variable number of button rows to initialize the keyboard with
+//
+// Returns a new ReplyKeyboard instance with the provided button rows.
 func newReplyKeyboard(rows ...[]ReplyKeyboardButton) *ReplyKeyboard {
 	kb := &ReplyKeyboard{
 		Keyboard: make([][]ReplyKeyboardButton, 0),
@@ -111,22 +147,31 @@ func newReplyKeyboard(rows ...[]ReplyKeyboardButton) *ReplyKeyboard {
 	return kb
 }
 
-// BuildReplyKeyboard creates a reply keyboard with custom buttons per row
+// BuildReplyKeyboard creates a reply keyboard with buttons distributed across rows.
 //
-// This function allows you to specify how many buttons should appear in each row.
+// This function provides a convenient way to create reply keyboards by automatically
+// distributing buttons across rows based on the specified buttons-per-row count.
+// The resulting keyboard can be further customized using fluent methods.
 //
 // Parameters:
-//   - buttons: slice of button texts
-//   - buttonsPerRow: number of buttons to place in each row (must be > 0)
+//   - buttons: Slice of button text labels to create buttons for
+//   - buttonsPerRow: Number of buttons to place in each row (must be > 0, defaults to 1 if invalid)
+//
+// Returns a ReplyKeyboard instance ready for further configuration or use.
 //
 // Example usage:
 //
 //	// Create a keyboard with 3 buttons per row
 //	keyboard := teleflow.BuildReplyKeyboard(
-//		[]string{"A", "B", "C", "D", "E", "F", "G"}, 3)
-//	// Results in: [A B C] [D E F] [G]
+//		[]string{"Option A", "Option B", "Option C", "Option D", "Option E"}, 3)
+//	// Results in: [Option A | Option B | Option C] [Option D | Option E]
 //
-//	keyboard.Resize().OneTime()
+//	// Configure the keyboard with fluent methods
+//	keyboard.Resize().OneTime().Placeholder("Choose an option")
+//
+//	// Single column layout
+//	singleColumn := teleflow.BuildReplyKeyboard(
+//		[]string{"Main Menu", "Settings", "Help", "Exit"}, 1)
 func BuildReplyKeyboard(buttons []string, buttonsPerRow int) *ReplyKeyboard {
 	if len(buttons) == 0 {
 		return newReplyKeyboard()
@@ -155,27 +200,72 @@ func BuildReplyKeyboard(buttons []string, buttonsPerRow int) *ReplyKeyboard {
 	return kb
 }
 
-// Resize sets the resize keyboard flag
+// Resize enables automatic keyboard resizing to fit the button layout.
+//
+// When enabled, Telegram clients will resize the keyboard vertically to
+// accommodate the optimal button size. This typically results in a more
+// compact and visually appealing keyboard layout.
+//
+// Returns the same ReplyKeyboard instance for method chaining.
+//
+// Example:
+//
+//	keyboard := BuildReplyKeyboard(buttons, 2).Resize()
 func (kb *ReplyKeyboard) Resize() *ReplyKeyboard {
 	kb.ResizeKeyboard = true
 	return kb
 }
 
-// OneTime sets the one time keyboard flag
+// OneTime configures the keyboard to hide automatically after the user presses any button.
+//
+// This is useful for keyboards that represent one-time choices or confirmations.
+// The user will see the keyboard disappear after making their selection, keeping
+// the chat interface clean.
+//
+// Returns the same ReplyKeyboard instance for method chaining.
+//
+// Example:
+//
+//	confirmKeyboard := BuildReplyKeyboard([]string{"Yes", "No"}, 2).OneTime()
 func (kb *ReplyKeyboard) OneTime() *ReplyKeyboard {
 	kb.OneTimeKeyboard = true
 	return kb
 }
 
-// Placeholder sets the input field placeholder text
+// Placeholder sets the placeholder text shown in the input field when the keyboard is active.
+//
+// This text appears in the message input field to guide users on what action
+// is expected. It helps provide context for what the keyboard buttons represent.
+//
+// Parameters:
+//   - text: The placeholder text to display in the input field
+//
+// Returns the same ReplyKeyboard instance for method chaining.
+//
+// Example:
+//
+//	menuKeyboard := BuildReplyKeyboard(menuOptions, 2).
+//		Placeholder("Choose a menu option")
 func (kb *ReplyKeyboard) Placeholder(text string) *ReplyKeyboard {
 	kb.InputFieldPlaceholder = text
 	return kb
 }
 
-// ToTgbotapi converts the reply keyboard to telegram-bot-api format
+// ToTgbotapi converts the ReplyKeyboard to the telegram-bot-api library format.
+//
+// This conversion function transforms the internal ReplyKeyboard representation
+// into the format expected by the telegram-bot-api library for sending to Telegram.
+// All keyboard properties and button configurations are preserved during conversion.
+//
+// Returns a tgbotapi.ReplyKeyboardMarkup ready for use with telegram-bot-api methods.
+//
+// Example:
+//
+//	keyboard := BuildReplyKeyboard([]string{"Option 1", "Option 2"}, 2).Resize()
+//	tgKeyboard := keyboard.ToTgbotapi()
+//	// Use tgKeyboard with telegram-bot-api functions
 func (kb *ReplyKeyboard) ToTgbotapi() tgbotapi.ReplyKeyboardMarkup {
-	// Convert to tgbotapi format
+	// Convert internal button format to telegram-bot-api format
 	var keyboard [][]tgbotapi.KeyboardButton
 	for _, row := range kb.Keyboard {
 		var tgRow []tgbotapi.KeyboardButton
@@ -199,9 +289,26 @@ func (kb *ReplyKeyboard) ToTgbotapi() tgbotapi.ReplyKeyboardMarkup {
 	}
 }
 
-// ToTgbotapi converts the inline keyboard to telegram-bot-api format
+// ToTgbotapi converts the InlineKeyboard to the telegram-bot-api library format.
+//
+// This conversion function transforms the internal InlineKeyboard representation
+// into the format expected by the telegram-bot-api library for sending to Telegram.
+// All button properties including callback data, URLs, and inline query settings
+// are preserved during conversion.
+//
+// Returns a tgbotapi.InlineKeyboardMarkup ready for use with telegram-bot-api methods.
+//
+// Example:
+//
+//	keyboard := &InlineKeyboard{
+//		InlineKeyboard: [][]InlineKeyboardButton{
+//			{{Text: "Button 1", CallbackData: "data1"}},
+//		},
+//	}
+//	tgKeyboard := keyboard.ToTgbotapi()
+//	// Use tgKeyboard with telegram-bot-api functions
 func (kb *InlineKeyboard) ToTgbotapi() tgbotapi.InlineKeyboardMarkup {
-	// Convert to tgbotapi format
+	// Convert internal button format to telegram-bot-api format
 	var keyboard [][]tgbotapi.InlineKeyboardButton
 	for _, row := range kb.InlineKeyboard {
 		var tgRow []tgbotapi.InlineKeyboardButton
@@ -210,7 +317,7 @@ func (kb *InlineKeyboard) ToTgbotapi() tgbotapi.InlineKeyboardMarkup {
 				Text: btn.Text,
 			}
 
-			// Set optional fields as pointers
+			// Set optional fields as pointers (telegram-bot-api requirement)
 			if btn.URL != "" {
 				tgBtn.URL = &btn.URL
 			}

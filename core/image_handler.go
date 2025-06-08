@@ -1,3 +1,6 @@
+// Package teleflow provides a Telegram bot framework for building conversational flows.
+// This file contains the imageHandler component which processes ImageSpec specifications
+// into formats suitable for sending through the Telegram Bot API.
 package teleflow
 
 import (
@@ -8,22 +11,65 @@ import (
 	"strings"
 )
 
-// processedImage contains processed image data ready for sending
+// processedImage contains processed image data ready for sending to Telegram.
+// The structure supports multiple image sources and formats:
+//   - data: Raw image bytes for in-memory images or decoded base64
+//   - isBase64: Flag indicating if the source was base64 encoded
+//   - filePath: File path or URL for file-based or remote images
+//
+// The Telegram Bot API supports different ways to send images, and this structure
+// provides the flexibility to handle all supported methods.
 type processedImage struct {
-	data     []byte
+	// data contains raw image bytes for images loaded into memory
+	data []byte
+	// isBase64 indicates whether the original source was base64 encoded
 	isBase64 bool
+	// filePath contains the file path or URL for file-based or remote images
 	filePath string
 }
 
-// imageHandler processes ImageSpec into ProcessedImage
+// imageHandler processes ImageSpec specifications into processedImage instances
+// ready for transmission to Telegram. It supports multiple image sources:
+//   - Static strings: File paths, URLs, or base64 data URIs
+//   - Dynamic functions: Functions that return image specifications based on context
+//
+// The handler automatically detects image types and formats, validates file sizes
+// and extensions, and prepares images in the format most suitable for the
+// Telegram Bot API.
 type imageHandler struct{}
 
-// newImageHandler creates a new image handler
+// newImageHandler creates and initializes a new image handler.
+// The handler is stateless and ready to process ImageSpec instances immediately.
+//
+// Returns a configured imageHandler instance.
 func newImageHandler() *imageHandler {
 	return &imageHandler{}
 }
 
-// processImage processes an ImageSpec and returns ProcessedImage or nil if no image
+// processImage processes an ImageSpec and returns a processedImage ready for sending
+// to Telegram, or nil if no image is specified.
+//
+// Supported ImageSpec Types:
+//   - string: Static image reference (file path, URL, or base64 data URI)
+//   - func(*Context) string: Dynamic function that returns image reference based on context
+//
+// Image Source Detection:
+//   - Base64 data URIs: Detected by "data:image/" prefix, decoded to bytes
+//   - Local files: Detected by file existence check, validated and loaded
+//   - URLs/Remote: Everything else treated as URL for Telegram to fetch
+//
+// Validation and Processing:
+//   - File size limits: Enforces Telegram's 50MB limit for local files
+//   - Format validation: Checks file extensions for supported image formats
+//   - Error handling: Returns descriptive errors for invalid or inaccessible images
+//
+// Parameters:
+//   - imageSpec: The image specification to process (string or function)
+//   - ctx: Context for dynamic image functions (unused for static strings)
+//
+// Returns:
+//   - *processedImage: Processed image ready for Telegram API, or nil if no image
+//   - error: Any error that occurred during processing or validation
 func (ih *imageHandler) processImage(imageSpec ImageSpec, ctx *Context) (*processedImage, error) {
 	if imageSpec == nil {
 		return nil, nil // No image specified
@@ -31,14 +77,14 @@ func (ih *imageHandler) processImage(imageSpec ImageSpec, ctx *Context) (*proces
 
 	switch img := imageSpec.(type) {
 	case string:
-		// Static image path/URL/base64
+		// Static image path/URL/base64 - process directly
 		return ih.processStaticImage(img)
 
 	case func(*Context) string:
-		// Dynamic image function
+		// Dynamic image function - evaluate with context first
 		imagePath := img(ctx)
 		if imagePath == "" {
-			return nil, nil // Function returned empty, no image
+			return nil, nil // Function returned empty, no image to process
 		}
 		return ih.processStaticImage(imagePath)
 
@@ -47,14 +93,28 @@ func (ih *imageHandler) processImage(imageSpec ImageSpec, ctx *Context) (*proces
 	}
 }
 
-// processStaticImage processes a static image string (path, URL, or base64)
+// processStaticImage processes a static image string by detecting its type
+// and routing it to the appropriate specialized processing method.
+//
+// Image Type Detection:
+//   - Base64 data URIs: Identified by "data:image/" prefix
+//   - Local files: Identified by successful file existence check
+//   - URLs/Remote: Everything else (assumed to be URLs or external references)
+//
+// Processing is delegated to specialized methods that handle validation,
+// format checking, and preparation for the specific image source type.
+//
+// Parameters:
+//   - imageStr: Static image string (file path, URL, or base64 data URI)
+//
+// Returns processed image ready for Telegram API or error if processing fails.
 func (ih *imageHandler) processStaticImage(imageStr string) (*processedImage, error) {
-	// Check if it's base64 encoded
+	// Check if it's base64 encoded data URI
 	if strings.HasPrefix(imageStr, "data:image/") {
 		return ih.processBase64Image(imageStr)
 	}
 
-	// Check if it's a valid file path
+	// Check if it's a valid local file path
 	if _, err := os.Stat(imageStr); err == nil {
 		return ih.processFileImage(imageStr)
 	}
@@ -63,7 +123,24 @@ func (ih *imageHandler) processStaticImage(imageStr string) (*processedImage, er
 	return ih.processURLImage(imageStr)
 }
 
-// processBase64Image processes base64 encoded image data
+// processBase64Image processes base64 encoded image data URIs by extracting
+// and decoding the base64 data into raw bytes suitable for Telegram transmission.
+//
+// Expected Format: "data:image/type;base64,encodedData"
+//   - Validates the data URI format has exactly two comma-separated parts
+//   - Extracts the base64 encoded data (after the comma)
+//   - Decodes the base64 string into raw image bytes
+//   - Marks the result as base64-sourced for tracking purposes
+//
+// Base64 images are particularly useful for:
+//   - Generated images from in-memory processing
+//   - Images received from APIs or external services
+//   - Embedded images in templates or configurations
+//
+// Parameters:
+//   - base64Str: Complete base64 data URI string
+//
+// Returns processedImage with decoded bytes or error if format/decoding fails.
 func (ih *imageHandler) processBase64Image(base64Str string) (*processedImage, error) {
 	// Extract base64 data (skip data:image/type;base64, prefix)
 	parts := strings.Split(base64Str, ",")
@@ -82,20 +159,43 @@ func (ih *imageHandler) processBase64Image(base64Str string) (*processedImage, e
 	}, nil
 }
 
-// processFileImage processes a local file path
+// processFileImage processes a local file path by validating the file and loading
+// its contents into memory for transmission to Telegram.
+//
+// Validation Steps:
+//   - Confirms file exists and is accessible
+//   - Enforces Telegram's 50MB file size limit
+//   - Validates file extension against supported image formats
+//   - Loads file contents into memory for sending
+//
+// Supported Image Formats:
+//   - JPEG (.jpg, .jpeg): Most common format, good compression
+//   - PNG (.png): Lossless compression, supports transparency
+//   - GIF (.gif): Animated images and simple graphics
+//   - BMP (.bmp): Uncompressed bitmap format
+//   - WebP (.webp): Modern format with excellent compression
+//
+// The method loads the entire file into memory, which is suitable for most
+// use cases but may not be optimal for very large images. Consider implementing
+// streaming for production systems with large image processing requirements.
+//
+// Parameters:
+//   - filePath: Path to the local image file to process
+//
+// Returns processedImage with file data loaded or error if validation/loading fails.
 func (ih *imageHandler) processFileImage(filePath string) (*processedImage, error) {
-	// Validate file exists
+	// Validate file exists and get file info
 	info, err := os.Stat(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("image file not found: %s", filePath)
 	}
 
-	// Check file size (Telegram limit is 50MB)
+	// Check file size against Telegram's 50MB limit
 	if info.Size() > 50*1024*1024 { // 50MB
 		return nil, fmt.Errorf("image file too large: %d bytes (max 50MB)", info.Size())
 	}
 
-	// Validate file extension
+	// Validate file extension against supported formats
 	ext := strings.ToLower(filepath.Ext(filePath))
 	validExts := []string{".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
 	isValid := false
@@ -110,7 +210,7 @@ func (ih *imageHandler) processFileImage(filePath string) (*processedImage, erro
 		return nil, fmt.Errorf("unsupported image format: %s (supported: %v)", ext, validExts)
 	}
 
-	// Read file data
+	// Read file data into memory
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read image file: %w", err)
@@ -123,12 +223,35 @@ func (ih *imageHandler) processFileImage(filePath string) (*processedImage, erro
 	}, nil
 }
 
-// processURLImage processes a URL or external image reference
+// processURLImage processes a URL or external image reference by storing the URL
+// for Telegram to fetch directly. This method implements a pass-through strategy
+// where the image URL is provided to Telegram's API for remote fetching.
+//
+// URL Processing Strategy:
+//   - No local validation or downloading is performed
+//   - URL is passed directly to Telegram Bot API
+//   - Telegram handles fetching, validation, and caching
+//   - Reduces local bandwidth and storage requirements
+//   - Relies on Telegram's robust image processing infrastructure
+//
+// Advantages of URL Pass-Through:
+//   - Minimal local resource usage
+//   - Leverages Telegram's CDN and caching
+//   - Handles dynamic URLs and redirects automatically
+//   - No local storage or cleanup required
+//
+// Considerations:
+//   - URL must be accessible to Telegram's servers
+//   - No local validation of image format or size
+//   - Network issues may cause delivery failures
+//   - Production systems may want additional URL validation
+//
+// Parameters:
+//   - imageURL: URL or external reference to the image
+//
+// Returns processedImage configured for URL-based delivery.
 func (ih *imageHandler) processURLImage(imageURL string) (*processedImage, error) {
-	// For URLs, we'll store the path and let Telegram handle it
-	// This is a simplified implementation - in production you might want to
-	// validate URLs, download and cache images, etc.
-
+	// Store URL for Telegram to fetch directly - no local processing needed
 	return &processedImage{
 		filePath: imageURL,
 		isBase64: false,

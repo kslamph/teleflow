@@ -83,6 +83,14 @@ import (
 // FlowManager, Flow, and related types are now implemented in flow.go
 
 // HandlerFunc defines the general function signature for interaction handlers.
+// This is the most basic handler type used internally by the middleware system
+// and as a common interface for all handler types after middleware application.
+//
+// Parameters:
+//   - ctx: The context for the current update, providing access to bot API, state, user info, etc.
+//
+// Returns:
+//   - error: An error if processing failed, nil otherwise.
 type HandlerFunc func(ctx *Context) error
 
 // CommandHandlerFunc defines the function signature for command handlers.
@@ -119,55 +127,133 @@ type TextHandlerFunc func(ctx *Context, text string) error
 //   - error: An error if processing failed, nil otherwise.
 type DefaultHandlerFunc func(ctx *Context, text string) error
 
-// BotOption defines functional options for Bot configuration
+// BotOption defines functional options for Bot configuration.
+// BotOptions are used with NewBot to customize the bot's behavior during initialization.
+// Multiple options can be chained together for flexible configuration.
+//
+// Example:
+//
+//	bot, err := NewBot(token,
+//	  WithFlowConfig(customFlowConfig),
+//	  WithAccessManager(myAccessManager))
 type BotOption func(*Bot)
 
-// PermissionContext provides rich context for permission checking
+// PermissionContext provides rich context for permission checking within AccessManager.
+// This struct contains comprehensive information about the current user interaction,
+// enabling fine-grained permission control and context-aware decision making.
 type PermissionContext struct {
-	UserID    int64
-	ChatID    int64
-	Command   string
-	Arguments []string
-	IsGroup   bool
-	IsChannel bool
-	MessageID int
-	Update    *tgbotapi.Update
+	UserID    int64            // Telegram user ID of the person making the request
+	ChatID    int64            // Telegram chat ID where the interaction occurred
+	Command   string           // The command being executed (without leading slash)
+	Arguments []string         // Command arguments split into individual strings
+	IsGroup   bool             // True if the interaction occurred in a group chat
+	IsChannel bool             // True if the interaction occurred in a channel
+	MessageID int              // Telegram message ID of the triggering message
+	Update    *tgbotapi.Update // Full Telegram update object for advanced context analysis
 }
 
-// AccessManager interface for authorization and automatic UI management
-// It provides context-aware keyboards and menu buttons based on user permissions
+// AccessManager interface provides authorization and automatic UI management capabilities.
+// It enables context-aware permission checking and automatic keyboard generation based on user roles.
+// When used with WithAccessManager, it automatically applies optimal middleware stack including
+// rate limiting and authentication.
+//
+// Implementation example:
+//
+//	type MyAccessManager struct {
+//	  // your fields
+//	}
+//
+//	func (m *MyAccessManager) CheckPermission(ctx *PermissionContext) error {
+//	  // your permission logic
+//	}
+//
+//	func (m *MyAccessManager) GetReplyKeyboard(ctx *PermissionContext) *ReplyKeyboard {
+//	  // return appropriate keyboard based on user permissions
+//	}
 type AccessManager interface {
-	// CheckPermission checks if the user has permission to perform an action
-	// Returns an error if permission is denied, nil if allowed
-	// The error message is used to inform the user
+	// CheckPermission checks if the user has permission to perform the requested action.
+	// The method receives full context about the user, chat, command, and interaction type.
+	//
+	// Parameters:
+	//   - ctx: Rich context containing user ID, chat info, command details, and full update
+	//
+	// Returns:
+	//   - error: An error if permission is denied (message will be shown to user), nil if allowed
 	CheckPermission(ctx *PermissionContext) error
 
-	// GetReplyKeyboard returns the reply keyboard for the user based on context
-	// This keyboard will be automatically applied to reply messages
+	// GetReplyKeyboard returns the appropriate reply keyboard for the user based on their context.
+	// This keyboard will be automatically applied to bot reply messages, providing
+	// context-aware UI that adapts to user permissions and current state.
+	//
+	// Parameters:
+	//   - ctx: Rich context for determining appropriate keyboard layout
+	//
+	// Returns:
+	//   - *ReplyKeyboard: The keyboard to display, or nil for no keyboard
 	GetReplyKeyboard(ctx *PermissionContext) *ReplyKeyboard
 }
 
-// Bot is the main application structure
+// Bot is the main application structure that orchestrates all Telegram bot functionality.
+// It manages handlers, middleware, flows, state, and provides the core update processing logic.
+// The Bot struct is initialized via NewBot and configured through BotOption functions.
 type Bot struct {
-	api                   *tgbotapi.BotAPI
-	handlers              map[string]HandlerFunc
-	textHandlers          map[string]HandlerFunc
-	defaultTextHandler    HandlerFunc // Field for the default text handler
-	callbackRegistry      *callbackRegistry
-	stateManager          StateManager
-	flowManager           *flowManager
-	promptKeyboardHandler *PromptKeyboardHandler // Handles UUID mappings for prompt keyboards
-	promptComposer        *PromptComposer        // Handles prompt sending
-	// Unified middleware system - intercepts all message types
-	middleware []MiddlewareFunc
+	// Core Telegram API integration
+	api *tgbotapi.BotAPI // Direct interface to Telegram Bot API
 
-	// Configuration
-	menuButton    *MenuButtonConfig // Only for web_app or default types
-	accessManager AccessManager     // AccessManager for user permission checking and replyKeyboard management
-	flowConfig    FlowConfig
+	// Handler management
+	handlers           map[string]HandlerFunc // Registered command handlers (key: command name without slash)
+	textHandlers       map[string]HandlerFunc // Registered exact text match handlers
+	defaultTextHandler HandlerFunc            // Fallback handler for unmatched text messages
+
+	// Callback and interaction management
+	callbackRegistry *callbackRegistry // Manages inline keyboard callback handlers with UUID mapping
+
+	// State and flow management
+	stateManager          StateManager           // Handles persistent user state across conversations
+	flowManager           *flowManager           // Manages conversational flows and step transitions
+	promptKeyboardHandler *PromptKeyboardHandler // Handles UUID mappings for prompt keyboards
+	promptComposer        *PromptComposer        // Handles dynamic prompt composition and sending
+
+	// Middleware system
+	middleware []MiddlewareFunc // Unified middleware stack applied to all handler types
+
+	// Configuration and access control
+	menuButton    *MenuButtonConfig // Bot menu button configuration (web_app or default types only)
+	accessManager AccessManager     // Permission checking and automatic UI management
+	flowConfig    FlowConfig        // Flow behavior configuration (exit commands, global commands, etc.)
 }
 
-// NewBot creates a new Bot instance
+// NewBot creates a new Bot instance with the specified Telegram bot token and optional configuration.
+// This is the primary constructor for teleflow bots, setting up all necessary components with sensible defaults.
+//
+// The function performs several initialization steps:
+//  1. Creates and validates the Telegram Bot API connection
+//  2. Initializes core components (handlers, state management, flow system)
+//  3. Sets up default flow configuration with exit commands and security settings
+//  4. Applies any provided BotOption configurations
+//  5. Initializes the flow system for immediate use
+//
+// Default Configuration:
+//   - In-memory state management
+//   - Flow exit commands: ["/cancel"]
+//   - Exit message: "🚫 Operation cancelled."
+//   - Global commands during flows: disabled (security)
+//   - Help commands: ["/help"]
+//   - Message processing: keep messages untouched
+//
+// Parameters:
+//   - token: Telegram bot token obtained from @BotFather
+//   - options: Optional BotOption functions for customizing bot behavior
+//
+// Returns:
+//   - *Bot: Configured bot instance ready for handler registration and startup
+//   - error: Error if bot token is invalid or initialization fails
+//
+// Example:
+//
+//	bot, err := NewBot("123456:ABC-DEF...",
+//	  WithFlowConfig(customConfig),
+//	  WithAccessManager(myAccessManager))
 func NewBot(token string, options ...BotOption) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
@@ -207,7 +293,23 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 }
 
 // WithMenuButton sets the default menu button configuration for web_app or default types only.
-// For bot commands, use SetBotCommands() method instead.
+// This BotOption configures the persistent menu button that appears next to the text input field.
+//
+// Note: For bot command menus, use SetBotCommands() method instead, as it provides
+// a different UI element (the "/" command menu).
+//
+// Parameters:
+//   - config: Menu button configuration. Only web_app and default types are supported.
+//
+// Returns:
+//   - BotOption: Configuration function to be used with NewBot
+//
+// Example:
+//
+//	bot, err := NewBot(token, WithMenuButton(&MenuButtonConfig{
+//	  Type: menuButtonTypeDefault,
+//	  // additional config...
+//	}))
 func WithMenuButton(config *MenuButtonConfig) BotOption {
 	return func(b *Bot) {
 		// Only allow web_app or default types for WithMenuButton
@@ -217,19 +319,55 @@ func WithMenuButton(config *MenuButtonConfig) BotOption {
 	}
 }
 
-// WithFlowConfig sets the flow configuration
+// WithFlowConfig sets the flow configuration that controls conversational flow behavior.
+// This BotOption allows customization of flow exit commands, global command handling,
+// help commands, and message processing behavior during flows.
+//
+// Parameters:
+//   - config: FlowConfig with exit commands, global command settings, and processing options
+//
+// Returns:
+//   - BotOption: Configuration function to be used with NewBot
+//
+// Example:
+//
+//	flowConfig := FlowConfig{
+//	  ExitCommands: []string{"/cancel", "/quit"},
+//	  ExitMessage: "Operation cancelled!",
+//	  AllowGlobalCommands: true,
+//	  HelpCommands: []string{"/help", "/info"},
+//	}
+//	bot, err := NewBot(token, WithFlowConfig(flowConfig))
 func WithFlowConfig(config FlowConfig) BotOption {
 	return func(b *Bot) {
 		b.flowConfig = config
 	}
 }
 
-// WithAccessManager sets the user permission checker and automatically applies auth middleware
-// This automatically sets up the optimal middleware order:
-// 1. RecoveryMiddleware (catch panics)
-// 2. LoggingMiddleware (monitor requests)
-// 3. RateLimitMiddleware (block spam before expensive operations)
-// 4. AuthMiddleware (permission checking with database/business logic)
+// WithAccessManager sets the user permission checker and automatically applies optimal middleware stack.
+// This BotOption not only configures permission checking but also automatically applies
+// a production-ready middleware stack in the correct order for security and performance.
+//
+// Automatic Middleware Stack Applied:
+//  1. RateLimitMiddleware(60) - Prevents spam/abuse (60 requests per minute default)
+//  2. AuthMiddleware - Permission checking with your AccessManager implementation
+//
+// The middleware order is optimized so rate limiting occurs before expensive permission
+// checks, protecting against both spam attacks and unauthorized access attempts.
+//
+// Parameters:
+//   - accessManager: Your AccessManager implementation for permission checking and UI management
+//
+// Returns:
+//   - BotOption: Configuration function to be used with NewBot
+//
+// Example:
+//
+//	type MyAccessManager struct { /* your implementation */ }
+//
+//	accessManager := &MyAccessManager{}
+//	bot, err := NewBot(token, WithAccessManager(accessManager))
+//	// RateLimit + Auth middleware automatically applied
 func WithAccessManager(accessManager AccessManager) BotOption {
 	return func(b *Bot) {
 		b.accessManager = accessManager
@@ -241,32 +379,46 @@ func WithAccessManager(accessManager AccessManager) BotOption {
 	}
 }
 
-// Adapter functions to convert general middleware to type-specific middleware
-
-// Use adds a general middleware that will be applied to ALL handler types (commands, text, callbacks, flow steps).
-// This middleware is automatically converted to the appropriate type-specific middleware and applied to all handlers.
-// Middlewares are applied in the reverse order they are added.
+// UseMiddleware adds general middleware that intercepts all message types and handler executions.
+// This middleware will be applied to commands, text messages, callbacks, and flow processing.
+//
+// Middleware Execution Order:
+// Middlewares are applied in reverse order of registration (LIFO - Last In, First Out).
+// If you register middlewares A, B, C in that order, they execute as: C -> B -> A -> handler -> A -> B -> C
+//
+// This method provides a unified middleware system that works across all interaction types,
+// eliminating the need for separate command, text, and callback middleware registration.
 //
 // Parameters:
-//   - m: The MiddlewareFunc to add to all handler types.
+//   - m: The MiddlewareFunc to add to the middleware stack
 //
-// UseMiddleware adds general middleware that intercepts all message types.
-// This middleware will be applied to commands, text messages, callbacks, and flows.
-// Middlewares are applied in the reverse order they are added.
+// Example:
 //
-// Parameters:
-//   - m: The MiddlewareFunc to add.
+//	bot.UseMiddleware(LoggingMiddleware())
+//	bot.UseMiddleware(RecoveryMiddleware())
+//	// Execution order: Recovery -> Logging -> handler -> Logging -> Recovery
 func (b *Bot) UseMiddleware(m MiddlewareFunc) {
 	b.middleware = append(b.middleware, m)
 }
 
 // HandleCommand registers a CommandHandlerFunc for a specific command.
 // The commandName should be the command without the leading slash (e.g., "start" for "/start").
-// Any registered command middleware will be applied to the handler.
+// All registered middleware will be automatically applied to the handler.
+//
+// The handler receives the command name and arguments as separate parameters for easy processing.
+// Command arguments are extracted as a single string containing everything after the command.
 //
 // Parameters:
-//   - commandName: The name of the command to handle (e.g., "help").
-//   - handler: The CommandHandlerFunc to execute when the command is received.
+//   - commandName: The command name without leading slash (e.g., "help" for "/help")
+//   - handler: The CommandHandlerFunc to execute when the command is received
+//
+// Example:
+//
+//	bot.HandleCommand("start", func(ctx *teleflow.Context, command string, args string) error {
+//	  return ctx.Reply(fmt.Sprintf("Hello! Command: %s, Args: %s", command, args))
+//	})
+//
+//	// Handles: "/start" and "/start some arguments"
 func (b *Bot) HandleCommand(commandName string, handler CommandHandlerFunc) {
 	// Convert CommandHandlerFunc to HandlerFunc and apply unified middleware
 	wrappedHandler := func(ctx *Context) error {
@@ -281,12 +433,26 @@ func (b *Bot) HandleCommand(commandName string, handler CommandHandlerFunc) {
 	b.handlers[commandName] = b.applyMiddleware(wrappedHandler)
 }
 
-// HandleText registers a TextHandlerFunc for a message that exactly matches the given text.
-// Any registered text middleware will be applied to the handler.
+// HandleText registers a TextHandlerFunc for messages that exactly match the given text.
+// This enables handling of specific phrases, keywords, or menu button responses.
+// All registered middleware will be automatically applied to the handler.
+//
+// The text matching is case-sensitive and requires exact string equality.
+// For pattern matching or partial matches, use DefaultHandler with custom logic.
 //
 // Parameters:
-//   - textToMatch: The exact text string to match.
-//   - handler: The TextHandlerFunc to execute when the text is matched.
+//   - textToMatch: The exact text string to match (case-sensitive)
+//   - handler: The TextHandlerFunc to execute when the text is matched
+//
+// Example:
+//
+//	bot.HandleText("📋 Show Menu", func(ctx *teleflow.Context, text string) error {
+//	  return ctx.Reply("Here's your menu!")
+//	})
+//
+//	bot.HandleText("help", func(ctx *teleflow.Context, text string) error {
+//	  return ctx.Reply("Help information...")
+//	})
 func (b *Bot) HandleText(textToMatch string, handler TextHandlerFunc) {
 	// Convert TextHandlerFunc to HandlerFunc and apply unified middleware
 	wrappedHandler := func(ctx *Context) error {
@@ -295,13 +461,25 @@ func (b *Bot) HandleText(textToMatch string, handler TextHandlerFunc) {
 	b.textHandlers[textToMatch] = b.applyMiddleware(wrappedHandler)
 }
 
-// DefaultHandler registers a DefaultTextHandlerFunc to be called for any text message
-// that is not a command and does not match any handler registered with HandleText.
-// Only one default text handler can be set; subsequent calls will overwrite the previous one.
-// Any registered unified middleware will be applied to the handler.
+// DefaultHandler registers a DefaultHandlerFunc to handle any text message that doesn't match
+// other registered handlers. This serves as a fallback for unmatched text messages.
+//
+// Only one default handler can be registered; subsequent calls will overwrite the previous handler.
+// All registered middleware will be automatically applied to the handler.
+//
+// The default handler is called for:
+//   - Text messages that are not commands
+//   - Text messages that don't match any HandleText registrations
+//   - When no specific handler is found for the message
 //
 // Parameters:
-//   - handler: The DefaultTextHandlerFunc to execute.
+//   - handler: The DefaultHandlerFunc to execute for unmatched text messages
+//
+// Example:
+//
+//	bot.DefaultHandler(func(ctx *teleflow.Context, text string) error {
+//	  return ctx.Reply("I didn't understand that. Type /help for assistance.")
+//	})
 func (b *Bot) DefaultHandler(handler DefaultHandlerFunc) {
 	// Convert DefaultTextHandlerFunc to HandlerFunc and apply unified middleware
 	wrappedHandler := func(ctx *Context) error {
@@ -314,18 +492,50 @@ func (b *Bot) DefaultHandler(handler DefaultHandlerFunc) {
 	b.defaultTextHandler = b.applyMiddleware(wrappedHandler)
 }
 
-// RegisterFlow registers a flow with the flow manager
+// RegisterFlow registers a conversational flow with the bot's flow management system.
+// Flows enable complex, multi-step conversations with validation, branching, and state management.
+//
+// The flow must be built using the FlowBuilder before registration. Once registered,
+// flows can be triggered by their trigger commands or programmatically via Context methods.
+//
+// Parameters:
+//   - flow: A complete flow built using NewFlow().Step()...Build()
+//
+// Example:
+//
+//	flow := teleflow.NewFlow("registration").
+//	  Step("name").
+//	  Prompt("What's your name?", nil, nil).
+//	  Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
+//	    ctx.Set("name", input)
+//	    return teleflow.NextStep()
+//	  }).
+//	  Build()
+//
+//	bot.RegisterFlow(flow)
 func (b *Bot) RegisterFlow(flow *Flow) {
 	b.flowManager.registerFlow(flow)
 }
 
-// GetPromptKeyboardHandler returns the PromptKeyboardHandler instance
+// GetPromptKeyboardHandler returns the PromptKeyboardHandler instance for advanced flow integration.
+// This is primarily used internally by the flow system but may be needed for custom implementations
+// that require direct access to prompt keyboard UUID mapping and callback handling.
+//
+// Returns:
+//   - *PromptKeyboardHandler: The bot's prompt keyboard handler instance
 func (b *Bot) GetPromptKeyboardHandler() *PromptKeyboardHandler {
 	return b.promptKeyboardHandler
 }
 
-// applyMiddleware applies all registered general middleware to a handler.
-// This is an internal method called during handler registration.
+// applyMiddleware applies all registered middleware to a handler in reverse order (LIFO).
+// This is an internal method called during handler registration to wrap handlers with middleware.
+// The middleware stack is applied once during registration for optimal performance.
+//
+// Parameters:
+//   - handler: The base handler to wrap with middleware
+//
+// Returns:
+//   - HandlerFunc: The handler wrapped with all registered middleware
 func (b *Bot) applyMiddleware(handler HandlerFunc) HandlerFunc {
 	for i := len(b.middleware) - 1; i >= 0; i-- {
 		handler = b.middleware[i](handler)
@@ -333,7 +543,25 @@ func (b *Bot) applyMiddleware(handler HandlerFunc) HandlerFunc {
 	return handler
 }
 
-// processUpdate processes incoming updates
+// processUpdate processes incoming Telegram updates through a comprehensive decision tree.
+// This is the core method that determines how each update should be handled based on:
+// user flow state, message type, registered handlers, and bot configuration.
+//
+// Processing Decision Tree:
+//  1. Check if user is in a flow
+//     a. Handle flow exit commands (global exit commands like /cancel)
+//     b. Handle global commands if enabled (help commands during flows)
+//     c. Delegate to flow manager for step processing
+//  2. If not in flow, handle regular messages:
+//     a. Commands -> specific command handlers
+//     b. Text messages -> exact text handlers or default handler
+//     c. Callback queries -> registered callback handlers
+//  3. Error handling and user feedback for all cases
+//
+// The method runs in its own goroutine (called from Start) to handle concurrent updates.
+//
+// Parameters:
+//   - update: The Telegram update object containing the message/callback/etc.
 func (b *Bot) processUpdate(update tgbotapi.Update) {
 	ctx := NewContext(b, update)
 	var err error
@@ -413,7 +641,15 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 	}
 }
 
-// isGlobalExitCommand checks if the update contains a global exit command
+// isGlobalExitCommand checks if the given text matches any configured flow exit command.
+// Flow exit commands allow users to cancel ongoing flows and return to normal bot operation.
+// These commands work globally regardless of the current flow step.
+//
+// Parameters:
+//   - text: The message text to check against configured exit commands
+//
+// Returns:
+//   - bool: True if the text matches any exit command, false otherwise
 func (b *Bot) isGlobalExitCommand(text string) bool {
 	for _, cmd := range b.flowConfig.ExitCommands {
 		if text == cmd {
@@ -423,7 +659,19 @@ func (b *Bot) isGlobalExitCommand(text string) bool {
 	return false
 }
 
-// resolveGlobalCommandHandler resolves global commands that should work during flows
+// resolveGlobalCommandHandler resolves commands that are allowed to execute during flows.
+// When AllowGlobalCommands is enabled in FlowConfig, certain commands (like help commands)
+// can be executed without interrupting the current flow state.
+//
+// The method checks if the command is in the configured HelpCommands list and returns
+// the appropriate handler if found. Command matching is flexible, supporting both
+// "/command" and "command" formats.
+//
+// Parameters:
+//   - commandName: The command name to resolve (with or without leading slash)
+//
+// Returns:
+//   - HandlerFunc: The handler for the global command, or nil if not allowed/found
 func (b *Bot) resolveGlobalCommandHandler(commandName string) HandlerFunc {
 	// Only allow specific global commands during flows
 	for _, helpCmd := range b.flowConfig.HelpCommands {
@@ -438,9 +686,18 @@ func (b *Bot) resolveGlobalCommandHandler(commandName string) HandlerFunc {
 	return nil
 }
 
-// resolveCallbackHandler resolves callback handlers.
-// It returns a generic HandlerFunc that wraps the specific CallbackHandler.Handle call.
-// This is because the CallbackRegistry.Handle method is designed this way.
+// resolveCallbackHandler resolves callback handlers for inline keyboard interactions.
+// It returns a HandlerFunc that wraps the specific CallbackHandler.Handle method,
+// enabling callback handling through the unified middleware system.
+//
+// The callback registry uses UUID-based routing to match callback data with registered handlers,
+// providing type-safe callback handling with automatic data extraction.
+//
+// Parameters:
+//   - callbackData: The callback_data from the inline keyboard button press
+//
+// Returns:
+//   - HandlerFunc: A wrapped handler that processes the callback, or nil if not found
 func (b *Bot) resolveCallbackHandler(callbackData string) HandlerFunc {
 	// The CallbackRegistry's Handle method already returns a HandlerFunc
 	// which, when executed, calls the specific CallbackHandler.Handle method
@@ -455,9 +712,29 @@ func (b *Bot) resolveCallbackHandler(callbackData string) HandlerFunc {
 // and then processUpdate would do type assertions.
 // For now, processUpdate directly accesses b.handlers, b.textHandlers, and calls resolveCallbackHandler.
 
-// SetBotCommands configures the bot's menu button with the given commands.
-// These commands are set globally for the bot on Telegram.
-// The map keys are the command strings (without leading slash), and values are descriptions.
+// SetBotCommands configures the bot's command menu that appears when users type "/".
+// These commands are set globally for the bot on Telegram and appear in the command suggestions.
+// This is different from WithMenuButton, which sets persistent menu buttons.
+//
+// The method handles both setting new commands and clearing existing commands (when map is empty).
+// Commands are automatically prefixed with "/" in the Telegram UI.
+//
+// Parameters:
+//   - commands: Map of command names (without slash) to their descriptions
+//
+// Returns:
+//   - error: Error if the API request fails, nil on success
+//
+// Example:
+//
+//	err := bot.SetBotCommands(map[string]string{
+//	  "start": "Start the bot",
+//	  "help":  "Show help information",
+//	  "about": "About this bot",
+//	})
+//
+//	// To clear commands:
+//	err := bot.SetBotCommands(map[string]string{})
 func (b *Bot) SetBotCommands(commands map[string]string) error {
 	if b.api == nil {
 		return fmt.Errorf("bot API not initialized")
@@ -488,7 +765,31 @@ func (b *Bot) SetBotCommands(commands map[string]string) error {
 	return nil
 }
 
-// Start begins listening for updates
+// Start begins listening for Telegram updates and processes them concurrently.
+// This method blocks and runs the bot's main event loop, processing incoming messages,
+// commands, callbacks, and other updates through the registered handlers and flows.
+//
+// Each update is processed in its own goroutine to handle concurrent users efficiently.
+// The method sets up long polling with a 60-second timeout for optimal performance.
+//
+// The bot will log its authorization status and continue running until an error occurs
+// or the process is terminated.
+//
+// Returns:
+//   - error: Error if bot startup fails (invalid token, network issues, etc.)
+//
+// Example:
+//
+//	bot, err := NewBot(token)
+//	if err != nil {
+//	  log.Fatal(err)
+//	}
+//
+//	// Register handlers...
+//	bot.HandleCommand("start", startHandler)
+//
+//	// Start the bot (blocks)
+//	log.Fatal(bot.Start())
 func (b *Bot) Start() error {
 	log.Printf("Authorized on account %s", b.api.Self.UserName)
 
