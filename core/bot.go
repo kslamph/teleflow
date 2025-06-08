@@ -41,8 +41,6 @@ type Bot struct {
 	textHandlers       map[string]HandlerFunc
 	defaultTextHandler HandlerFunc
 
-	callbackRegistry *callbackRegistry
-
 	stateManager          StateManager
 	flowManager           *flowManager
 	promptKeyboardHandler *PromptKeyboardHandler
@@ -60,10 +58,10 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		return nil, err
 	}
 	b := &Bot{
-		api:                   api,
-		handlers:              make(map[string]HandlerFunc),
-		textHandlers:          make(map[string]HandlerFunc),
-		callbackRegistry:      newCallbackRegistry(),
+		api:          api,
+		handlers:     make(map[string]HandlerFunc),
+		textHandlers: make(map[string]HandlerFunc),
+
 		stateManager:          NewInMemoryStateManager(),
 		flowManager:           newFlowManager(NewInMemoryStateManager()),
 		promptKeyboardHandler: newPromptKeyboardHandler(),
@@ -98,8 +96,6 @@ func WithFlowConfig(config FlowConfig) BotOption {
 func WithAccessManager(accessManager AccessManager) BotOption {
 	return func(b *Bot) {
 		b.accessManager = accessManager
-
-		b.UseMiddleware(RateLimitMiddleware(60))
 		b.UseMiddleware(AuthMiddleware(accessManager))
 	}
 }
@@ -213,11 +209,6 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 		}
 	} else if update.CallbackQuery != nil {
 
-		genericHandler := b.resolveCallbackHandler(update.CallbackQuery.Data)
-		if genericHandler != nil {
-			err = genericHandler(ctx)
-		}
-
 		if answerErr := ctx.answerCallbackQuery(""); answerErr != nil {
 
 			log.Printf("Failed to answer callback query for UserID %d: %v", ctx.UserID(), answerErr)
@@ -253,11 +244,6 @@ func (b *Bot) resolveGlobalCommandHandler(commandName string) HandlerFunc {
 		}
 	}
 	return nil
-}
-
-func (b *Bot) resolveCallbackHandler(callbackData string) HandlerFunc {
-
-	return b.callbackRegistry.handle(callbackData)
 }
 
 func (b *Bot) SetBotCommands(commands map[string]string) error {

@@ -16,14 +16,14 @@ type BotAPI interface {
 type PromptComposer struct {
 	botAPI BotAPI
 
-	messageRenderer *messageRenderer
+	messageRenderer *messageHandler
 
 	imageHandler *imageHandler
 
 	keyboardHandler *PromptKeyboardHandler
 }
 
-func newPromptComposer(botAPI BotAPI, msgRenderer *messageRenderer, imgHandler *imageHandler, kbdHandler *PromptKeyboardHandler) *PromptComposer {
+func newPromptComposer(botAPI BotAPI, msgRenderer *messageHandler, imgHandler *imageHandler, kbdHandler *PromptKeyboardHandler) *PromptComposer {
 	return &PromptComposer{
 		botAPI:          botAPI,
 		messageRenderer: msgRenderer,
@@ -49,7 +49,7 @@ func (pc *PromptComposer) composeAndSend(ctx *Context, promptConfig *PromptConfi
 
 	var tgInlineKeyboard *tgbotapi.InlineKeyboardMarkup
 	if promptConfig.Keyboard != nil {
-		builtKeyboard, err := pc.keyboardHandler.BuildKeyboard(ctx, promptConfig.Keyboard)
+		builtKeyboard, err := pc.keyboardHandler.buildKeyboard(ctx, promptConfig.Keyboard)
 		if err != nil {
 			return fmt.Errorf("keyboard building failed: %w", err)
 		}

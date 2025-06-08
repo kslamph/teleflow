@@ -172,11 +172,8 @@ func (fm *flowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName strin
 		ctx.Set(key, value)
 	}
 
-	if fm.bot == nil || fm.bot.promptComposer == nil {
-		return fmt.Errorf("PromptComposer not initialized - Bot not properly set")
-	}
-
 	err := fm.bot.promptComposer.composeAndSend(ctx, step.PromptConfig)
+
 	if err != nil {
 		return fm.handleRenderError(ctx, err, flow, stepName, userState)
 	}
@@ -252,7 +249,7 @@ func (fm *flowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
 		var originalData interface{} = input
 
 		if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
-			if mappedData, found := pkh.GetCallbackData(ctx.UserID(), input); found {
+			if mappedData, found := pkh.getCallbackData(ctx.UserID(), input); found {
 				originalData = mappedData
 			}
 		}
@@ -307,9 +304,6 @@ func (fm *flowManager) handleProcessResult(ctx *Context, result ProcessResult, u
 }
 
 func (fm *flowManager) renderInformationalPrompt(ctx *Context, config *PromptConfig) error {
-	if fm.bot == nil || fm.bot.promptComposer == nil {
-		return fmt.Errorf("PromptComposer not initialized - Bot not properly set")
-	}
 
 	infoPrompt := &PromptConfig{
 		Message: config.Message,
@@ -360,7 +354,7 @@ func (fm *flowManager) completeFlow(ctx *Context, flow *Flow) (bool, error) {
 			delete(fm.userFlows, ctx.UserID())
 
 			if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
-				pkh.CleanupUserMappings(ctx.UserID())
+				pkh.cleanupUserMappings(ctx.UserID())
 			}
 			return true, err
 		}
@@ -370,7 +364,7 @@ func (fm *flowManager) completeFlow(ctx *Context, flow *Flow) (bool, error) {
 	}
 
 	if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
-		pkh.CleanupUserMappings(ctx.UserID())
+		pkh.cleanupUserMappings(ctx.UserID())
 	}
 
 	delete(fm.userFlows, ctx.UserID())
@@ -485,7 +479,7 @@ func (fm *flowManager) getActionName(action errorStrategy) string {
 func (fm *flowManager) cancelFlowAction(ctx *Context) (bool, error) {
 
 	if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
-		pkh.CleanupUserMappings(ctx.UserID())
+		pkh.cleanupUserMappings(ctx.UserID())
 	}
 
 	delete(fm.userFlows, ctx.UserID())

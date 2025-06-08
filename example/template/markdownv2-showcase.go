@@ -44,7 +44,7 @@ func main() {
 
 func registerMarkdownV2Templates(bot *teleflow.Bot) {
 	// 1. Basic formatting template
-	if err := bot.AddTemplate("basic_formatting",
+	if err := teleflow.AddTemplate("basic_formatting",
 		"*Bold text* and _italic text_ and __underline__ and ~strikethrough~\n\n"+
 			"You can also combine *_bold italic_* and *__bold underline__*",
 		teleflow.ParseModeMarkdownV2); err != nil {
@@ -52,7 +52,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 	}
 
 	// 2. Code and preformatted text
-	if err := bot.AddTemplate("code_example",
+	if err := teleflow.AddTemplate("code_example",
 		"Here's some `inline code` and a code block:\n\n"+
 			"```go\n"+
 			"func main() {\n"+
@@ -64,7 +64,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 	}
 
 	// 3. Links and mentions
-	if err := bot.AddTemplate("links_example",
+	if err := teleflow.AddTemplate("links_example",
 		"Visit our [website](https://example.com) or check out [TeleFlow](https://github.com/kslamph/teleflow)\\.\n\n"+
 			"You can also mention users like @username or use [inline links](tg://user?id={{.UserID}})\\.",
 		teleflow.ParseModeMarkdownV2); err != nil {
@@ -72,7 +72,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 	}
 
 	// 4. Lists and organization
-	if err := bot.AddTemplate("lists_example",
+	if err := teleflow.AddTemplate("lists_example",
 		"*Available Features:*\n\n"+
 			"{{range $i, $feature := .Features}}"+
 			"{{.Index}}\\. {{.Name}}\n"+
@@ -86,7 +86,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 	}
 
 	// 5. Spoilers and special formatting
-	if err := bot.AddTemplate("spoilers_example",
+	if err := teleflow.AddTemplate("spoilers_example",
 		"Here's a secret: ||{{.Secret}}||\n\n"+
 			"And here's some `monospace` text with a ||hidden spoiler||\\.",
 		teleflow.ParseModeMarkdownV2); err != nil {
@@ -94,7 +94,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 	}
 
 	// 6. Complex user profile template
-	if err := bot.AddTemplate("user_profile",
+	if err := teleflow.AddTemplate("user_profile",
 		"*👤 User Profile*\n\n"+
 			"*Name:* {{.Name}}\n"+
 			"*Role:* `{{.Role}}`\n"+
@@ -110,7 +110,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 	}
 
 	// 7. Notification template with emojis
-	if err := bot.AddTemplate("notification",
+	if err := teleflow.AddTemplate("notification",
 		"🔔 *{{.Type}} Notification*\n\n"+
 			"{{if eq .Priority \"high\"}}🚨 *HIGH PRIORITY*{{else if eq .Priority \"medium\"}}⚠️ *Medium Priority*{{else}}ℹ️ *Low Priority*{{end}}\n\n"+
 			"*Message:* {{.Message}}\n"+
@@ -121,7 +121,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 	}
 
 	// 8. Product showcase template
-	if err := bot.AddTemplate("product_showcase",
+	if err := teleflow.AddTemplate("product_showcase",
 		"🛍️ *{{.ProductName}}*\n\n"+
 			"{{.Description}}\n\n"+
 			"*💰 Price:* ~${{.OldPrice}}~ *${{.Price}}*\n"+
@@ -137,7 +137,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 	}
 
 	// 9. Main menu template
-	if err := bot.AddTemplate("main_menu",
+	if err := teleflow.AddTemplate("main_menu",
 		"🎨 *MarkdownV2 Template Showcase*\n\n"+
 			"Choose a template to see in action:\n\n"+
 			"📝 Basic Formatting\n"+
@@ -197,7 +197,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 					Message: "Please click one of the buttons above to see a template example.",
 				})
 			}
-			log.Println("Button clicked:", buttonClick.Data)
+
 			// Demonstrate handling different data types
 			switch data := buttonClick.Data.(type) {
 			case map[string]interface{}:
@@ -410,7 +410,7 @@ func setupCommands(bot *teleflow.Bot) {
 	})
 
 	// Default handler using template
-	if err := bot.AddTemplate("not_understood", "❓ I didn't understand `{{.Input}}`\\. Type /help for available commands\\.", teleflow.ParseModeMarkdownV2); err != nil {
+	if err := teleflow.AddTemplate("not_understood", "❓ I didn\\'t understand \\`{{.Input}}\\`\\. Type /help for available commands\\.", teleflow.ParseModeMarkdownV2); err != nil {
 		log.Fatalf("Failed to add not_understood template: %v", err)
 	}
 	bot.DefaultHandler(func(ctx *teleflow.Context, text string) error {

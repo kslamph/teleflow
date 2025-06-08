@@ -50,7 +50,7 @@ func (c *Context) Get(key string) (interface{}, bool) {
 }
 
 func (c *Context) SetFlowData(key string, value interface{}) error {
-	if !c.IsUserInFlow() {
+	if !c.isUserInFlow() {
 		return fmt.Errorf("user not in a flow, cannot set flow data")
 	}
 
@@ -58,7 +58,7 @@ func (c *Context) SetFlowData(key string, value interface{}) error {
 }
 
 func (c *Context) GetFlowData(key string) (interface{}, bool) {
-	if !c.IsUserInFlow() {
+	if !c.isUserInFlow() {
 		return nil, false
 	}
 
@@ -70,7 +70,7 @@ func (c *Context) StartFlow(flowName string) error {
 	return c.bot.flowManager.startFlow(c.UserID(), flowName, c)
 }
 
-func (c *Context) IsUserInFlow() bool {
+func (c *Context) isUserInFlow() bool {
 	return c.bot.flowManager.isUserInFlow(c.UserID())
 }
 
@@ -83,13 +83,11 @@ func (c *Context) SendPrompt(prompt *PromptConfig) error {
 		return fmt.Errorf("PromptComposer not initialized - this should not happen as initialization is automatic")
 	}
 
-	infoPrompt := &PromptConfig{
+	return c.bot.promptComposer.composeAndSend(c, &PromptConfig{
 		Message:      prompt.Message,
 		Image:        prompt.Image,
 		TemplateData: prompt.TemplateData,
-	}
-
-	return c.bot.promptComposer.composeAndSend(c, infoPrompt)
+	})
 }
 
 func (c *Context) SendPromptText(text string) error {
@@ -101,6 +99,31 @@ func (c *Context) SendPromptWithTemplate(templateName string, data map[string]in
 		Message:      "template:" + templateName,
 		TemplateData: data,
 	})
+}
+
+// Template management methods - providing access to TemplateManager through Context
+func (c *Context) AddTemplate(name, templateText string, parseMode ParseMode) error {
+	return defaultTemplateManager.AddTemplate(name, templateText, parseMode)
+}
+
+func (c *Context) GetTemplateInfo(name string) *TemplateInfo {
+	return defaultTemplateManager.GetTemplateInfo(name)
+}
+
+func (c *Context) ListTemplates() []string {
+	return defaultTemplateManager.ListTemplates()
+}
+
+func (c *Context) HasTemplate(name string) bool {
+	return defaultTemplateManager.HasTemplate(name)
+}
+
+func (c *Context) RenderTemplate(name string, data map[string]interface{}) (string, ParseMode, error) {
+	return defaultTemplateManager.RenderTemplate(name, data)
+}
+
+func (c *Context) TemplateManager() TemplateManager {
+	return defaultTemplateManager
 }
 
 func (c *Context) IsGroup() bool {
@@ -152,26 +175,6 @@ func (c *Context) extractChatID(update tgbotapi.Update) int64 {
 		return update.CallbackQuery.Message.Chat.ID
 	}
 	return 0
-}
-
-type ReplyKeyboardOption func(*tgbotapi.ReplyKeyboardMarkup)
-
-func WithResize() ReplyKeyboardOption {
-	return func(kb *tgbotapi.ReplyKeyboardMarkup) {
-		kb.ResizeKeyboard = true
-	}
-}
-
-func WithOneTime() ReplyKeyboardOption {
-	return func(kb *tgbotapi.ReplyKeyboardMarkup) {
-		kb.OneTimeKeyboard = true
-	}
-}
-
-func WithPlaceholder(text string) ReplyKeyboardOption {
-	return func(kb *tgbotapi.ReplyKeyboardMarkup) {
-		kb.InputFieldPlaceholder = text
-	}
 }
 
 func (c *Context) sendSimpleText(text string) error {

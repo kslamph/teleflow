@@ -18,7 +18,7 @@ func TestPromptKeyboardHandler_BuildKeyboard_ValidKeyboardFunc(t *testing.T) {
 			ButtonCallback("Button 3", "data3")
 	}
 
-	result, err := handler.BuildKeyboard(ctx, keyboardFunc)
+	result, err := handler.buildKeyboard(ctx, keyboardFunc)
 
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
@@ -72,7 +72,7 @@ func TestPromptKeyboardHandler_BuildKeyboard_NilKeyboardFunc(t *testing.T) {
 	handler := newPromptKeyboardHandler()
 	ctx := createTestContext()
 
-	result, err := handler.BuildKeyboard(ctx, nil)
+	result, err := handler.buildKeyboard(ctx, nil)
 
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
@@ -96,7 +96,7 @@ func TestPromptKeyboardHandler_BuildKeyboard_KeyboardFuncReturnsNil(t *testing.T
 		return nil
 	}
 
-	result, err := handler.BuildKeyboard(ctx, keyboardFunc)
+	result, err := handler.buildKeyboard(ctx, keyboardFunc)
 
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
@@ -120,7 +120,7 @@ func TestPromptKeyboardHandler_BuildKeyboard_InvalidKeyboard(t *testing.T) {
 		return NewPromptKeyboard()
 	}
 
-	result, err := handler.BuildKeyboard(ctx, keyboardFunc)
+	result, err := handler.buildKeyboard(ctx, keyboardFunc)
 
 	if err == nil {
 		t.Error("Expected error for invalid keyboard, got nil")
@@ -147,7 +147,7 @@ func TestPromptKeyboardHandler_GetCallbackData_ExistingUUID(t *testing.T) {
 			ButtonCallback("Another Button", map[string]string{"key": "value"})
 	}
 
-	result, err := handler.BuildKeyboard(ctx, keyboardFunc)
+	result, err := handler.buildKeyboard(ctx, keyboardFunc)
 	if err != nil {
 		t.Fatalf("Failed to build keyboard: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestPromptKeyboardHandler_GetCallbackData_ExistingUUID(t *testing.T) {
 	uuid1 := *keyboard.InlineKeyboard[0][0].CallbackData
 	uuid2 := *keyboard.InlineKeyboard[0][1].CallbackData
 
-	data1, found1 := handler.GetCallbackData(userID, uuid1)
+	data1, found1 := handler.getCallbackData(userID, uuid1)
 	if !found1 {
 		t.Error("Expected to find callback data for uuid1")
 	}
@@ -164,7 +164,7 @@ func TestPromptKeyboardHandler_GetCallbackData_ExistingUUID(t *testing.T) {
 		t.Errorf("Expected 'test_data', got %v", data1)
 	}
 
-	data2, found2 := handler.GetCallbackData(userID, uuid2)
+	data2, found2 := handler.getCallbackData(userID, uuid2)
 	if !found2 {
 		t.Error("Expected to find callback data for uuid2")
 	}
@@ -181,7 +181,7 @@ func TestPromptKeyboardHandler_GetCallbackData_NonExistingUUID(t *testing.T) {
 	handler := newPromptKeyboardHandler()
 	userID := int64(12345)
 
-	data, found := handler.GetCallbackData(userID, "non-existing-uuid")
+	data, found := handler.getCallbackData(userID, "non-existing-uuid")
 
 	if found {
 		t.Error("Expected not to find callback data for non-existing UUID")
@@ -199,7 +199,7 @@ func TestPromptKeyboardHandler_GetCallbackData_NonExistingUser(t *testing.T) {
 		return NewPromptKeyboard().ButtonCallback("Test", "data")
 	}
 
-	result, err := handler.BuildKeyboard(ctx, keyboardFunc)
+	result, err := handler.buildKeyboard(ctx, keyboardFunc)
 	if err != nil {
 		t.Fatalf("Failed to build keyboard: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestPromptKeyboardHandler_GetCallbackData_NonExistingUser(t *testing.T) {
 	uuid := *keyboard.InlineKeyboard[0][0].CallbackData
 
 	differentUserID := ctx.UserID() + 1000
-	data, found := handler.GetCallbackData(differentUserID, uuid)
+	data, found := handler.getCallbackData(differentUserID, uuid)
 
 	if found {
 		t.Error("Expected not to find callback data for different user")
@@ -229,7 +229,7 @@ func TestPromptKeyboardHandler_CleanupUserMappings(t *testing.T) {
 			ButtonCallback("Button 2", "data2")
 	}
 
-	_, err := handler.BuildKeyboard(ctx, keyboardFunc)
+	_, err := handler.buildKeyboard(ctx, keyboardFunc)
 	if err != nil {
 		t.Fatalf("Failed to build keyboard: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestPromptKeyboardHandler_CleanupUserMappings(t *testing.T) {
 		t.Fatalf("Expected 2 UUID mappings, got %d", len(userMappings))
 	}
 
-	handler.CleanupUserMappings(userID)
+	handler.cleanupUserMappings(userID)
 
 	userMappings = handler.userUUIDMappings[userID]
 	if userMappings != nil {
@@ -252,7 +252,7 @@ func TestPromptKeyboardHandler_CleanupUserMappings_NonExistingUser(t *testing.T)
 
 	nonExistingUserID := int64(99999)
 
-	handler.CleanupUserMappings(nonExistingUserID)
+	handler.cleanupUserMappings(nonExistingUserID)
 
 	if handler.userUUIDMappings == nil {
 		t.Error("Expected userUUIDMappings to remain initialized")
@@ -285,12 +285,12 @@ func TestPromptKeyboardHandler_MultipleUsers(t *testing.T) {
 		return NewPromptKeyboard().ButtonCallback("User2 Button", "user2_data")
 	}
 
-	result1, err1 := handler.BuildKeyboard(ctx1, keyboardFunc1)
+	result1, err1 := handler.buildKeyboard(ctx1, keyboardFunc1)
 	if err1 != nil {
 		t.Fatalf("Failed to build keyboard for user1: %v", err1)
 	}
 
-	result2, err2 := handler.BuildKeyboard(ctx2, keyboardFunc2)
+	result2, err2 := handler.buildKeyboard(ctx2, keyboardFunc2)
 	if err2 != nil {
 		t.Fatalf("Failed to build keyboard for user2: %v", err2)
 	}
@@ -301,34 +301,34 @@ func TestPromptKeyboardHandler_MultipleUsers(t *testing.T) {
 	keyboard2 := result2.(tgbotapi.InlineKeyboardMarkup)
 	uuid2 := *keyboard2.InlineKeyboard[0][0].CallbackData
 
-	data1, found1 := handler.GetCallbackData(ctx1.UserID(), uuid1)
+	data1, found1 := handler.getCallbackData(ctx1.UserID(), uuid1)
 	if !found1 || data1 != "user1_data" {
 		t.Errorf("User1 should access their own data, got %v, found=%v", data1, found1)
 	}
 
-	data2, found2 := handler.GetCallbackData(ctx2.UserID(), uuid2)
+	data2, found2 := handler.getCallbackData(ctx2.UserID(), uuid2)
 	if !found2 || data2 != "user2_data" {
 		t.Errorf("User2 should access their own data, got %v, found=%v", data2, found2)
 	}
 
-	_, found1Cross := handler.GetCallbackData(ctx1.UserID(), uuid2)
+	_, found1Cross := handler.getCallbackData(ctx1.UserID(), uuid2)
 	if found1Cross {
 		t.Error("User1 should not access User2's data")
 	}
 
-	_, found2Cross := handler.GetCallbackData(ctx2.UserID(), uuid1)
+	_, found2Cross := handler.getCallbackData(ctx2.UserID(), uuid1)
 	if found2Cross {
 		t.Error("User2 should not access User1's data")
 	}
 
-	handler.CleanupUserMappings(ctx1.UserID())
+	handler.cleanupUserMappings(ctx1.UserID())
 
-	_, found1After := handler.GetCallbackData(ctx1.UserID(), uuid1)
+	_, found1After := handler.getCallbackData(ctx1.UserID(), uuid1)
 	if found1After {
 		t.Error("User1's data should be cleaned up")
 	}
 
-	data2After, found2After := handler.GetCallbackData(ctx2.UserID(), uuid2)
+	data2After, found2After := handler.getCallbackData(ctx2.UserID(), uuid2)
 	if !found2After || data2After != "user2_data" {
 		t.Error("User2's data should still exist after User1 cleanup")
 	}

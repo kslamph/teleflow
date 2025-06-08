@@ -57,11 +57,7 @@ func (kb *PromptKeyboardBuilder) Build() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(kb.rows...)
 }
 
-func (kb *PromptKeyboardBuilder) GetUUIDMapping() map[string]interface{} {
-	return kb.uuidMapping
-}
-
-func (kb *PromptKeyboardBuilder) ValidateBuilder() error {
+func (kb *PromptKeyboardBuilder) validateBuilder() error {
 	totalButtons := len(kb.currentRow)
 	for _, row := range kb.rows {
 		totalButtons += len(row)

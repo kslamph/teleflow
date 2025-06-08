@@ -27,19 +27,19 @@ type TemplateInfo struct {
 	Template *template.Template
 }
 
-func (b *Bot) AddTemplate(name, templateText string, parseMode ParseMode) error {
+func AddTemplate(name, templateText string, parseMode ParseMode) error {
 	return defaultTemplateManager.AddTemplate(name, templateText, parseMode)
 }
 
-func (b *Bot) GetTemplateInfo(name string) *TemplateInfo {
+func GetTemplateInfo(name string) *TemplateInfo {
 	return defaultTemplateManager.GetTemplateInfo(name)
 }
 
-func (b *Bot) ListTemplates() []string {
+func ListTemplates() []string {
 	return defaultTemplateManager.ListTemplates()
 }
 
-func (b *Bot) HasTemplate(name string) bool {
+func HasTemplate(name string) bool {
 	return defaultTemplateManager.HasTemplate(name)
 }
 

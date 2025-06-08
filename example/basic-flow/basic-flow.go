@@ -178,7 +178,7 @@ func main() {
 			Message: "🤖 TeleFlow Bot Commands:\n\n/start - Begin user registration flow\n/register - Alternative registration command\n/demo - Photo capabilities demo\n/cancel - Cancel current flow\n/help - Show this help",
 		})
 	})
-	if err := bot.AddTemplate("not_understood", `❓ I didn't understand '{{.Input}}'`, teleflow.ParseModeMarkdownV2); err != nil {
+	if err := teleflow.AddTemplate("not_understood", "❓ I didn\\'t understand `{{.Input }}`", teleflow.ParseModeMarkdownV2); err != nil {
 		log.Fatalf("Failed to add not_understood template: %v", err)
 	}
 	bot.DefaultHandler(func(ctx *teleflow.Context, text string) error {

@@ -4,17 +4,17 @@ import (
 	"fmt"
 )
 
-type messageRenderer struct {
+type messageHandler struct {
 	templateManager TemplateManager
 }
 
-func newMessageRenderer() *messageRenderer {
-	return &messageRenderer{
+func newMessageRenderer() *messageHandler {
+	return &messageHandler{
 		templateManager: GetDefaultTemplateManager(),
 	}
 }
 
-func (mr *messageRenderer) renderMessage(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
+func (mr *messageHandler) renderMessage(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
 	if config.Message == nil {
 		return "", ParseModeNone, nil
 	}
@@ -34,7 +34,7 @@ func (mr *messageRenderer) renderMessage(config *PromptConfig, ctx *Context) (st
 	}
 }
 
-func (mr *messageRenderer) handleStringMessage(message string, config *PromptConfig, ctx *Context) (string, ParseMode, error) {
+func (mr *messageHandler) handleStringMessage(message string, config *PromptConfig, ctx *Context) (string, ParseMode, error) {
 
 	isTemplate, templateName := isTemplateMessage(message)
 	if isTemplate {
@@ -45,7 +45,7 @@ func (mr *messageRenderer) handleStringMessage(message string, config *PromptCon
 	return message, ParseModeNone, nil
 }
 
-func (mr *messageRenderer) renderTemplateMessage(templateName string, config *PromptConfig, ctx *Context) (string, ParseMode, error) {
+func (mr *messageHandler) renderTemplateMessage(templateName string, config *PromptConfig, ctx *Context) (string, ParseMode, error) {
 
 	if !mr.templateManager.HasTemplate(templateName) {
 		return "", ParseModeNone, fmt.Errorf("template '%s' not found", templateName)
@@ -61,7 +61,7 @@ func (mr *messageRenderer) renderTemplateMessage(templateName string, config *Pr
 	return renderedText, parseMode, nil
 }
 
-func (mr *messageRenderer) mergeDataSources(templateData map[string]interface{}, contextData map[string]interface{}) map[string]interface{} {
+func (mr *messageHandler) mergeDataSources(templateData map[string]interface{}, contextData map[string]interface{}) map[string]interface{} {
 	merged := make(map[string]interface{})
 
 	for k, v := range contextData {

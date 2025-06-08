@@ -17,7 +17,7 @@ func newPromptKeyboardHandler() *PromptKeyboardHandler {
 	}
 }
 
-func (pkh *PromptKeyboardHandler) BuildKeyboard(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error) {
+func (pkh *PromptKeyboardHandler) buildKeyboard(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error) {
 	if keyboardFunc == nil {
 		return nil, nil
 	}
@@ -27,7 +27,7 @@ func (pkh *PromptKeyboardHandler) BuildKeyboard(ctx *Context, keyboardFunc Keybo
 		return nil, nil
 	}
 
-	if err := builder.ValidateBuilder(); err != nil {
+	if err := builder.validateBuilder(); err != nil {
 		return nil, fmt.Errorf("invalid inline keyboard: %w", err)
 	}
 
@@ -39,7 +39,7 @@ func (pkh *PromptKeyboardHandler) BuildKeyboard(ctx *Context, keyboardFunc Keybo
 		pkh.userUUIDMappings[userID] = make(map[string]interface{})
 	}
 
-	for uuid, data := range builder.GetUUIDMapping() {
+	for uuid, data := range builder.uuidMapping {
 		pkh.userUUIDMappings[userID][uuid] = data
 	}
 
@@ -51,7 +51,7 @@ func (pkh *PromptKeyboardHandler) BuildKeyboard(ctx *Context, keyboardFunc Keybo
 	return builtKeyboard, nil
 }
 
-func (pkh *PromptKeyboardHandler) GetCallbackData(userID int64, uuid string) (interface{}, bool) {
+func (pkh *PromptKeyboardHandler) getCallbackData(userID int64, uuid string) (interface{}, bool) {
 	pkh.mu.RLock()
 	defer pkh.mu.RUnlock()
 
@@ -62,7 +62,7 @@ func (pkh *PromptKeyboardHandler) GetCallbackData(userID int64, uuid string) (in
 	return nil, false
 }
 
-func (pkh *PromptKeyboardHandler) CleanupUserMappings(userID int64) {
+func (pkh *PromptKeyboardHandler) cleanupUserMappings(userID int64) {
 	pkh.mu.Lock()
 	defer pkh.mu.Unlock()
 	delete(pkh.userUUIDMappings, userID)

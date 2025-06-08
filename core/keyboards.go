@@ -18,17 +18,9 @@ type ReplyKeyboard struct {
 	Selective             bool                    `json:"selective,omitempty"`
 }
 
-func newReplyKeyboard(rows ...[]ReplyKeyboardButton) *ReplyKeyboard {
-	kb := &ReplyKeyboard{
-		Keyboard: make([][]ReplyKeyboardButton, 0),
-	}
-	kb.Keyboard = append(kb.Keyboard, rows...)
-	return kb
-}
-
 func BuildReplyKeyboard(buttons []string, buttonsPerRow int) *ReplyKeyboard {
 	if len(buttons) == 0 {
-		return newReplyKeyboard()
+		return nil
 	}
 
 	if buttonsPerRow <= 0 {
