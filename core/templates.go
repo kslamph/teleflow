@@ -160,6 +160,7 @@ func escapeMarkdown(s string) string {
 	replacer := strings.NewReplacer(
 		"*", "\\*",
 		"_", "\\_",
+		"-", "\\-",
 		"`", "\\`",
 		"[", "\\[",
 		"]", "\\]",

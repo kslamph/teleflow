@@ -1,7 +1,9 @@
 package teleflow
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -83,6 +85,8 @@ func (pc *PromptComposer) ComposeAndSend(ctx *Context, promptConfig *PromptConfi
 			photoMsg.ReplyMarkup = ctx.pendingReplyKeyboard.ToTgbotapi()
 			ctx.pendingReplyKeyboard = nil // Clear after use
 		}
+		// Log before sending photo message
+		logChattable("Sending photo message", photoMsg)
 		_, err = pc.botAPI.Send(photoMsg)
 		return err
 	} else if messageText != "" {
@@ -98,12 +102,16 @@ func (pc *PromptComposer) ComposeAndSend(ctx *Context, promptConfig *PromptConfi
 			textMsg.ReplyMarkup = ctx.pendingReplyKeyboard.ToTgbotapi()
 			ctx.pendingReplyKeyboard = nil // Clear after use
 		}
+		// Log before sending text message
+		logChattable("Sending text message", textMsg)
 		_, err = pc.botAPI.Send(textMsg)
 		return err
 	} else if tgInlineKeyboard != nil {
 
-		invisibleMsg := tgbotapi.NewMessage(ctx.ChatID(), "\u200B")
+		invisibleMsg := tgbotapi.NewMessage(ctx.ChatID(), "\u200B") // Zero-width space
 		invisibleMsg.ReplyMarkup = tgInlineKeyboard
+		// Log before sending invisible message for keyboard
+		logChattable("Sending invisible message for keyboard", invisibleMsg)
 		_, err = pc.botAPI.Send(invisibleMsg)
 		return err
 	} else if ctx.pendingReplyKeyboard != nil {
@@ -111,6 +119,8 @@ func (pc *PromptComposer) ComposeAndSend(ctx *Context, promptConfig *PromptConfi
 		invisibleMsg := tgbotapi.NewMessage(ctx.ChatID(), "\u200B")
 		invisibleMsg.ReplyMarkup = ctx.pendingReplyKeyboard.ToTgbotapi()
 		ctx.pendingReplyKeyboard = nil // Clear after use
+		// Log before sending invisible message for pending reply keyboard
+		logChattable("Sending invisible message for pending reply keyboard", invisibleMsg)
 		_, err = pc.botAPI.Send(invisibleMsg)
 		return err
 	}
@@ -123,6 +133,16 @@ func (pc *PromptComposer) validatePromptConfig(config *PromptConfig) error {
 		return fmt.Errorf("PromptConfig must have at least one of Message, Image, or Keyboard specified")
 	}
 	return nil
+}
+
+// logChattable is a helper function to log tgbotapi.Chattable objects.
+func logChattable(description string, chattable tgbotapi.Chattable) {
+	jsonData, err := json.MarshalIndent(chattable, "", "  ")
+	if err != nil {
+		log.Printf("DEBUG: Error marshaling chattable for logging (%s): %v", description, err)
+		return
+	}
+	log.Printf("DEBUG: %s: %s", description, string(jsonData))
 }
 
 func numButtons(keyboard tgbotapi.InlineKeyboardMarkup) int {

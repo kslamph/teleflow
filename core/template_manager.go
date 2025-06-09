@@ -1,8 +1,10 @@
 package teleflow
 
 import (
+	"encoding/json"
 	"fmt"
 	"html"
+	"log"
 	"strings"
 	"text/template"
 
@@ -110,25 +112,36 @@ func (tm *templateManager) ListTemplates() []string {
 
 func (tm *templateManager) RenderTemplate(name string, data map[string]interface{}) (string, ParseMode, error) {
 
-	tmpl := tm.templates.Lookup(name)
-	if tmpl == nil {
-		return "", ParseModeNone, fmt.Errorf("template '%s' not found", name)
-	}
-
 	info := tm.registry[name]
 	if info == nil {
 		return "", ParseModeNone, fmt.Errorf("template info not found for '%s'", name)
 	}
+	// Ensure the template instance from the registry is used, as it was parsed with the correct FuncMap
+	if info.Template == nil {
+		return "", ParseModeNone, fmt.Errorf("parsed template not found in registry for '%s'", name)
+	}
+	tmplToExecute := info.Template // Use the template from the registry, not from tm.templates.Lookup(name)
 
 	mergedData := tm.mergeTemplateData(data, nil)
 
 	var buf strings.Builder
-	err := tmpl.Execute(&buf, mergedData)
+
+	jsonData, jsonErr := json.Marshal(mergedData)
+	if jsonErr != nil {
+		log.Printf("DEBUG: Error marshaling data for template %s: %v", name, jsonErr)
+	}
+	log.Printf("DEBUG: Rendering template '%s' with ParseMode '%s' and data: %s", name, info.ParseMode, string(jsonData))
+
+	err := tmplToExecute.Execute(&buf, mergedData) // Execute the specific template instance from the registry
 	if err != nil {
+		log.Printf("ERROR: Failed to execute template '%s'. Data: %s. Error: %v", name, string(jsonData), err)
 		return "", ParseModeNone, fmt.Errorf("failed to render template '%s': %w", name, err)
 	}
 
-	return buf.String(), info.ParseMode, nil
+	renderedString := buf.String()
+	log.Printf("DEBUG: Successfully rendered template '%s'. Output: %s", name, renderedString)
+
+	return renderedString, info.ParseMode, nil
 }
 
 func (tm *templateManager) mergeTemplateData(templateData map[string]interface{}, contextData map[string]interface{}) map[string]interface{} {
@@ -171,16 +184,21 @@ func getTemplateFuncs(parseMode ParseMode) template.FuncMap {
 	titleCaser := cases.Title(language.Und)
 	baseFuncs := template.FuncMap{
 		"escape": func(s string) string {
+			originalS := s
+			var escapedS string
 			switch parseMode {
 			case ParseModeHTML:
-				return html.EscapeString(s)
+				escapedS = html.EscapeString(s)
 			case ParseModeMarkdown:
-				return escapeMarkdown(s)
+				escapedS = escapeMarkdown(s)
 			case ParseModeMarkdownV2:
-				return escapeMarkdownV2(s)
+				escapedS = escapeMarkdownV2(s)
+				// Log specifically for MarkdownV2
+				log.Printf("DEBUG: escapeMarkdownV2 called with ParseMode '%s'. Input: '%s', Output: '%s'", parseMode, originalS, escapedS)
 			default:
-				return s
+				escapedS = s
 			}
+			return escapedS
 		},
 		"safe": func(s string) string {
 
