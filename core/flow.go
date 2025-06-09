@@ -324,11 +324,6 @@ func (fm *flowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
 
 	return input, buttonClick
 }
-func (fm *flowManager) handleProcessResult(ctx *Context, result ProcessResult, userState *userFlowState, flow *Flow) (bool, error) {
-	fm.muUserFlows.Lock()
-	defer fm.muUserFlows.Unlock()
-	return fm.handleProcessResult_nolock(ctx, result, userState, flow)
-}
 
 func (fm *flowManager) handleProcessResult_nolock(ctx *Context, result ProcessResult, userState *userFlowState, flow *Flow) (bool, error) {
 
@@ -445,11 +440,6 @@ func (fm *flowManager) completeFlow_nolock(ctx *Context, flow *Flow) (bool, erro
 	// If no OnComplete handler was defined, that's not an error - just complete successfully
 	return true, nil
 }
-func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *Flow, stepName string, userState *userFlowState) error {
-	fm.muUserFlows.Lock()
-	defer fm.muUserFlows.Unlock()
-	return fm.handleRenderError_nolock(ctx, renderErr, flow, stepName, userState)
-}
 
 func (fm *flowManager) handleRenderError_nolock(ctx *Context, renderErr error, flow *Flow, stepName string, userState *userFlowState) error {
 
@@ -494,11 +484,6 @@ func (fm *flowManager) handleRenderError_nolock(ctx *Context, renderErr error, f
 		})
 		return nil
 	}
-}
-func (fm *flowManager) handleErrorStrategyCancel(ctx *Context, config *ErrorConfig) {
-	fm.muUserFlows.Lock()
-	defer fm.muUserFlows.Unlock()
-	fm.handleErrorStrategyCancel_nolock(ctx, config)
 }
 
 func (fm *flowManager) handleErrorStrategyCancel_nolock(ctx *Context, config *ErrorConfig) {
@@ -559,11 +544,6 @@ func (fm *flowManager) getActionName(action errorStrategy) string {
 	default:
 		return "UNKNOWN"
 	}
-}
-func (fm *flowManager) cancelFlowAction(ctx *Context) (bool, error) {
-	fm.muUserFlows.Lock()
-	defer fm.muUserFlows.Unlock()
-	return fm.cancelFlowAction_nolock(ctx)
 }
 
 func (fm *flowManager) cancelFlowAction_nolock(ctx *Context) (bool, error) {

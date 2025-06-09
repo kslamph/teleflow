@@ -521,7 +521,10 @@ func TestMessageHandler_TemplateDataMergeInRender(t *testing.T) {
 		},
 	}
 
-	handler.renderTemplateMessage("test", config, context)
+	_, _, err := handler.renderTemplateMessage("test", config, context)
+	if err != nil {
+		t.Fatalf("renderTemplateMessage failed: %v", err)
+	}
 
 	// Verify the merged data was passed to the template manager
 	if capturedData["template_key"] != "template_value" {

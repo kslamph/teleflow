@@ -727,7 +727,7 @@ func TestContext_GetPermissionContext(t *testing.T) {
 
 	permCtx := ctx.getPermissionContext()
 	if permCtx == nil {
-		t.Error("Expected permission context to be created")
+		t.Fatal("Expected permission context to be created")
 	}
 
 	if permCtx.UserID != 12345 {

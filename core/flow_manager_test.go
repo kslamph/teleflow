@@ -947,23 +947,3 @@ func TestErrorHandling(t *testing.T) {
 }
 
 // Helper function
-func flowTestContains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && flowTestFindSubstring(s, substr)))
-}
-
-func flowTestFindSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		match := true
-		for j := 0; j < len(substr); j++ {
-			if s[i+j] != substr[j] {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
-	}
-	return false
-}

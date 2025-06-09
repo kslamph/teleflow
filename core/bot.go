@@ -290,7 +290,7 @@ func (b *Bot) SetBotCommands(commands map[string]string) error {
 // DeleteMessage deletes a specific message using the context and message ID.
 func (b *Bot) DeleteMessage(ctx *Context, messageID int) error {
 	deleteMsg := tgbotapi.NewDeleteMessage(ctx.ChatID(), messageID)
-	_, err := b.api.Send(deleteMsg)
+	_, err := b.api.Request(deleteMsg)
 	return err
 }
 
@@ -301,8 +301,13 @@ func (b *Bot) EditMessageReplyMarkup(ctx *Context, messageID int, replyMarkup in
 	var editMsg tgbotapi.EditMessageReplyMarkupConfig
 
 	if replyMarkup == nil {
+		emptyKeyboard := tgbotapi.InlineKeyboardMarkup{
+			InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{},
+		}
 		// Remove keyboard by setting empty markup
-		editMsg = tgbotapi.NewEditMessageReplyMarkup(ctx.ChatID(), messageID, tgbotapi.InlineKeyboardMarkup{})
+		editMsg = tgbotapi.NewEditMessageReplyMarkup(ctx.ChatID(),
+			messageID,
+			emptyKeyboard)
 	} else {
 		// Assert to expected type
 		keyboard, ok := replyMarkup.(tgbotapi.InlineKeyboardMarkup)
@@ -312,7 +317,7 @@ func (b *Bot) EditMessageReplyMarkup(ctx *Context, messageID int, replyMarkup in
 		editMsg = tgbotapi.NewEditMessageReplyMarkup(ctx.ChatID(), messageID, keyboard)
 	}
 
-	_, err := b.api.Send(editMsg)
+	_, err := b.api.Request(editMsg)
 	return err
 }
 
