@@ -13,6 +13,14 @@ TeleFlow is an enterprise Telegram bot framework that eliminates boilerplate and
 - **Advanced Templates**: MarkdownV2 support with data precedence and auto-escaping
 - **Smart UI Management**: Configurable message/keyboard cleanup strategies
 
+## 📚 Documentation
+
+For comprehensive guides and architectural details, see our documentation:
+
+- **[Architecture Guide](docs/teleflow_architecture.md)** - Detailed system architecture, component interactions, and design patterns
+- **[LLM Developer Guide](docs/llm_teleflow_guide.md)** - Comprehensive guide for understanding core concepts and usage patterns
+- **[GoDoc API Reference](docs/godoc_summary.md)** - Complete API documentation summary with examples
+
 ## 🏗️ Basic Bot Setup
 
 ### Minimal Bot

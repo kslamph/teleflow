@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// errorStrategy defines the internal enumeration of error handling strategies.
 type errorStrategy int
 
 const (
@@ -15,13 +16,26 @@ const (
 	errorStrategyIgnore
 )
 
+// ErrorConfig defines how flows should handle errors during step processing.
+// It specifies both the action to take and an optional user-facing message.
 type ErrorConfig struct {
-	Action  errorStrategy
-	Message string
+	Action  errorStrategy // The strategy to use when handling errors
+	Message string        // Message to display to the user (optional)
 }
 
+// ON_ERROR_SILENT is a special constant that can be used as a message
+// to indicate that no error message should be shown to the user.
 const ON_ERROR_SILENT = "__SILENT__"
 
+// OnErrorCancel creates an ErrorConfig that cancels the flow when an error occurs.
+// This is the most conservative approach, stopping the flow immediately.
+//
+// Example:
+//
+//	flow := teleflow.NewFlow("example").
+//		OnError(teleflow.OnErrorCancel("Something went wrong. Please try again later.")).
+//		// ... define steps
+//		Build()
 func OnErrorCancel(message ...string) *ErrorConfig {
 	msg := "❗ A technical error occurred. Flow has been cancelled."
 	if len(message) > 0 && message[0] != "" {
@@ -33,6 +47,15 @@ func OnErrorCancel(message ...string) *ErrorConfig {
 	}
 }
 
+// OnErrorRetry creates an ErrorConfig that retries the current step when an error occurs.
+// This allows flows to recover from temporary issues automatically.
+//
+// Example:
+//
+//	flow := teleflow.NewFlow("example").
+//		OnError(teleflow.OnErrorRetry("Please try again.")).
+//		// ... define steps
+//		Build()
 func OnErrorRetry(message ...string) *ErrorConfig {
 	msg := "🔄 A technical error occurred. Retrying current step..."
 	if len(message) > 0 && message[0] != "" {
@@ -44,6 +67,15 @@ func OnErrorRetry(message ...string) *ErrorConfig {
 	}
 }
 
+// OnErrorIgnore creates an ErrorConfig that ignores errors and continues the flow.
+// This should be used carefully as it may lead to unexpected behavior.
+//
+// Example:
+//
+//	flow := teleflow.NewFlow("example").
+//		OnError(teleflow.OnErrorIgnore("Continuing despite error...")).
+//		// ... define steps
+//		Build()
 func OnErrorIgnore(message ...string) *ErrorConfig {
 	msg := "⚠️ A technical error occurred. Continuing with flow..."
 	if len(message) > 0 && message[0] != "" {
@@ -55,23 +87,28 @@ func OnErrorIgnore(message ...string) *ErrorConfig {
 	}
 }
 
+// FlowConfig configures global flow behavior and command handling.
+// It defines exit commands, help commands, and default message processing actions.
 type FlowConfig struct {
-	ExitCommands        []string
-	ExitMessage         string
-	AllowGlobalCommands bool
-	HelpCommands        []string
-	OnProcessAction     ProcessMessageAction
+	ExitCommands        []string             // Commands that exit any active flow
+	ExitMessage         string               // Message shown when flow is exited
+	AllowGlobalCommands bool                 // Whether global commands work during flows
+	HelpCommands        []string             // Commands considered "help" commands
+	OnProcessAction     ProcessMessageAction // Default action for processing messages
 }
 
+// flowManager manages all active conversation flows and their state.
+// It handles flow registration, user state tracking, and flow execution.
+// This is an internal component not exposed to bot users directly.
 type flowManager struct {
-	flows       map[string]*Flow
-	userFlows   map[int64]*userFlowState
-	muUserFlows sync.RWMutex // Single mutex for all flow operations
-	flowConfig  *FlowConfig
+	flows       map[string]*Flow         // Registered flows by name
+	userFlows   map[int64]*userFlowState // Active user flow states
+	muUserFlows sync.RWMutex             // Mutex for thread-safe flow operations
+	flowConfig  *FlowConfig              // Global flow configuration
 
-	promptSender   PromptSender
-	keyboardAccess PromptKeyboardActions
-	messageCleaner MessageCleaner
+	promptSender   PromptSender          // Component for sending prompts
+	keyboardAccess PromptKeyboardActions // Handler for keyboard interactions
+	messageCleaner MessageCleaner        // Component for message management
 }
 
 func newFlowManager(config *FlowConfig, pSender PromptSender, kAccess PromptKeyboardActions, mCleaner MessageCleaner) *flowManager {

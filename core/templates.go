@@ -7,42 +7,70 @@ import (
 	"text/template"
 )
 
+// ParseMode defines the parse mode for Telegram message formatting.
+// Different parse modes support different formatting features and syntax.
 type ParseMode string
 
 const (
+	// ParseModeNone disables all formatting - messages are sent as plain text.
 	ParseModeNone ParseMode = ""
 
+	// ParseModeMarkdown enables basic Markdown formatting (deprecated by Telegram).
+	// Supports *bold*, _italic_, and `code` formatting.
 	ParseModeMarkdown ParseMode = "Markdown"
 
+	// ParseModeMarkdownV2 enables enhanced Markdown formatting with more features.
+	// Supports __underline__, **bold**, _italic_, `code`, ```pre```, and more.
+	// Requires escaping of special characters.
 	ParseModeMarkdownV2 ParseMode = "MarkdownV2"
 
+	// ParseModeHTML enables HTML formatting with standard HTML tags.
+	// Supports <b>bold</b>, <i>italic</i>, <u>underline</u>, <code>code</code>, etc.
 	ParseModeHTML ParseMode = "HTML"
 )
 
+// TemplateInfo contains metadata about a registered message template.
+// It includes the template content, formatting mode, and compiled template.
 type TemplateInfo struct {
-	Name string
+	Name string // Unique template name
 
-	ParseMode ParseMode
+	ParseMode ParseMode // Telegram formatting mode for the template
 
-	Template *template.Template
+	Template *template.Template // Compiled Go template
 }
 
+// AddTemplate registers a new message template with the default template manager.
+// Templates use Go template syntax and support the specified Telegram parse mode.
+// This is a convenience function for the global template manager.
+//
+// Example:
+//
+//	err := teleflow.AddTemplate("greeting", "Hello {{.name}}!", teleflow.ParseModeMarkdown)
 func AddTemplate(name, templateText string, parseMode ParseMode) error {
 	return defaultTemplateManager.AddTemplate(name, templateText, parseMode)
 }
 
+// GetTemplateInfo retrieves information about a registered template.
+// Returns nil if the template doesn't exist. This is a convenience function
+// for the global template manager.
 func GetTemplateInfo(name string) *TemplateInfo {
 	return defaultTemplateManager.GetTemplateInfo(name)
 }
 
+// ListTemplates returns a list of all registered template names.
+// This is a convenience function for the global template manager.
 func ListTemplates() []string {
 	return defaultTemplateManager.ListTemplates()
 }
 
+// HasTemplate checks if a template with the given name is registered.
+// This is a convenience function for the global template manager.
 func HasTemplate(name string) bool {
 	return defaultTemplateManager.HasTemplate(name)
 }
 
+// validateParseMode checks if the provided parse mode is supported.
+// Returns an error if the parse mode is not recognized.
 func validateParseMode(mode ParseMode) error {
 	switch mode {
 	case ParseModeNone, ParseModeMarkdown, ParseModeMarkdownV2, ParseModeHTML:
@@ -52,6 +80,8 @@ func validateParseMode(mode ParseMode) error {
 	}
 }
 
+// validateTemplateIntegrity validates that a template is compatible with its parse mode.
+// This helps catch formatting issues early before templates are used.
 func validateTemplateIntegrity(templateText string, parseMode ParseMode) error {
 	switch parseMode {
 	case ParseModeMarkdown:

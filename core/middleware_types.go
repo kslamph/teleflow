@@ -1,52 +1,23 @@
-//
+package teleflow
 
+// MiddlewareFunc represents a middleware function that wraps a handler.
+// Middleware functions can perform operations before and after calling the next handler,
+// enabling cross-cutting concerns like logging, authentication, and error handling.
 //
-
+// Middleware follows the standard pattern where each function takes a handler
+// and returns a new handler that wraps the original functionality.
 //
-
+// Example custom middleware:
 //
-
-//
-
-//
-//	func CustomLoggingMiddleware() teleflow.MiddlewareFunc {
+//	func CustomTimingMiddleware() teleflow.MiddlewareFunc {
 //		return func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
 //			return func(ctx *teleflow.Context) error {
-//				log.Printf("Processing update from user %d", ctx.UserID())
+//				start := time.Now()
 //				err := next(ctx)
-//				if err != nil {
-//					log.Printf("Handler error: %v", err)
-//				}
+//				duration := time.Since(start)
+//				log.Printf("Handler for user %d took %v", ctx.UserID(), duration)
 //				return err
 //			}
 //		}
 //	}
-//
-//
-//	bot.UseMiddleware(CustomLoggingMiddleware())
-//
-
-//
-//	func AuthMiddleware(accessManager AccessManager) teleflow.MiddlewareFunc {
-//		return func(next teleflow.HandlerFunc) teleflow.HandlerFunc {
-//			return func(ctx *teleflow.Context) error {
-//
-//				if !isAuthorized(ctx.UserID(), ctx.ChatID()) {
-//					return ctx.Reply("🚫 Access denied")
-//				}
-//				return next(ctx)
-//			}
-//		}
-//	}
-//
-
-//
-//
-//	bot.UseMiddleware(teleflow.RecoveryMiddleware())
-//	bot.UseMiddleware(teleflow.LoggingMiddleware())
-//	bot.UseMiddleware(teleflow.RateLimitMiddleware(10))
-//
-
-package teleflow
-
-type MiddlewareFunc func(next HandlerFunc) HandlerFunc
+type MiddlewareFunc func(HandlerFunc) HandlerFunc
