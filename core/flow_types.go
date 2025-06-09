@@ -75,12 +75,21 @@ func (pr ProcessResult) WithTemplateData(data map[string]interface{}) ProcessRes
 	return pr
 }
 
-type ProcessMessageAction int
+type ButtonClickAction int
 
 const (
-	ProcessKeepMessage ProcessMessageAction = iota
-	ProcessDeleteMessage
-	ProcessDeleteKeyboard
+	KeepMessage   ButtonClickAction = iota // Do nothing (default)
+	DeleteMessage                          // Delete entire message with buttons
+	DeleteButtons                          // Delete only the inline buttons
+)
+
+// Keep the old type for internal use to maintain compatibility
+type ProcessMessageAction ButtonClickAction
+
+const (
+	ProcessKeepMessage    ProcessMessageAction = ProcessMessageAction(KeepMessage)
+	ProcessDeleteMessage  ProcessMessageAction = ProcessMessageAction(DeleteMessage)
+	ProcessDeleteKeyboard ProcessMessageAction = ProcessMessageAction(DeleteButtons)
 )
 
 type processAction int

@@ -46,13 +46,8 @@ func (fb *FlowBuilder) WithTimeout(duration time.Duration) *FlowBuilder {
 	return fb
 }
 
-func (fb *FlowBuilder) OnProcessDeleteMessage() *FlowBuilder {
-	fb.onProcessAction = ProcessDeleteMessage
-	return fb
-}
-
-func (fb *FlowBuilder) OnProcessDeleteKeyboard() *FlowBuilder {
-	fb.onProcessAction = ProcessDeleteKeyboard
+func (fb *FlowBuilder) OnButtonClick(action ButtonClickAction) *FlowBuilder {
+	fb.onProcessAction = ProcessMessageAction(action)
 	return fb
 }
 

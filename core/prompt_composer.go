@@ -78,6 +78,10 @@ func (pc *PromptComposer) ComposeAndSend(ctx *Context, promptConfig *PromptConfi
 		}
 		if tgInlineKeyboard != nil {
 			photoMsg.ReplyMarkup = tgInlineKeyboard
+		} else if ctx.pendingReplyKeyboard != nil {
+			// Attach pending reply keyboard if no inline keyboard is present
+			photoMsg.ReplyMarkup = ctx.pendingReplyKeyboard.ToTgbotapi()
+			ctx.pendingReplyKeyboard = nil // Clear after use
 		}
 		_, err = pc.botAPI.Send(photoMsg)
 		return err
@@ -89,6 +93,10 @@ func (pc *PromptComposer) ComposeAndSend(ctx *Context, promptConfig *PromptConfi
 		}
 		if tgInlineKeyboard != nil {
 			textMsg.ReplyMarkup = tgInlineKeyboard
+		} else if ctx.pendingReplyKeyboard != nil {
+			// Attach pending reply keyboard if no inline keyboard is present
+			textMsg.ReplyMarkup = ctx.pendingReplyKeyboard.ToTgbotapi()
+			ctx.pendingReplyKeyboard = nil // Clear after use
 		}
 		_, err = pc.botAPI.Send(textMsg)
 		return err
@@ -96,6 +104,13 @@ func (pc *PromptComposer) ComposeAndSend(ctx *Context, promptConfig *PromptConfi
 
 		invisibleMsg := tgbotapi.NewMessage(ctx.ChatID(), "\u200B")
 		invisibleMsg.ReplyMarkup = tgInlineKeyboard
+		_, err = pc.botAPI.Send(invisibleMsg)
+		return err
+	} else if ctx.pendingReplyKeyboard != nil {
+		// Send invisible message with pending reply keyboard if no other content
+		invisibleMsg := tgbotapi.NewMessage(ctx.ChatID(), "\u200B")
+		invisibleMsg.ReplyMarkup = ctx.pendingReplyKeyboard.ToTgbotapi()
+		ctx.pendingReplyKeyboard = nil // Clear after use
 		_, err = pc.botAPI.Send(invisibleMsg)
 		return err
 	}

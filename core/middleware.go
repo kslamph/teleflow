@@ -126,6 +126,12 @@ func AuthMiddleware(accessManager AccessManager) MiddlewareFunc {
 			if err := accessManager.CheckPermission(permCtx); err != nil {
 				return ctx.sendSimpleText("🚫 " + err.Error())
 			}
+
+			// Get reply keyboard from access manager and set it as pending
+			if keyboard := accessManager.GetReplyKeyboard(permCtx); keyboard != nil {
+				ctx.SetPendingReplyKeyboard(keyboard)
+			}
+
 			return next(ctx)
 		}
 	}

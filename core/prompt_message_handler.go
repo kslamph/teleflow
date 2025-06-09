@@ -22,30 +22,30 @@ func (mr *messageHandler) renderMessage(config *PromptConfig, ctx *Context) (str
 	switch msg := config.Message.(type) {
 	case string:
 
-		return mr.handleStringMessage(msg, config, ctx)
+		return mr.handleStringMessage(msg, config)
 
 	case func(*Context) string:
 
 		result := msg(ctx)
-		return mr.handleStringMessage(result, config, ctx)
+		return mr.handleStringMessage(result, config)
 
 	default:
 		return "", ParseModeNone, fmt.Errorf("unsupported message type: %T (expected string or func(*Context) string)", msg)
 	}
 }
 
-func (mr *messageHandler) handleStringMessage(message string, config *PromptConfig, ctx *Context) (string, ParseMode, error) {
+func (mr *messageHandler) handleStringMessage(message string, config *PromptConfig) (string, ParseMode, error) {
 
 	isTemplate, templateName := isTemplateMessage(message)
 	if isTemplate {
 
-		return mr.renderTemplateMessage(templateName, config, ctx)
+		return mr.renderTemplateMessage(templateName, config)
 	}
 
 	return message, ParseModeNone, nil
 }
 
-func (mr *messageHandler) renderTemplateMessage(templateName string, config *PromptConfig, ctx *Context) (string, ParseMode, error) {
+func (mr *messageHandler) renderTemplateMessage(templateName string, config *PromptConfig) (string, ParseMode, error) {
 
 	if !mr.templateManager.HasTemplate(templateName) {
 		return "", ParseModeNone, fmt.Errorf("template '%s' not found", templateName)

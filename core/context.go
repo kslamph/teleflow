@@ -20,6 +20,8 @@ type Context struct {
 	chatID    int64
 	isGroup   bool
 	isChannel bool
+
+	pendingReplyKeyboard *ReplyKeyboard
 }
 
 func newContext(
@@ -196,6 +198,18 @@ func (c *Context) extractChatID(update tgbotapi.Update) int64 {
 func (c *Context) sendSimpleText(text string) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
 	msg.DisableWebPagePreview = true
+
+	// Attach pending reply keyboard if available
+	if c.pendingReplyKeyboard != nil {
+		msg.ReplyMarkup = c.pendingReplyKeyboard.ToTgbotapi()
+		c.pendingReplyKeyboard = nil // Clear after use
+	}
+
 	_, err := c.telegramClient.Send(msg)
 	return err
+}
+
+// SetPendingReplyKeyboard sets a reply keyboard to be attached to the next outgoing message
+func (c *Context) SetPendingReplyKeyboard(keyboard *ReplyKeyboard) {
+	c.pendingReplyKeyboard = keyboard
 }
