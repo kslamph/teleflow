@@ -3,7 +3,6 @@ package teleflow
 import (
 	"fmt"
 	"log"
-	"maps"
 	"sync"
 	"time"
 )
@@ -178,9 +177,7 @@ func (fm *flowManager) renderStepPrompt_withLockRelease(ctx *Context, flow *Flow
 		return fmt.Errorf("step %s has no prompt configuration", stepName)
 	}
 
-	for key, value := range userState.Data {
-		ctx.Set(key, value)
-	}
+	// Data copy removed - flow data should be accessed via GetFlowData() only
 
 	// Release the mutex before prompt rendering to avoid deadlock
 	// Prompt functions may call GetFlowData/SetFlowData which need the same mutex
@@ -208,9 +205,7 @@ func (fm *flowManager) renderStepPrompt_nolock(ctx *Context, flow *Flow, stepNam
 		return fmt.Errorf("step %s has no prompt configuration", stepName)
 	}
 
-	for key, value := range userState.Data {
-		ctx.Set(key, value)
-	}
+	// Data copy removed - flow data should be accessed via GetFlowData() only
 
 	err := fm.promptSender.ComposeAndSend(ctx, step.PromptConfig)
 
@@ -249,9 +244,7 @@ func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 
 	input, buttonClick := fm.extractInputData(ctx)
 
-	for key, value := range userState.Data {
-		ctx.Set(key, value)
-	}
+	// Data copy removed - flow data should be accessed via GetFlowData() only
 
 	if currentStep.ProcessFunc == nil {
 		fm.muUserFlows.Unlock()
@@ -294,7 +287,7 @@ func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 		return true, nil // Flow was cancelled, but we handled the update
 	}
 
-	maps.Copy(userState.Data, ctx.data)
+	// Bidirectional sync removed - use SetFlowData() to modify flow data
 
 	return fm.handleProcessResult_nolock(ctx, result, userState, flow)
 }

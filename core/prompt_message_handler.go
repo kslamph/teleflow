@@ -51,26 +51,16 @@ func (mr *messageHandler) renderTemplateMessage(templateName string, config *Pro
 		return "", ParseModeNone, fmt.Errorf("template '%s' not found", templateName)
 	}
 
-	mergedData := mr.mergeDataSources(config.TemplateData, ctx.data)
+	// Use only explicit TemplateData - no context data merging
+	templateData := config.TemplateData
+	if templateData == nil {
+		templateData = make(map[string]interface{})
+	}
 
-	renderedText, parseMode, err := mr.templateManager.RenderTemplate(templateName, mergedData)
+	renderedText, parseMode, err := mr.templateManager.RenderTemplate(templateName, templateData)
 	if err != nil {
 		return "", ParseModeNone, fmt.Errorf("failed to render template '%s': %w", templateName, err)
 	}
 
 	return renderedText, parseMode, nil
-}
-
-func (mr *messageHandler) mergeDataSources(templateData map[string]interface{}, contextData map[string]interface{}) map[string]interface{} {
-	merged := make(map[string]interface{})
-
-	for k, v := range contextData {
-		merged[k] = v
-	}
-
-	for k, v := range templateData {
-		merged[k] = v
-	}
-
-	return merged
 }
