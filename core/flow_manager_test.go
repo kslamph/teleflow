@@ -366,6 +366,33 @@ func TestRegisterFlow(t *testing.T) {
 	}
 }
 
+func assertError(t *testing.T, err error, expectedError bool, errorContains string) {
+	t.Helper()
+	if expectedError {
+		if err == nil {
+			t.Error("Expected error but got none")
+		} else if errorContains != "" && !contains(err.Error(), errorContains) {
+			t.Errorf("Expected error to contain '%s', got '%s'", errorContains, err.Error())
+		}
+	} else if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+func assertFlowStartedSuccessfully(t *testing.T, fm *flowManager, mockSender *mockPromptSender, userID int64, ctxProvided bool) {
+	t.Helper()
+	if !fm.isUserInFlow(userID) {
+		t.Error("User should be in flow after startFlow")
+	}
+
+	if ctxProvided {
+		calls := mockSender.getComposeAndSendCalls()
+		if len(calls) != 1 {
+			t.Errorf("Expected 1 prompt call, got %d", len(calls))
+		}
+	}
+}
+
 func TestStartFlow(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -409,31 +436,10 @@ func TestStartFlow(t *testing.T) {
 
 			err := fm.startFlow(tt.userID, tt.flowName, tt.ctx)
 
-			if tt.expectedError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				} else if tt.errorContains != "" && !contains(err.Error(), tt.errorContains) {
-					t.Errorf("Expected error to contain '%s', got '%s'", tt.errorContains, err.Error())
-				}
-				return
-			}
+			assertError(t, err, tt.expectedError, tt.errorContains)
 
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-				return
-			}
-
-			// Check user flow state was created
-			if !fm.isUserInFlow(tt.userID) {
-				t.Error("User should be in flow after startFlow")
-			}
-
-			// Check if prompt was sent when context provided
-			if tt.ctx != nil {
-				calls := mockSender.getComposeAndSendCalls()
-				if len(calls) != 1 {
-					t.Errorf("Expected 1 prompt call, got %d", len(calls))
-				}
+			if !tt.expectedError && err == nil {
+				assertFlowStartedSuccessfully(t, fm, mockSender, tt.userID, tt.ctx != nil)
 			}
 		})
 	}

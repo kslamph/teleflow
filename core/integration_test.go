@@ -92,55 +92,72 @@ func TestBot_SimpleCommandIntegration(t *testing.T) {
 	// Process the update directly (simulating bot receiving the update)
 	bot.processUpdate(update)
 
-	// Verify that the handler was called
+	// Verify execution and data
+	verifyHandlerExecution(t, handlerCalled, handlerExecutedCorrectly, receivedCommand, "testcmd", receivedArgs, " some_argument")
+	verifyMiddlewareExecution(t, middlewareExecuted, receivedContext)
+	verifyContextData(t, receivedContext, 123, 456)
+	verifyResponseMessage(t, sentMessages, 456, "Command processed successfully")
+}
+
+func verifyHandlerExecution(t *testing.T, handlerCalled, handlerExecutedCorrectly bool, receivedCommand, expectedCommand, receivedArgs, expectedArgs string) {
+	t.Helper()
 	if !handlerCalled {
 		t.Error("Expected command handler to be called, but it wasn't")
 	}
-
 	if !handlerExecutedCorrectly {
 		t.Error("Handler was called but didn't execute correctly (context verification failed)")
 	}
+	if receivedCommand != expectedCommand {
+		t.Errorf("Expected command '%s', got '%s'", expectedCommand, receivedCommand)
+	}
+	if receivedArgs != expectedArgs {
+		t.Errorf("Expected args '%s', got '%s'", expectedArgs, receivedArgs)
+	}
+}
 
+func verifyMiddlewareExecution(t *testing.T, middlewareExecuted bool, ctx *Context) {
+	t.Helper()
 	if !middlewareExecuted {
 		t.Error("Expected middleware to be executed, but it wasn't")
 	}
-
-	// Verify received command and arguments
-	if receivedCommand != "testcmd" {
-		t.Errorf("Expected command 'testcmd', got '%s'", receivedCommand)
+	if ctx != nil { // Check context only if middleware was expected to run
+		if value, exists := ctx.Get("middleware_data"); !exists || value != "test_value" {
+			t.Errorf("Expected middleware data 'test_value', got '%v' (exists: %v)", value, exists)
+		}
+	} else if middlewareExecuted { // If middleware ran, context should have been set
+		t.Error("Middleware executed but context is nil, cannot verify middleware data")
 	}
+}
 
-	if receivedArgs != " some_argument" {
-		t.Errorf("Expected args ' some_argument', got '%s'", receivedArgs)
-	}
-
-	// Verify context correctness
-	if receivedContext == nil {
+func verifyContextData(t *testing.T, ctx *Context, expectedUserID, expectedChatID int64) {
+	t.Helper()
+	if ctx == nil {
 		t.Error("Expected context to be non-nil")
-	} else {
-		if receivedContext.UserID() != 123 {
-			t.Errorf("Expected UserID 123, got %d", receivedContext.UserID())
-		}
-		if receivedContext.ChatID() != 456 {
-			t.Errorf("Expected ChatID 456, got %d", receivedContext.ChatID())
-		}
+		return
 	}
+	if ctx.UserID() != expectedUserID {
+		t.Errorf("Expected UserID %d, got %d", expectedUserID, ctx.UserID())
+	}
+	if ctx.ChatID() != expectedChatID {
+		t.Errorf("Expected ChatID %d, got %d", expectedChatID, ctx.ChatID())
+	}
+}
 
-	// Verify that a response was sent
+func verifyResponseMessage(t *testing.T, sentMessages []tgbotapi.Chattable, expectedChatID int64, expectedText string) {
+	t.Helper()
 	if len(sentMessages) == 0 {
 		t.Error("Expected at least one message to be sent, but none were sent")
-	} else {
-		// Check that the sent message is correct
-		if msgConfig, ok := sentMessages[0].(tgbotapi.MessageConfig); ok {
-			if msgConfig.ChatID != 456 {
-				t.Errorf("Expected message to be sent to ChatID 456, got %d", msgConfig.ChatID)
-			}
-			if msgConfig.Text != "Command processed successfully" {
-				t.Errorf("Expected message text 'Command processed successfully', got '%s'", msgConfig.Text)
-			}
-		} else {
-			t.Error("Expected sent message to be of type MessageConfig")
+		return
+	}
+	if msgConfig, ok := sentMessages[0].(tgbotapi.MessageConfig); ok {
+		if msgConfig.ChatID != expectedChatID {
+			t.Errorf("Expected message to be sent to ChatID %d, got %d", expectedChatID, msgConfig.ChatID)
 		}
+		if msgConfig.Text != expectedText {
+			t.Errorf("Expected message text '%s', got '%s'", expectedText, msgConfig.Text)
+		}
+	} else {
+		t.Error("Expected sent message to be of type MessageConfig")
 	}
 }
 
