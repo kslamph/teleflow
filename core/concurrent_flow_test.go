@@ -50,7 +50,7 @@ func TestConcurrentFlowDataOperations(t *testing.T) {
 	userID := int64(12345)
 
 	// Start the flow
-	ctx := createFlowTestContext(userID, "test input")
+	ctx := createFlowTestContext(userID, "test input", nil)
 	// Set the flowOps so SetFlowData/GetFlowData work
 	ctx.flowOps = fm
 	err := fm.startFlow(userID, "concurrent-test-flow", ctx)
@@ -63,7 +63,7 @@ func TestConcurrentFlowDataOperations(t *testing.T) {
 	// This would previously deadlock with a single mutex
 
 	// Create a new context for HandleUpdate
-	updateCtx := createFlowTestContext(userID, "test input")
+	updateCtx := createFlowTestContext(userID, "test input", nil)
 	updateCtx.flowOps = fm
 
 	handled, err := fm.HandleUpdate(updateCtx)
@@ -104,7 +104,7 @@ func TestConcurrentFlowDataAccess(t *testing.T) {
 	fm.registerFlow(flow)
 
 	userID := int64(12345)
-	ctx := createFlowTestContext(userID, "test")
+	ctx := createFlowTestContext(userID, "test", nil)
 
 	// Start the flow
 	err := fm.startFlow(userID, "data-access-test", ctx)
@@ -183,7 +183,7 @@ func TestMixedMutexOperations(t *testing.T) {
 	fm.registerFlow(flow)
 
 	userID := int64(12345)
-	ctx := createFlowTestContext(userID, "test")
+	ctx := createFlowTestContext(userID, "test", nil)
 
 	err := fm.startFlow(userID, "mixed-ops-test", ctx)
 	if err != nil {

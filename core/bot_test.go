@@ -733,11 +733,11 @@ func TestBot_DeleteMessage(t *testing.T) {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	if len(mockClient.SendCalls) != 1 {
-		t.Errorf("Expected 1 Send call, got %d", len(mockClient.SendCalls))
+	if len(mockClient.RequestCalls) != 1 {
+		t.Errorf("Expected 1 Request call, got %d", len(mockClient.RequestCalls))
 	}
 
-	if deleteMsg, ok := mockClient.SendCalls[0].(tgbotapi.DeleteMessageConfig); ok {
+	if deleteMsg, ok := mockClient.RequestCalls[0].(tgbotapi.DeleteMessageConfig); ok {
 		if deleteMsg.ChatID != 456 {
 			t.Errorf("Expected ChatID 456, got %d", deleteMsg.ChatID)
 		}
@@ -745,7 +745,7 @@ func TestBot_DeleteMessage(t *testing.T) {
 			t.Errorf("Expected MessageID 789, got %d", deleteMsg.MessageID)
 		}
 	} else {
-		t.Errorf("Expected DeleteMessageConfig, got %T", mockClient.SendCalls[0])
+		t.Errorf("Expected DeleteMessageConfig, got %T", mockClient.RequestCalls[0])
 	}
 }
 
@@ -772,11 +772,11 @@ func TestBot_EditMessageReplyMarkup(t *testing.T) {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	if len(mockClient.SendCalls) != 1 {
-		t.Errorf("Expected 1 Send call, got %d", len(mockClient.SendCalls))
+	if len(mockClient.RequestCalls) != 1 {
+		t.Errorf("Expected 1 Request call, got %d", len(mockClient.RequestCalls))
 	}
 
-	if editMsg, ok := mockClient.SendCalls[0].(tgbotapi.EditMessageReplyMarkupConfig); ok {
+	if editMsg, ok := mockClient.RequestCalls[0].(tgbotapi.EditMessageReplyMarkupConfig); ok {
 		if editMsg.ChatID != 456 {
 			t.Errorf("Expected ChatID 456, got %d", editMsg.ChatID)
 		}
@@ -805,16 +805,16 @@ func TestBot_EditMessageReplyMarkup_RemoveKeyboard(t *testing.T) {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	if len(mockClient.SendCalls) != 1 {
-		t.Errorf("Expected 1 Send call, got %d", len(mockClient.SendCalls))
+	if len(mockClient.RequestCalls) != 1 {
+		t.Errorf("Expected 1 Request call, got %d", len(mockClient.RequestCalls))
 	}
 
-	if editMsg, ok := mockClient.SendCalls[0].(tgbotapi.EditMessageReplyMarkupConfig); ok {
+	if editMsg, ok := mockClient.RequestCalls[0].(tgbotapi.EditMessageReplyMarkupConfig); ok {
 		if len(editMsg.ReplyMarkup.InlineKeyboard) != 0 {
 			t.Error("Expected empty keyboard when removing")
 		}
 	} else {
-		t.Errorf("Expected EditMessageReplyMarkupConfig, got %T", mockClient.SendCalls[0])
+		t.Errorf("Expected EditMessageReplyMarkupConfig, got %T", mockClient.RequestCalls[0])
 	}
 }
 
@@ -844,8 +844,8 @@ func TestBot_EditMessageReplyMarkup_InvalidType(t *testing.T) {
 func TestBot_DeleteMessage_Error(t *testing.T) {
 	bot, mockClient, _, _ := createTestBot()
 
-	mockClient.SendFunc = func(c tgbotapi.Chattable) (tgbotapi.Message, error) {
-		return tgbotapi.Message{}, errors.New("API error")
+	mockClient.RequestFunc = func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error) {
+		return nil, errors.New("API error")
 	}
 
 	update := tgbotapi.Update{
@@ -870,8 +870,8 @@ func TestBot_DeleteMessage_Error(t *testing.T) {
 func TestBot_EditMessageReplyMarkup_Error(t *testing.T) {
 	bot, mockClient, _, _ := createTestBot()
 
-	mockClient.SendFunc = func(c tgbotapi.Chattable) (tgbotapi.Message, error) {
-		return tgbotapi.Message{}, errors.New("API error")
+	mockClient.RequestFunc = func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error) {
+		return nil, errors.New("API error")
 	}
 
 	update := tgbotapi.Update{

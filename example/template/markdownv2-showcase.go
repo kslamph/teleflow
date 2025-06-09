@@ -155,7 +155,7 @@ func registerMarkdownV2Templates(bot *teleflow.Bot) {
 
 func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 	return teleflow.NewFlow("template_showcase").
-		OnProcessDeleteKeyboard(). // Delete previous messages on button clicks
+		OnButtonClick(teleflow.DeleteButtons). // Delete previous messages on button clicks
 		Step("start").
 		Prompt("template:main_menu").
 		WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
@@ -193,6 +193,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 		}).
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
 			if buttonClick == nil {
+				log.Println("Button click is nil, retrying...")
 				return teleflow.Retry().WithPrompt(&teleflow.PromptConfig{
 					Message: "Please click one of the buttons above to see a template example.",
 				})
@@ -245,7 +246,7 @@ func createTemplateShowcaseFlow() (*teleflow.Flow, error) {
 		Step("show_code").
 		Prompt("template:code_example").
 		WithTemplateData(map[string]interface{}{
-			"Name": "World",
+			"Name": "World 世界",
 		}).
 		WithPromptKeyboard(getBackButton()).
 		Process(handleBackButton).

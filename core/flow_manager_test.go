@@ -203,7 +203,7 @@ func createTestFlow() *Flow {
 					if input == "" {
 						return Retry().WithPrompt("Please enter a valid name")
 					}
-					ctx.Set("name", input)
+					ctx.SetFlowData("name", input)
 					return NextStep()
 				},
 			},
@@ -216,7 +216,7 @@ func createTestFlow() *Flow {
 					if input == "back" {
 						return GoToStep("step1")
 					}
-					ctx.Set("age", input)
+					ctx.SetFlowData("age", input)
 					return CompleteFlow()
 				},
 			},
@@ -230,7 +230,7 @@ func createTestFlow() *Flow {
 	}
 }
 
-func createFlowTestContext(userID int64, messageText string) *Context {
+func createFlowTestContext(userID int64, messageText string, flowOps ContextFlowOperations) *Context {
 	update := tgbotapi.Update{
 		Message: &tgbotapi.Message{
 			MessageID: 123,
@@ -248,6 +248,7 @@ func createFlowTestContext(userID int64, messageText string) *Context {
 		telegramClient: mockClient,
 		update:         update,
 		data:           make(map[string]interface{}),
+		flowOps:        flowOps,
 		userID:         userID,
 		chatID:         userID,
 	}
@@ -378,7 +379,7 @@ func TestStartFlow(t *testing.T) {
 			name:          "valid flow with context",
 			flowName:      "test-flow",
 			userID:        12345,
-			ctx:           createFlowTestContext(12345, ""),
+			ctx:           createFlowTestContext(12345, "", nil),
 			expectedError: false,
 		},
 		{
@@ -392,7 +393,7 @@ func TestStartFlow(t *testing.T) {
 			name:          "non-existent flow",
 			flowName:      "non-existent",
 			userID:        12345,
-			ctx:           createFlowTestContext(12345, ""),
+			ctx:           createFlowTestContext(12345, "", nil),
 			expectedError: true,
 			errorContains: "flow non-existent not found",
 		},
@@ -449,7 +450,7 @@ func TestStartFlowWithEmptySteps(t *testing.T) {
 	}
 	fm.registerFlow(emptyFlow)
 
-	ctx := createFlowTestContext(12345, "")
+	ctx := createFlowTestContext(12345, "", fm)
 	err := fm.startFlow(12345, "empty-flow", ctx)
 
 	if err == nil {
@@ -474,7 +475,7 @@ func TestIsUserInFlow(t *testing.T) {
 	}
 
 	// Start flow
-	ctx := createFlowTestContext(userID, "")
+	ctx := createFlowTestContext(userID, "", fm)
 	err := fm.startFlow(userID, "test-flow", ctx)
 	if err != nil {
 		t.Fatalf("Failed to start flow: %v", err)
@@ -497,7 +498,7 @@ func TestCancelFlow(t *testing.T) {
 	fm.registerFlow(flow)
 
 	userID := int64(12345)
-	ctx := createFlowTestContext(userID, "")
+	ctx := createFlowTestContext(userID, "", fm)
 
 	// Start flow
 	err := fm.startFlow(userID, "test-flow", ctx)
@@ -525,7 +526,7 @@ func TestSetUserFlowData(t *testing.T) {
 	fm.registerFlow(flow)
 
 	userID := int64(12345)
-	ctx := createFlowTestContext(userID, "")
+	ctx := createFlowTestContext(userID, "", fm)
 
 	// Test setting data for user not in flow
 	err := fm.setUserFlowData(userID, "key1", "value1")
@@ -572,7 +573,7 @@ func TestGetUserFlowData(t *testing.T) {
 	}
 
 	// Start flow
-	ctx := createFlowTestContext(userID, "")
+	ctx := createFlowTestContext(userID, "", fm)
 	err := fm.startFlow(userID, "test-flow", ctx)
 	if err != nil {
 		t.Fatalf("Failed to start flow: %v", err)
@@ -601,7 +602,7 @@ func TestGetUserFlowData(t *testing.T) {
 
 func TestHandleUpdateUserNotInFlow(t *testing.T) {
 	fm, _, _, _ := createTestFlowManager()
-	ctx := createFlowTestContext(12345, "test message")
+	ctx := createFlowTestContext(12345, "test message", fm)
 
 	handled, err := fm.HandleUpdate(ctx)
 
@@ -620,7 +621,7 @@ func TestHandleUpdateUserInFlow(t *testing.T) {
 	fm.registerFlow(flow)
 
 	userID := int64(12345)
-	ctx := createFlowTestContext(userID, "")
+	ctx := createFlowTestContext(userID, "", fm)
 
 	// Start flow
 	err := fm.startFlow(userID, "test-flow", ctx)
@@ -631,7 +632,7 @@ func TestHandleUpdateUserInFlow(t *testing.T) {
 	mockSender.reset()
 
 	// Test valid input
-	ctx = createFlowTestContext(userID, "John Doe")
+	ctx = createFlowTestContext(userID, "John Doe", fm)
 	handled, err := fm.HandleUpdate(ctx)
 
 	if err != nil {
@@ -677,7 +678,7 @@ func TestHandleUpdateWithCallback(t *testing.T) {
 	fm.registerFlow(flow)
 
 	userID := int64(12345)
-	ctx := createFlowTestContext(userID, "")
+	ctx := createFlowTestContext(userID, "", fm)
 
 	// Start flow
 	err := fm.startFlow(userID, "callback-flow", ctx)
@@ -724,7 +725,7 @@ func TestHandleUpdateFlowNotFound(t *testing.T) {
 	}
 	fm.muUserFlows.Unlock()
 
-	ctx := createFlowTestContext(userID, "test")
+	ctx := createFlowTestContext(userID, "test", fm)
 	handled, err := fm.HandleUpdate(ctx)
 
 	if err == nil {
@@ -759,7 +760,7 @@ func TestHandleUpdateStepNotFound(t *testing.T) {
 	}
 	fm.muUserFlows.Unlock()
 
-	ctx := createFlowTestContext(userID, "test")
+	ctx := createFlowTestContext(userID, "test", fm)
 	handled, err := fm.HandleUpdate(ctx)
 
 	if err == nil {
@@ -793,7 +794,7 @@ func TestConcurrentAccess(t *testing.T) {
 		userID := int64(userIDBase + i)
 
 		// Start flow for each user
-		ctx := createFlowTestContext(userID, "")
+		ctx := createFlowTestContext(userID, "", fm)
 		err := fm.startFlow(userID, "test-flow", ctx)
 		if err != nil {
 			t.Fatalf("Failed to start flow for user %d: %v", userID, err)
@@ -853,7 +854,7 @@ func TestMessageCleanerInteractions(t *testing.T) {
 	fm.registerFlow(flow)
 
 	userID := int64(12345)
-	ctx := createFlowTestContext(userID, "")
+	ctx := createFlowTestContext(userID, "", fm)
 
 	// Start flow
 	err := fm.startFlow(userID, "cleanup-flow", ctx)
@@ -922,7 +923,7 @@ func TestErrorHandling(t *testing.T) {
 			fm.registerFlow(flow)
 
 			userID := int64(12345)
-			ctx := createFlowTestContext(userID, "")
+			ctx := createFlowTestContext(userID, "", fm)
 
 			// Set sender to return error
 			if tt.errorStrategy.Action == errorStrategyIgnore {

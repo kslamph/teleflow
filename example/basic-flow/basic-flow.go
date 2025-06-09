@@ -32,9 +32,18 @@ func main() {
 		log.Fatal("TELEGRAM_BOT_TOKEN environment variable is required")
 	}
 
-	mainMenuKeyboard := teleflow.BuildReplyKeyboard([]string{
-		"📝 Register", "🏠 Home", "⚙️ Settings", "❓ Help"},
-		3).Resize()
+	// mainMenuKeyboard := teleflow.BuildReplyKeyboard([]string{
+	// 	"📝 Register", "🏠 Home", "⚙️ Settings", "❓ Help"},
+	// 	3).Resize()
+
+	mainMenuKeyboard := teleflow.NewReplyKeyboard().
+		AddButton("📝 Register").
+		AddButton("🏠 Home").
+		AddButton("⚙️ Settings").
+		Row().
+		AddButton("❓ Help").
+		Resize().
+		Build()
 
 	// Initialize AccessManager
 	accessManager := &MyAccessManager{
@@ -89,10 +98,20 @@ func main() {
 			func(ctx *teleflow.Context) string {
 				log.Println("Age step prompted")
 				name, _ := ctx.GetFlowData("user_name")
+				existingage, ok := ctx.GetFlowData("user_age")
+				if ok && existingage != nil {
+					log.Printf("User age already set: %s", existingage)
+					ctx.SendPrompt(
+						&teleflow.PromptConfig{
+							Message: fmt.Sprintf("Welcome back, %s! Your age is already set to %s. Would you like to change it?", name, existingage),
+						},
+					)
+				}
 				log.Printf("Age step prompted for user: %s", name)
 				return fmt.Sprintf("Nice to meet you, %s! How old are you?", name)
 			}).
 		Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
+			log.Println("Age step processed with input:", input)
 			// Simple age validation
 			if len(input) == 0 || len(input) > 3 {
 				return teleflow.GoToStep("age").
@@ -100,7 +119,16 @@ func main() {
 
 			}
 			// Store the age
-			_ = ctx.SetFlowData("user_age", input)
+			log.Printf("Setting age to: %s", input)
+			if err := ctx.SetFlowData("user_age", input); err != nil {
+				log.Printf("Failed to set age: %v", err)
+				return teleflow.Retry().WithPrompt("Error saving age. Please try again:")
+			} else {
+				if storedAge, ok := ctx.GetFlowData("user_age"); ok {
+					log.Printf("Age successfully stored as: %s", storedAge)
+				}
+			}
+
 			return teleflow.NextStep().
 				WithPrompt("✅ Age recorded! Let's confirm your details...")
 		}).

@@ -20,7 +20,7 @@ func main() {
 
 	// Example 1: Flow with OnProcessDeleteMessage - completely removes previous messages
 	deleteMessageFlow, err := teleflow.NewFlow("delete_message_demo").
-		OnProcessDeleteKeyboard(). // All button clicks will delete previous messages
+		OnButtonClick(teleflow.DeleteMessage). // All button clicks will delete previous messages
 		Step("menu").
 		Prompt("Choose an option:").
 		WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
@@ -94,7 +94,7 @@ func main() {
 
 	// Example 2: Flow with OnProcessDeleteKeyboard - keeps messages but removes keyboards
 	deleteKeyboardFlow, err := teleflow.NewFlow("delete_keyboard_demo").
-		OnProcessDeleteKeyboard(). // Button clicks will remove keyboards from previous messages
+		OnButtonClick(teleflow.DeleteButtons). // Button clicks will remove keyboards from previous messages
 		Step("welcome").
 		Prompt("Welcome! This flow will disable previous keyboards when you click buttons.").
 		WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder {
