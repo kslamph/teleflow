@@ -285,69 +285,112 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 	ctx := newContext(update, b.api, b.templateManager, b.flowManager, b.promptComposer, b.accessManager)
 	var err error
 
-	if b.flowManager.isUserInFlow(ctx.UserID()) {
-		if ctx.update.Message != nil && b.isGlobalExitCommand(ctx.update.Message.Text) {
-			b.flowManager.cancelFlow(ctx.UserID())
-			err = ctx.sendSimpleText(b.flowConfig.ExitMessage)
-			if err != nil {
-				log.Printf("Error sending flow exit message: %v", err)
-			}
-			return
-		} else if b.flowConfig.AllowGlobalCommands && ctx.update.Message != nil && ctx.update.Message.IsCommand() {
-			commandName := ctx.update.Message.Command()
-			if cmdHandler := b.resolveGlobalCommandHandler(commandName); cmdHandler != nil {
-
-				err = cmdHandler(ctx)
-				if err != nil {
-					log.Printf("Global command handler error for UserID %d, command '%s': %v", ctx.UserID(), commandName, err)
-
-				}
-				return
-			}
-		}
+	// 1. Handle flow-related logic: exit commands, global commands within flows
+	if b.handleFlowPreProcessing(ctx) {
+		return // Pre-processing handled the update (e.g., exit command)
 	}
 
+	// 2. Attempt to handle the update via the flow manager
 	if handledByFlow, flowErr := b.flowManager.HandleUpdate(ctx); handledByFlow {
 		if flowErr != nil {
 			log.Printf("Flow handler error for UserID %d: %v", ctx.UserID(), flowErr)
-
 		}
-		return
+		return // Flow manager handled the update
 	}
 
+	// 3. Handle regular messages (commands or text) if not handled by flow
 	if update.Message != nil {
-		if update.Message.IsCommand() {
-			commandName := update.Message.Command()
-			if cmdHandler, ok := b.handlers[commandName]; ok {
-				err = cmdHandler(ctx)
-			} else {
-
-				if b.defaultTextHandler != nil {
-					err = b.defaultTextHandler(ctx)
-				}
-			}
-		} else {
-			text := update.Message.Text
-			if textHandler, ok := b.textHandlers[text]; ok {
-				err = textHandler(ctx)
-			} else if b.defaultTextHandler != nil {
-				err = b.defaultTextHandler(ctx)
-			}
-
-		}
+		err = b.handleMessage(ctx, update.Message)
 	} else if update.CallbackQuery != nil {
-
-		if answerErr := ctx.answerCallbackQuery(""); answerErr != nil {
-
-			log.Printf("Failed to answer callback query for UserID %d: %v", ctx.UserID(), answerErr)
-		}
+		// 4. Handle callback queries
+		err = b.handleCallbackQuery(ctx)
 	}
 
+	// 5. Common error handling for non-flow related errors
 	if err != nil {
-		log.Printf("Handler error for UserID %d: %v", ctx.UserID(), err)
-		if replyErr := ctx.sendSimpleText("An error occurred. Please try again."); replyErr != nil {
-			log.Printf("Failed to send error reply to UserID %d: %v", ctx.UserID(), replyErr)
+		b.handleProcessingError(ctx, err)
+	}
+}
+
+// handleFlowPreProcessing checks for global exit commands or global commands within a flow.
+// It returns true if the update was handled (e.g., an exit command was processed), otherwise false.
+func (b *Bot) handleFlowPreProcessing(ctx *Context) bool {
+	if !b.flowManager.isUserInFlow(ctx.UserID()) {
+		return false // Not in a flow, nothing to pre-process here
+	}
+
+	if ctx.update.Message != nil {
+		// Check for global exit command
+		if b.isGlobalExitCommand(ctx.update.Message.Text) {
+			b.flowManager.cancelFlow(ctx.UserID())
+			if err := ctx.sendSimpleText(b.flowConfig.ExitMessage); err != nil {
+				log.Printf("Error sending flow exit message: %v", err)
+			}
+			return true // Update handled
 		}
+
+		// Check for allowed global commands during a flow
+		if b.flowConfig.AllowGlobalCommands && ctx.update.Message.IsCommand() {
+			commandName := ctx.update.Message.Command()
+			if cmdHandler := b.resolveGlobalCommandHandler(commandName); cmdHandler != nil {
+				if err := cmdHandler(ctx); err != nil {
+					log.Printf("Global command handler error for UserID %d, command '%s': %v", ctx.UserID(), commandName, err)
+				}
+				return true // Update handled
+			}
+		}
+	}
+	return false // Update not handled by pre-processing
+}
+
+// handleMessage processes regular command and text messages.
+func (b *Bot) handleMessage(ctx *Context, message *tgbotapi.Message) error {
+	if message.IsCommand() {
+		commandName := message.Command()
+		if cmdHandler, ok := b.handlers[commandName]; ok {
+			return cmdHandler(ctx)
+		}
+		// If command not found, fall through to default text handler if available
+	}
+
+	// Handle text messages or fallback for unhandled commands
+	text := message.Text
+	if textHandler, ok := b.textHandlers[text]; ok {
+		return textHandler(ctx)
+	}
+
+	if b.defaultTextHandler != nil {
+		return b.defaultTextHandler(ctx)
+	}
+	return nil // No handler found
+}
+
+// handleCallbackQuery processes callback queries from inline keyboards.
+func (b *Bot) handleCallbackQuery(ctx *Context) error {
+	// First, always answer the callback query to remove the "loading" state on the client
+	if answerErr := ctx.answerCallbackQuery(""); answerErr != nil {
+		log.Printf("Failed to answer callback query for UserID %d: %v", ctx.UserID(), answerErr)
+		// Continue processing even if answering fails, as the handler might still be important
+	}
+
+	// Note: The current implementation of processUpdate doesn't have specific logic
+	// for callback query data after answering. If you add handlers for callback data,
+	// they would be invoked here. For example, using promptKeyboardHandler:
+	//
+	// if b.promptKeyboardHandler != nil {
+	//    return b.promptKeyboardHandler.HandleCallback(ctx, cq.Data)
+	// }
+	//
+	// For now, it just answers the query. If specific callback data handlers are needed,
+	// this is where they would be integrated.
+	return nil
+}
+
+// handleProcessingError logs errors from handlers and sends a generic error message to the user.
+func (b *Bot) handleProcessingError(ctx *Context, err error) {
+	log.Printf("Handler error for UserID %d: %v", ctx.UserID(), err)
+	if replyErr := ctx.sendSimpleText("An error occurred. Please try again."); replyErr != nil {
+		log.Printf("Failed to send error reply to UserID %d: %v", ctx.UserID(), replyErr)
 	}
 }
 

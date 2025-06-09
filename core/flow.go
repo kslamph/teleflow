@@ -16,6 +16,11 @@ const (
 	errorStrategyIgnore
 )
 
+const (
+	// defaultErrorMessageCancel is the default message shown when a flow is cancelled due to an error.
+	defaultErrorMessageCancel = "❗ A technical error occurred. Flow has been cancelled."
+)
+
 // ErrorConfig defines how flows should handle errors during step processing.
 // It specifies both the action to take and an optional user-facing message.
 type ErrorConfig struct {
@@ -37,7 +42,7 @@ const ON_ERROR_SILENT = "__SILENT__"
 //		// ... define steps
 //		Build()
 func OnErrorCancel(message ...string) *ErrorConfig {
-	msg := "❗ A technical error occurred. Flow has been cancelled."
+	msg := defaultErrorMessageCancel
 	if len(message) > 0 && message[0] != "" {
 		msg = message[0]
 	}
@@ -478,7 +483,7 @@ func (fm *flowManager) handleRenderError_nolock(ctx *Context, renderErr error, f
 	action := errorStrategyCancel
 	config := &ErrorConfig{
 		Action:  errorStrategyCancel,
-		Message: "❗ A technical error occurred. Flow has been cancelled.",
+		Message: defaultErrorMessageCancel,
 	}
 
 	if flow.OnError != nil {
@@ -510,7 +515,7 @@ func (fm *flowManager) handleRenderError_nolock(ctx *Context, renderErr error, f
 
 		fm.handleErrorStrategyCancel_nolock(ctx, &ErrorConfig{
 			Action:  errorStrategyCancel,
-			Message: "❗ A technical error occurred. Flow has been cancelled.",
+			Message: defaultErrorMessageCancel,
 		})
 		return nil
 	}
