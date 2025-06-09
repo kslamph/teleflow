@@ -1,5 +1,9 @@
 # TeleFlow Enterprise Bot API Guide
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/kslamph/teleflow.svg)](https://pkg.go.dev/github.com/kslamph/teleflow)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kslamph/teleflow)](https://goreportcard.com/report/github.com/kslamph/teleflow)
+
+
 > **Quick Start for Go Developers**: Enterprise-grade Telegram bot framework with fluent flows, automatic state management, and type-safe interactions.
 
 ## 🚀 Quick Overview
@@ -64,7 +68,7 @@ bot, err := teleflow.NewBot(token,
         ExitMessage:         "🚫 Operation cancelled",
         AllowGlobalCommands: false,
     }),
-    teleflow.WithAccessManager(accessManager), // Auto-applies rate limiting + auth
+    teleflow.WithAccessManager(accessManager), // Auto-applies auth and main menu button pushing
 )
 ```
 
@@ -546,8 +550,9 @@ func AuditMiddleware() teleflow.MiddlewareFunc {
 }
 
 // Apply enterprise middleware stack
+// Note: No need to manually call bot.UseMiddleware(teleflow.AuthMiddleware(accessManager))
+
 bot.UseMiddleware(AuditMiddleware())
-bot.UseMiddleware(teleflow.AuthMiddleware(accessManager))
 bot.UseMiddleware(teleflow.RateLimitMiddleware(60)) // 60 req/min
 ```
 
