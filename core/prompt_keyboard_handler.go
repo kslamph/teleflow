@@ -5,6 +5,22 @@ import (
 	"sync"
 )
 
+// PromptKeyboardActions defines the actions that can be performed by a prompt keyboard handler.
+// It's used to decouple components like Bot from the concrete PromptKeyboardHandler implementation.
+type PromptKeyboardActions interface {
+	// BuildKeyboard constructs a keyboard based on the provided KeyboardFunc.
+	// It registers callback UUIDs and their associated data for the user.
+	BuildKeyboard(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error)
+
+	// GetCallbackData retrieves the data associated with a specific callback UUID for a user.
+	// It returns the data and a boolean indicating if the UUID was found.
+	GetCallbackData(userID int64, uuid string) (interface{}, bool)
+
+	// CleanupUserMappings removes all callback UUID mappings for a given user.
+	// This is typically called when a user's session or flow ends.
+	CleanupUserMappings(userID int64)
+}
+
 type PromptKeyboardHandler struct {
 	userUUIDMappings map[int64]map[string]interface{}
 
@@ -17,7 +33,7 @@ func newPromptKeyboardHandler() *PromptKeyboardHandler {
 	}
 }
 
-func (pkh *PromptKeyboardHandler) buildKeyboard(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error) {
+func (pkh *PromptKeyboardHandler) BuildKeyboard(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error) {
 	if keyboardFunc == nil {
 		return nil, nil
 	}
@@ -51,7 +67,7 @@ func (pkh *PromptKeyboardHandler) buildKeyboard(ctx *Context, keyboardFunc Keybo
 	return builtKeyboard, nil
 }
 
-func (pkh *PromptKeyboardHandler) getCallbackData(userID int64, uuid string) (interface{}, bool) {
+func (pkh *PromptKeyboardHandler) GetCallbackData(userID int64, uuid string) (interface{}, bool) {
 	pkh.mu.RLock()
 	defer pkh.mu.RUnlock()
 
@@ -62,7 +78,7 @@ func (pkh *PromptKeyboardHandler) getCallbackData(userID int64, uuid string) (in
 	return nil, false
 }
 
-func (pkh *PromptKeyboardHandler) cleanupUserMappings(userID int64) {
+func (pkh *PromptKeyboardHandler) CleanupUserMappings(userID int64) {
 	pkh.mu.Lock()
 	defer pkh.mu.Unlock()
 	delete(pkh.userUUIDMappings, userID)

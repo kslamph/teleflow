@@ -7,7 +7,12 @@ import (
 )
 
 type Context struct {
-	bot    *Bot
+	telegramClient  TelegramClient
+	templateManager TemplateManager
+	flowOps         ContextFlowOperations
+	promptSender    PromptSender
+	accessManager   AccessManager
+
 	update tgbotapi.Update
 	data   map[string]interface{}
 
@@ -17,11 +22,22 @@ type Context struct {
 	isChannel bool
 }
 
-func newContext(bot *Bot, update tgbotapi.Update) *Context {
+func newContext(
+	update tgbotapi.Update,
+	client TelegramClient,
+	tm TemplateManager,
+	fo ContextFlowOperations,
+	ps PromptSender,
+	am AccessManager,
+) *Context {
 	ctx := &Context{
-		bot:    bot,
-		update: update,
-		data:   make(map[string]interface{}),
+		telegramClient:  client,
+		templateManager: tm,
+		flowOps:         fo,
+		promptSender:    ps,
+		accessManager:   am,
+		update:          update,
+		data:            make(map[string]interface{}),
 	}
 
 	ctx.userID = ctx.extractUserID(update)
@@ -54,7 +70,7 @@ func (c *Context) SetFlowData(key string, value interface{}) error {
 		return fmt.Errorf("user not in a flow, cannot set flow data")
 	}
 
-	return c.bot.flowManager.setUserFlowData(c.UserID(), key, value)
+	return c.flowOps.setUserFlowData(c.UserID(), key, value)
 }
 
 func (c *Context) GetFlowData(key string) (interface{}, bool) {
@@ -62,28 +78,28 @@ func (c *Context) GetFlowData(key string) (interface{}, bool) {
 		return nil, false
 	}
 
-	return c.bot.flowManager.getUserFlowData(c.UserID(), key)
+	return c.flowOps.getUserFlowData(c.UserID(), key)
 }
 
 func (c *Context) StartFlow(flowName string) error {
 
-	return c.bot.flowManager.startFlow(c.UserID(), flowName, c)
+	return c.flowOps.startFlow(c.UserID(), flowName, c)
 }
 
 func (c *Context) isUserInFlow() bool {
-	return c.bot.flowManager.isUserInFlow(c.UserID())
+	return c.flowOps.isUserInFlow(c.UserID())
 }
 
 func (c *Context) CancelFlow() {
-	c.bot.flowManager.cancelFlow(c.UserID())
+	c.flowOps.cancelFlow(c.UserID())
 }
 
 func (c *Context) SendPrompt(prompt *PromptConfig) error {
-	if c.bot.promptComposer == nil {
-		return fmt.Errorf("PromptComposer not initialized - this should not happen as initialization is automatic")
+	if c.promptSender == nil {
+		return fmt.Errorf("PromptSender not initialized - this should not happen as initialization is automatic")
 	}
 
-	return c.bot.promptComposer.composeAndSend(c, &PromptConfig{
+	return c.promptSender.ComposeAndSend(c, &PromptConfig{
 		Message:      prompt.Message,
 		Image:        prompt.Image,
 		TemplateData: prompt.TemplateData,
@@ -103,27 +119,27 @@ func (c *Context) SendPromptWithTemplate(templateName string, data map[string]in
 
 // Template management methods - providing access to TemplateManager through Context
 func (c *Context) AddTemplate(name, templateText string, parseMode ParseMode) error {
-	return defaultTemplateManager.AddTemplate(name, templateText, parseMode)
+	return c.templateManager.AddTemplate(name, templateText, parseMode)
 }
 
 func (c *Context) GetTemplateInfo(name string) *TemplateInfo {
-	return defaultTemplateManager.GetTemplateInfo(name)
+	return c.templateManager.GetTemplateInfo(name)
 }
 
 func (c *Context) ListTemplates() []string {
-	return defaultTemplateManager.ListTemplates()
+	return c.templateManager.ListTemplates()
 }
 
 func (c *Context) HasTemplate(name string) bool {
-	return defaultTemplateManager.HasTemplate(name)
+	return c.templateManager.HasTemplate(name)
 }
 
 func (c *Context) RenderTemplate(name string, data map[string]interface{}) (string, ParseMode, error) {
-	return defaultTemplateManager.RenderTemplate(name, data)
+	return c.templateManager.RenderTemplate(name, data)
 }
 
 func (c *Context) TemplateManager() TemplateManager {
-	return defaultTemplateManager
+	return c.templateManager
 }
 
 func (c *Context) IsGroup() bool {
@@ -135,7 +151,7 @@ func (c *Context) IsChannel() bool {
 }
 
 func (c *Context) getPermissionContext() *PermissionContext {
-	if c.bot.accessManager != nil {
+	if c.accessManager != nil {
 		return &PermissionContext{
 			UserID:    c.UserID(),
 			ChatID:    c.ChatID(),
@@ -163,7 +179,7 @@ func (c *Context) answerCallbackQuery(text string) error {
 	}
 
 	cb := tgbotapi.NewCallback(c.update.CallbackQuery.ID, text)
-	_, err := c.bot.api.Request(cb)
+	_, err := c.telegramClient.Request(cb)
 	return err
 }
 
@@ -180,6 +196,6 @@ func (c *Context) extractChatID(update tgbotapi.Update) int64 {
 func (c *Context) sendSimpleText(text string) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
 	msg.DisableWebPagePreview = true
-	_, err := c.bot.api.Send(msg)
+	_, err := c.telegramClient.Send(msg)
 	return err
 }

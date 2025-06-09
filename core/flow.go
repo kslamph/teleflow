@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"sync"
 	"time"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 type errorStrategy int
@@ -66,30 +65,37 @@ type FlowConfig struct {
 }
 
 type flowManager struct {
-	flows     map[string]*Flow
-	userFlows map[int64]*userFlowState
-	botConfig *FlowConfig
-	bot       *Bot
+	flows       map[string]*Flow
+	userFlows   map[int64]*userFlowState
+	muUserFlows sync.RWMutex // Single mutex for all flow operations
+	flowConfig  *FlowConfig
+
+	promptSender   PromptSender
+	keyboardAccess PromptKeyboardActions
+	messageCleaner MessageCleaner
 }
 
-func newFlowManager() *flowManager {
+func newFlowManager(config *FlowConfig, pSender PromptSender, kAccess PromptKeyboardActions, mCleaner MessageCleaner) *flowManager {
 	return &flowManager{
-		flows:     make(map[string]*Flow),
-		userFlows: make(map[int64]*userFlowState),
+		flows:          make(map[string]*Flow),
+		userFlows:      make(map[int64]*userFlowState),
+		flowConfig:     config,
+		promptSender:   pSender,
+		keyboardAccess: kAccess,
+		messageCleaner: mCleaner,
 	}
 }
 
-func (fm *flowManager) initialize(bot *Bot) {
-	fm.bot = bot
-	fm.botConfig = &bot.flowConfig
-}
-
 func (fm *flowManager) isUserInFlow(userID int64) bool {
+	fm.muUserFlows.RLock()
+	defer fm.muUserFlows.RUnlock()
 	_, exists := fm.userFlows[userID]
 	return exists
 }
 
 func (fm *flowManager) cancelFlow(userID int64) {
+	fm.muUserFlows.Lock()
+	defer fm.muUserFlows.Unlock()
 	delete(fm.userFlows, userID)
 }
 
@@ -147,7 +153,9 @@ func (fm *flowManager) startFlow(userID int64, flowName string, ctx *Context) er
 		LastActive:  time.Now(),
 	}
 
+	fm.muUserFlows.Lock()
 	fm.userFlows[userID] = userState
+	fm.muUserFlows.Unlock()
 
 	if ctx != nil {
 		return fm.renderStepPrompt(ctx, flow, flow.Order[0], userState)
@@ -157,6 +165,10 @@ func (fm *flowManager) startFlow(userID int64, flowName string, ctx *Context) er
 }
 
 func (fm *flowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName string, userState *userFlowState) error {
+	return fm.renderStepPrompt_nolock(ctx, flow, stepName, userState)
+}
+
+func (fm *flowManager) renderStepPrompt_withLockRelease(ctx *Context, flow *Flow, stepName string, userState *userFlowState) error {
 	step := flow.Steps[stepName]
 	if step == nil {
 		return fmt.Errorf("step %s not found", stepName)
@@ -170,31 +182,66 @@ func (fm *flowManager) renderStepPrompt(ctx *Context, flow *Flow, stepName strin
 		ctx.Set(key, value)
 	}
 
-	err := fm.bot.promptComposer.composeAndSend(ctx, step.PromptConfig)
+	// Release the mutex before prompt rendering to avoid deadlock
+	// Prompt functions may call GetFlowData/SetFlowData which need the same mutex
+	fm.muUserFlows.Unlock()
+
+	err := fm.promptSender.ComposeAndSend(ctx, step.PromptConfig)
+
+	// Re-acquire the mutex after prompt rendering
+	fm.muUserFlows.Lock()
 
 	if err != nil {
-		return fm.handleRenderError(ctx, err, flow, stepName, userState)
+		return fm.handleRenderError_nolock(ctx, err, flow, stepName, userState)
 	}
 
 	return nil
 }
 
+func (fm *flowManager) renderStepPrompt_nolock(ctx *Context, flow *Flow, stepName string, userState *userFlowState) error {
+	step := flow.Steps[stepName]
+	if step == nil {
+		return fmt.Errorf("step %s not found", stepName)
+	}
+
+	if step.PromptConfig == nil {
+		return fmt.Errorf("step %s has no prompt configuration", stepName)
+	}
+
+	for key, value := range userState.Data {
+		ctx.Set(key, value)
+	}
+
+	err := fm.promptSender.ComposeAndSend(ctx, step.PromptConfig)
+
+	if err != nil {
+		return fm.handleRenderError_nolock(ctx, err, flow, stepName, userState)
+	}
+
+	return nil
+}
 func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
+	// First, acquire lock to get flow state info
+	fm.muUserFlows.Lock()
+
 	userID := ctx.UserID()
 	userState, exists := fm.userFlows[userID]
 	if !exists {
+		fm.muUserFlows.Unlock()
 		return false, nil
 	}
 
 	flow := fm.flows[userState.FlowName]
 	if flow == nil {
 		delete(fm.userFlows, userID)
+		fm.muUserFlows.Unlock()
 		return false, fmt.Errorf("flow %s not found", userState.FlowName)
 	}
 
 	currentStep := flow.Steps[userState.CurrentStep]
 	if currentStep == nil {
 		delete(fm.userFlows, userID)
+		fm.muUserFlows.Unlock()
 		return false, fmt.Errorf("step %s not found", userState.CurrentStep)
 	}
 
@@ -207,9 +254,15 @@ func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 	}
 
 	if currentStep.ProcessFunc == nil {
+		fm.muUserFlows.Unlock()
 		return true, fmt.Errorf("step %s has no process function", userState.CurrentStep)
 	}
 
+	// Release the lock before calling ProcessFunc to avoid deadlock
+	// ProcessFunc might call SetFlowData which needs flowDataMutex
+	fm.muUserFlows.Unlock()
+
+	// Call ProcessFunc without holding any locks
 	result := currentStep.ProcessFunc(ctx, input, buttonClick)
 
 	if buttonClick != nil {
@@ -231,9 +284,19 @@ func (fm *flowManager) HandleUpdate(ctx *Context) (bool, error) {
 		}
 	}
 
+	// Re-acquire lock for state modifications
+	fm.muUserFlows.Lock()
+	defer fm.muUserFlows.Unlock()
+
+	// Re-check that user is still in flow (in case it was cancelled during ProcessFunc)
+	userState, exists = fm.userFlows[userID]
+	if !exists {
+		return true, nil // Flow was cancelled, but we handled the update
+	}
+
 	maps.Copy(userState.Data, ctx.data)
 
-	return fm.handleProcessResult(ctx, result, userState, flow)
+	return fm.handleProcessResult_nolock(ctx, result, userState, flow)
 }
 
 func (fm *flowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
@@ -246,10 +309,8 @@ func (fm *flowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
 		input = ctx.update.CallbackQuery.Data
 		var originalData interface{} = input
 
-		if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
-			if mappedData, found := pkh.getCallbackData(ctx.UserID(), input); found {
-				originalData = mappedData
-			}
+		if mappedData, found := fm.keyboardAccess.GetCallbackData(ctx.UserID(), input); found {
+			originalData = mappedData
 		}
 
 		buttonClick = &ButtonClick{
@@ -263,13 +324,18 @@ func (fm *flowManager) extractInputData(ctx *Context) (string, *ButtonClick) {
 
 	return input, buttonClick
 }
-
 func (fm *flowManager) handleProcessResult(ctx *Context, result ProcessResult, userState *userFlowState, flow *Flow) (bool, error) {
+	fm.muUserFlows.Lock()
+	defer fm.muUserFlows.Unlock()
+	return fm.handleProcessResult_nolock(ctx, result, userState, flow)
+}
+
+func (fm *flowManager) handleProcessResult_nolock(ctx *Context, result ProcessResult, userState *userFlowState, flow *Flow) (bool, error) {
 
 	if result.Prompt != nil {
 		if err := fm.renderInformationalPrompt(ctx, result.Prompt); err != nil {
 
-			return true, fm.handleRenderError(ctx, err, flow, userState.CurrentStep, userState)
+			return true, fm.handleRenderError_nolock(ctx, err, flow, userState.CurrentStep, userState)
 		}
 	}
 
@@ -285,16 +351,16 @@ func (fm *flowManager) handleProcessResult(ctx *Context, result ProcessResult, u
 		if result.Prompt == nil {
 			currentStep := flow.Steps[userState.CurrentStep]
 			if currentStep != nil && currentStep.PromptConfig != nil {
-				return true, fm.renderStepPrompt(ctx, flow, userState.CurrentStep, userState)
+				return true, fm.renderStepPrompt_withLockRelease(ctx, flow, userState.CurrentStep, userState)
 			}
 		}
 		return true, nil
 
 	case actionCompleteFlow:
-		return fm.completeFlow(ctx, flow)
+		return fm.completeFlow_nolock(ctx, flow)
 
 	case actionCancelFlow:
-		return fm.cancelFlowAction(ctx)
+		return fm.cancelFlowAction_nolock(ctx)
 
 	default:
 		return true, fmt.Errorf("unknown ProcessAction: %d", result.Action)
@@ -308,7 +374,7 @@ func (fm *flowManager) renderInformationalPrompt(ctx *Context, config *PromptCon
 		Image:   config.Image,
 	}
 
-	return fm.bot.promptComposer.composeAndSend(ctx, infoPrompt)
+	return fm.promptSender.ComposeAndSend(ctx, infoPrompt)
 }
 
 func (fm *flowManager) advanceToNextStep(ctx *Context, userState *userFlowState, flow *Flow) (bool, error) {
@@ -333,7 +399,7 @@ func (fm *flowManager) advanceToNextStep(ctx *Context, userState *userFlowState,
 	nextStepName := flow.Order[currentIndex+1]
 	userState.CurrentStep = nextStepName
 
-	return true, fm.renderStepPrompt(ctx, flow, nextStepName, userState)
+	return true, fm.renderStepPrompt_withLockRelease(ctx, flow, nextStepName, userState)
 }
 
 func (fm *flowManager) goToSpecificStep(ctx *Context, userState *userFlowState, flow *Flow, targetStep string) (bool, error) {
@@ -342,34 +408,50 @@ func (fm *flowManager) goToSpecificStep(ctx *Context, userState *userFlowState, 
 	}
 
 	userState.CurrentStep = targetStep
-	return true, fm.renderStepPrompt(ctx, flow, targetStep, userState)
+	return true, fm.renderStepPrompt_withLockRelease(ctx, flow, targetStep, userState)
+}
+func (fm *flowManager) completeFlow(ctx *Context, flow *Flow) (bool, error) {
+	fm.muUserFlows.Lock()
+	defer fm.muUserFlows.Unlock()
+	return fm.completeFlow_nolock(ctx, flow)
 }
 
-func (fm *flowManager) completeFlow(ctx *Context, flow *Flow) (bool, error) {
+func (fm *flowManager) completeFlow_nolock(ctx *Context, flow *Flow) (bool, error) {
+	userID := ctx.UserID()
+	var onCompleteErr error
 
 	if flow.OnComplete != nil {
-		if err := flow.OnComplete(ctx); err != nil {
-			delete(fm.userFlows, ctx.UserID())
+		// Release the lock before calling OnComplete to avoid deadlock
+		// OnComplete handler may call GetFlowData/SetFlowData which need the same mutex
+		fm.muUserFlows.Unlock()
 
-			if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
-				pkh.cleanupUserMappings(ctx.UserID())
-			}
-			return true, err
-		}
+		onCompleteErr = flow.OnComplete(ctx)
+
+		// Re-acquire the lock after OnComplete completes
+		fm.muUserFlows.Lock()
 	} else {
-		log.Printf("[FLOW_COMPLETE] Flow %s called for user %d without completion handler", flow.Name, ctx.UserID())
-		return true, fmt.Errorf("no completion handler defined for flow %s", flow.Name)
+		log.Printf("[FLOW_COMPLETE] Flow %s called for user %d without completion handler", flow.Name, userID)
 	}
 
-	if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
-		pkh.cleanupUserMappings(ctx.UserID())
+	// Always cleanup user flow and keyboard mappings regardless of OnComplete result
+	fm.keyboardAccess.CleanupUserMappings(userID)
+	delete(fm.userFlows, userID)
+
+	// Return the OnComplete error if there was one
+	if onCompleteErr != nil {
+		return true, onCompleteErr
 	}
 
-	delete(fm.userFlows, ctx.UserID())
+	// If no OnComplete handler was defined, that's not an error - just complete successfully
 	return true, nil
 }
-
 func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *Flow, stepName string, userState *userFlowState) error {
+	fm.muUserFlows.Lock()
+	defer fm.muUserFlows.Unlock()
+	return fm.handleRenderError_nolock(ctx, renderErr, flow, stepName, userState)
+}
+
+func (fm *flowManager) handleRenderError_nolock(ctx *Context, renderErr error, flow *Flow, stepName string, userState *userFlowState) error {
 
 	fm.logRenderError(renderErr, stepName, flow.Name, ctx.UserID())
 
@@ -389,7 +471,7 @@ func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *Fl
 
 	switch action {
 	case errorStrategyCancel:
-		fm.handleErrorStrategyCancel(ctx, config)
+		fm.handleErrorStrategyCancel_nolock(ctx, config)
 		return nil
 
 	case errorStrategyRetry:
@@ -406,15 +488,20 @@ func (fm *flowManager) handleRenderError(ctx *Context, renderErr error, flow *Fl
 
 	default:
 
-		fm.handleErrorStrategyCancel(ctx, &ErrorConfig{
+		fm.handleErrorStrategyCancel_nolock(ctx, &ErrorConfig{
 			Action:  errorStrategyCancel,
 			Message: "❗ A technical error occurred. Flow has been cancelled.",
 		})
 		return nil
 	}
 }
-
 func (fm *flowManager) handleErrorStrategyCancel(ctx *Context, config *ErrorConfig) {
+	fm.muUserFlows.Lock()
+	defer fm.muUserFlows.Unlock()
+	fm.handleErrorStrategyCancel_nolock(ctx, config)
+}
+
+func (fm *flowManager) handleErrorStrategyCancel_nolock(ctx *Context, config *ErrorConfig) {
 
 	fm.notifyUserIfNeeded(ctx, config.Message)
 	delete(fm.userFlows, ctx.UserID())
@@ -435,7 +522,7 @@ func (fm *flowManager) handleErrorStrategyIgnore(ctx *Context, config *ErrorConf
 			Keyboard: originalPrompt.Keyboard,
 		}
 
-		if err := fm.bot.promptComposer.composeAndSend(ctx, fallbackPrompt); err != nil {
+		if err := fm.promptSender.ComposeAndSend(ctx, fallbackPrompt); err != nil {
 
 			_, err := fm.advanceToNextStep(ctx, userState, flow)
 			return err
@@ -473,12 +560,15 @@ func (fm *flowManager) getActionName(action errorStrategy) string {
 		return "UNKNOWN"
 	}
 }
-
 func (fm *flowManager) cancelFlowAction(ctx *Context) (bool, error) {
+	fm.muUserFlows.Lock()
+	defer fm.muUserFlows.Unlock()
+	return fm.cancelFlowAction_nolock(ctx)
+}
 
-	if pkh := ctx.bot.GetPromptKeyboardHandler(); pkh != nil {
-		pkh.cleanupUserMappings(ctx.UserID())
-	}
+func (fm *flowManager) cancelFlowAction_nolock(ctx *Context) (bool, error) {
+
+	fm.keyboardAccess.CleanupUserMappings(ctx.UserID())
 
 	delete(fm.userFlows, ctx.UserID())
 	return true, nil
@@ -500,28 +590,16 @@ func (fm *flowManager) handleMessageAction(ctx *Context, flow *Flow, messageID i
 }
 
 func (fm *flowManager) deletePreviousMessage(ctx *Context, messageID int) error {
-	deleteConfig := tgbotapi.DeleteMessageConfig{
-		ChatID:    ctx.ChatID(),
-		MessageID: messageID,
-	}
-
-	_, err := ctx.bot.api.Request(deleteConfig)
-	return err
+	return fm.messageCleaner.DeleteMessage(ctx, messageID)
 }
 
 func (fm *flowManager) deletePreviousKeyboard(ctx *Context, messageID int) error {
-	editConfig := tgbotapi.EditMessageReplyMarkupConfig{
-		BaseEdit: tgbotapi.BaseEdit{
-			ChatID:    ctx.ChatID(),
-			MessageID: messageID,
-		},
-	}
-
-	_, err := ctx.bot.api.Request(editConfig)
-	return err
+	return fm.messageCleaner.EditMessageReplyMarkup(ctx, messageID, nil)
 }
-
 func (fm *flowManager) setUserFlowData(userID int64, key string, value interface{}) error {
+	fm.muUserFlows.Lock()
+	defer fm.muUserFlows.Unlock()
+
 	userState, exists := fm.userFlows[userID]
 	if !exists {
 		return fmt.Errorf("user %d not in a flow", userID)
@@ -536,6 +614,9 @@ func (fm *flowManager) setUserFlowData(userID int64, key string, value interface
 }
 
 func (fm *flowManager) getUserFlowData(userID int64, key string) (interface{}, bool) {
+	fm.muUserFlows.RLock()
+	defer fm.muUserFlows.RUnlock()
+
 	userState, exists := fm.userFlows[userID]
 	if !exists {
 		return nil, false

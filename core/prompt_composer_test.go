@@ -7,576 +7,601 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-type TestBotAPI struct {
-	SendFunc    func(c tgbotapi.Chattable) (tgbotapi.Message, error)
-	RequestFunc func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error)
+// Mock implementations for dependencies
 
-	SendCalls    []tgbotapi.Chattable
-	RequestCalls []tgbotapi.Chattable
+// mockTelegramClient implements TelegramClient interface for testing
+type mockTelegramClient struct {
+	sendFunc     func(c tgbotapi.Chattable) (tgbotapi.Message, error)
+	requestFunc  func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error)
+	sentMessages []tgbotapi.Chattable
 }
 
-func (t *TestBotAPI) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
-	t.SendCalls = append(t.SendCalls, c)
-	if t.SendFunc != nil {
-		return t.SendFunc(c)
+func (m *mockTelegramClient) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
+	m.sentMessages = append(m.sentMessages, c)
+	if m.sendFunc != nil {
+		return m.sendFunc(c)
 	}
-	return tgbotapi.Message{}, nil
+	return tgbotapi.Message{MessageID: 123}, nil
 }
 
-func (t *TestBotAPI) Request(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error) {
-	t.RequestCalls = append(t.RequestCalls, c)
-	if t.RequestFunc != nil {
-		return t.RequestFunc(c)
+func (m *mockTelegramClient) Request(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error) {
+	if m.requestFunc != nil {
+		return m.requestFunc(c)
 	}
-	return &tgbotapi.APIResponse{}, nil
+	return &tgbotapi.APIResponse{Ok: true}, nil
 }
 
-type TestablePromptComposer struct {
-	botAPI              BotAPI
-	testMessageRenderer *TestMessageRenderer
-	testImageHandler    *TestImageHandler
-	testKeyboardHandler *TestPromptKeyboardHandler
+func (m *mockTelegramClient) GetUpdatesChan(config tgbotapi.UpdateConfig) tgbotapi.UpdatesChannel {
+	return make(tgbotapi.UpdatesChannel)
 }
 
-func NewTestablePromptComposer(botAPI BotAPI) *TestablePromptComposer {
-	return &TestablePromptComposer{
-		botAPI:              botAPI,
-		testMessageRenderer: &TestMessageRenderer{},
-		testImageHandler:    &TestImageHandler{},
-		testKeyboardHandler: &TestPromptKeyboardHandler{},
-	}
+func (m *mockTelegramClient) GetMe() (tgbotapi.User, error) {
+	return tgbotapi.User{ID: 123, UserName: "testbot"}, nil
 }
 
-func (tpc *TestablePromptComposer) ComposeAndSend(ctx *Context, promptConfig *PromptConfig) error {
-	if err := tpc.validatePromptConfig(promptConfig); err != nil {
-		return err
-	}
+// mockTemplateManager implements TemplateManager interface for testing
+type mockTemplateManager struct {
+	renderFunc func(name string, data map[string]interface{}) (string, ParseMode, error)
+	hasFunc    func(name string) bool
+}
 
-	messageText, parseMode, err := tpc.testMessageRenderer.renderMessage(promptConfig, ctx)
-	if err != nil {
-		return err
-	}
-
-	processedImg, err := tpc.testImageHandler.processImage(promptConfig.Image, ctx)
-	if err != nil {
-		return err
-	}
-
-	var tgInlineKeyboard *tgbotapi.InlineKeyboardMarkup
-	if promptConfig.Keyboard != nil {
-		builtKeyboard, err := tpc.testKeyboardHandler.BuildKeyboard(ctx, promptConfig.Keyboard)
-		if err != nil {
-			return err
-		}
-		if builtKeyboard != nil {
-			if keyboard, ok := builtKeyboard.(tgbotapi.InlineKeyboardMarkup); ok {
-				if numButtons(keyboard) > 0 {
-					tgInlineKeyboard = &keyboard
-				}
-			}
-		}
-	}
-
-	if processedImg != nil {
-
-		photoMsg := tgbotapi.NewPhoto(ctx.ChatID(), nil)
-		if processedImg.data != nil {
-			photoMsg.File = tgbotapi.FileBytes{Name: "image.jpg", Bytes: processedImg.data}
-		} else if processedImg.filePath != "" {
-			photoMsg.File = tgbotapi.FileURL(processedImg.filePath)
-		} else {
-			return errors.New("processed image has no data or path")
-		}
-
-		photoMsg.Caption = messageText
-		if parseMode != ParseModeNone {
-			photoMsg.ParseMode = string(parseMode)
-		}
-		if tgInlineKeyboard != nil {
-			photoMsg.ReplyMarkup = tgInlineKeyboard
-		}
-		_, err = tpc.botAPI.Send(photoMsg)
-		return err
-	} else if messageText != "" {
-
-		textMsg := tgbotapi.NewMessage(ctx.ChatID(), messageText)
-		if parseMode != ParseModeNone {
-			textMsg.ParseMode = string(parseMode)
-		}
-		if tgInlineKeyboard != nil {
-			textMsg.ReplyMarkup = tgInlineKeyboard
-		}
-		_, err = tpc.botAPI.Send(textMsg)
-		return err
-	} else if tgInlineKeyboard != nil {
-
-		invisibleMsg := tgbotapi.NewMessage(ctx.ChatID(), "\u200B")
-		invisibleMsg.ReplyMarkup = tgInlineKeyboard
-		_, err = tpc.botAPI.Send(invisibleMsg)
-		return err
-	}
-
+func (m *mockTemplateManager) AddTemplate(name, templateText string, parseMode ParseMode) error {
 	return nil
 }
 
-func (tpc *TestablePromptComposer) validatePromptConfig(config *PromptConfig) error {
-	if config.Message == nil && config.Image == nil && config.Keyboard == nil {
-		return errors.New("PromptConfig must have at least one of Message, Image, or Keyboard specified")
+func (m *mockTemplateManager) HasTemplate(name string) bool {
+	if m.hasFunc != nil {
+		return m.hasFunc(name)
 	}
-	return nil
+	return true
 }
 
-type TestMessageRenderer struct {
-	RenderFunc  func(config *PromptConfig, ctx *Context) (string, ParseMode, error)
-	RenderCalls []struct {
-		Config *PromptConfig
-		Ctx    *Context
-	}
+func (m *mockTemplateManager) GetTemplateInfo(name string) *TemplateInfo {
+	return &TemplateInfo{Name: name, ParseMode: ParseModeHTML}
 }
 
-func (t *TestMessageRenderer) renderMessage(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
-	t.RenderCalls = append(t.RenderCalls, struct {
-		Config *PromptConfig
-		Ctx    *Context
-	}{config, ctx})
-	if t.RenderFunc != nil {
-		return t.RenderFunc(config, ctx)
-	}
-	return "", ParseModeNone, nil
+func (m *mockTemplateManager) ListTemplates() []string {
+	return []string{"test"}
 }
 
-type TestImageHandler struct {
-	ProcessFunc  func(imageSpec ImageSpec, ctx *Context) (*processedImage, error)
-	ProcessCalls []struct {
-		ImageSpec ImageSpec
-		Ctx       *Context
+func (m *mockTemplateManager) RenderTemplate(name string, data map[string]interface{}) (string, ParseMode, error) {
+	if m.renderFunc != nil {
+		return m.renderFunc(name, data)
 	}
+	return "rendered: " + name, ParseModeHTML, nil
 }
 
-func (t *TestImageHandler) processImage(imageSpec ImageSpec, ctx *Context) (*processedImage, error) {
-	t.ProcessCalls = append(t.ProcessCalls, struct {
-		ImageSpec ImageSpec
-		Ctx       *Context
-	}{imageSpec, ctx})
-	if t.ProcessFunc != nil {
-		return t.ProcessFunc(imageSpec, ctx)
-	}
-	return nil, nil
-}
-
-type TestPromptKeyboardHandler struct {
-	BuildFunc   func(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error)
-	GetFunc     func(userID int64, uuid string) (interface{}, bool)
-	CleanupFunc func(userID int64)
-	BuildCalls  []struct {
-		Ctx          *Context
-		KeyboardFunc KeyboardFunc
-	}
-	GetCalls []struct {
-		UserID int64
-		UUID   string
-	}
-	CleanupCalls []int64
-}
-
-func (t *TestPromptKeyboardHandler) BuildKeyboard(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error) {
-	t.BuildCalls = append(t.BuildCalls, struct {
-		Ctx          *Context
-		KeyboardFunc KeyboardFunc
-	}{ctx, keyboardFunc})
-	if t.BuildFunc != nil {
-		return t.BuildFunc(ctx, keyboardFunc)
-	}
-	return nil, nil
-}
-
-func (t *TestPromptKeyboardHandler) GetCallbackData(userID int64, uuid string) (interface{}, bool) {
-	t.GetCalls = append(t.GetCalls, struct {
-		UserID int64
-		UUID   string
-	}{userID, uuid})
-	if t.GetFunc != nil {
-		return t.GetFunc(userID, uuid)
-	}
-	return nil, false
-}
-
-func (t *TestPromptKeyboardHandler) CleanupUserMappings(userID int64) {
-	t.CleanupCalls = append(t.CleanupCalls, userID)
-	if t.CleanupFunc != nil {
-		t.CleanupFunc(userID)
-	}
-}
-
+// Test helper to create a basic context
 func createTestContext() *Context {
 	update := tgbotapi.Update{
 		Message: &tgbotapi.Message{
-			Chat: &tgbotapi.Chat{ID: 123},
-			From: &tgbotapi.User{ID: 456},
+			From: &tgbotapi.User{ID: 12345},
+			Chat: &tgbotapi.Chat{ID: 67890},
 		},
 	}
-	return newContext(&Bot{}, update)
-}
 
-func TestPromptComposer_ComposeAndSend_TextOnlyMessage(t *testing.T) {
-
-	testBotAPI := &TestBotAPI{}
-	composer := NewTestablePromptComposer(testBotAPI)
-
-	composer.testMessageRenderer.RenderFunc = func(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
-		return "Hello World", ParseModeNone, nil
-	}
-
-	ctx := createTestContext()
-	promptConfig := &PromptConfig{
-		Message: "Hello World",
-	}
-
-	err := composer.ComposeAndSend(ctx, promptConfig)
-
-	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
-	}
-
-	if len(testBotAPI.SendCalls) != 1 {
-		t.Errorf("Expected 1 Send call, got %d", len(testBotAPI.SendCalls))
-	}
-
-	if msg, ok := testBotAPI.SendCalls[0].(tgbotapi.MessageConfig); ok {
-		if msg.Text != "Hello World" {
-			t.Errorf("Expected message text 'Hello World', got '%s'", msg.Text)
-		}
-		if msg.ChatID != ctx.ChatID() {
-			t.Errorf("Expected ChatID %d, got %d", ctx.ChatID(), msg.ChatID)
-		}
-	} else {
-		t.Error("Expected MessageConfig type")
+	return &Context{
+		update: update,
+		data:   make(map[string]interface{}),
+		userID: 12345,
+		chatID: 67890,
 	}
 }
 
-func TestPromptComposer_ComposeAndSend_ImageOnlyMessage(t *testing.T) {
+// Helper function to create a testable PromptComposer with real dependencies but controlled behavior
+func createTestPromptComposer(client TelegramClient, templateMgr TemplateManager) *PromptComposer {
+	msgHandler := newMessageHandler(templateMgr)
+	imgHandler := newImageHandler()
+	kbdHandler := newPromptKeyboardHandler()
 
-	testBotAPI := &TestBotAPI{}
-	composer := NewTestablePromptComposer(testBotAPI)
-
-	composer.testMessageRenderer.RenderFunc = func(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
-		return "", ParseModeNone, nil
-	}
-	composer.testImageHandler.ProcessFunc = func(imageSpec ImageSpec, ctx *Context) (*processedImage, error) {
-		return &processedImage{
-			data:     []byte("fake_image_data"),
-			filePath: "",
-		}, nil
-	}
-
-	ctx := createTestContext()
-	promptConfig := &PromptConfig{
-		Image: "test.jpg",
-	}
-
-	err := composer.ComposeAndSend(ctx, promptConfig)
-
-	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
-	}
-
-	if len(testBotAPI.SendCalls) != 1 {
-		t.Errorf("Expected 1 Send call, got %d", len(testBotAPI.SendCalls))
-	}
-
-	if _, ok := testBotAPI.SendCalls[0].(tgbotapi.PhotoConfig); !ok {
-		t.Error("Expected PhotoConfig type")
-	}
+	return newPromptComposer(client, msgHandler, imgHandler, kbdHandler)
 }
 
-func TestPromptComposer_ComposeAndSend_KeyboardOnlyMessage(t *testing.T) {
+func TestNewPromptComposer(t *testing.T) {
+	mockClient := &mockTelegramClient{}
+	mockTM := &mockTemplateManager{}
 
-	testBotAPI := &TestBotAPI{}
-	composer := NewTestablePromptComposer(testBotAPI)
+	composer := createTestPromptComposer(mockClient, mockTM)
 
-	composer.testMessageRenderer.RenderFunc = func(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
-		return "", ParseModeNone, nil
-	}
-	composer.testKeyboardHandler.BuildFunc = func(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error) {
-		keyboard := tgbotapi.NewInlineKeyboardMarkup([]tgbotapi.InlineKeyboardButton{
-			tgbotapi.NewInlineKeyboardButtonData("Test", "uuid123"),
-		})
-		return keyboard, nil
+	if composer == nil {
+		t.Fatal("createTestPromptComposer returned nil")
 	}
 
-	ctx := createTestContext()
-	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
-		return NewPromptKeyboard().ButtonCallback("Test", "test_data")
-	}
-	promptConfig := &PromptConfig{
-		Keyboard: keyboardFunc,
+	if composer.botAPI != mockClient {
+		t.Error("botAPI not set correctly")
 	}
 
-	err := composer.ComposeAndSend(ctx, promptConfig)
-
-	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
+	if composer.messageRenderer == nil {
+		t.Error("messageRenderer not set")
 	}
 
-	if len(testBotAPI.SendCalls) != 1 {
-		t.Errorf("Expected 1 Send call, got %d", len(testBotAPI.SendCalls))
+	if composer.imageHandler == nil {
+		t.Error("imageHandler not set")
 	}
 
-	if msg, ok := testBotAPI.SendCalls[0].(tgbotapi.MessageConfig); ok {
-		if msg.Text != "\u200B" {
-			t.Errorf("Expected invisible character, got '%s'", msg.Text)
-		}
-	} else {
-		t.Error("Expected MessageConfig type")
-	}
-}
-
-func TestPromptComposer_ComposeAndSend_CombinedMessage(t *testing.T) {
-
-	testBotAPI := &TestBotAPI{}
-	composer := NewTestablePromptComposer(testBotAPI)
-
-	composer.testMessageRenderer.RenderFunc = func(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
-		return "*Bold Text*", ParseModeMarkdown, nil
-	}
-	composer.testImageHandler.ProcessFunc = func(imageSpec ImageSpec, ctx *Context) (*processedImage, error) {
-		return &processedImage{
-			filePath: "http://example.com/image.jpg",
-		}, nil
-	}
-	composer.testKeyboardHandler.BuildFunc = func(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error) {
-		keyboard := tgbotapi.NewInlineKeyboardMarkup([]tgbotapi.InlineKeyboardButton{
-			tgbotapi.NewInlineKeyboardButtonData("Test", "uuid123"),
-		})
-		return keyboard, nil
-	}
-
-	ctx := createTestContext()
-	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
-		return NewPromptKeyboard().ButtonCallback("Test", "test_data")
-	}
-	promptConfig := &PromptConfig{
-		Message:  "*Bold Text*",
-		Image:    "test.jpg",
-		Keyboard: keyboardFunc,
-	}
-
-	err := composer.ComposeAndSend(ctx, promptConfig)
-
-	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
-	}
-
-	if len(testBotAPI.SendCalls) != 1 {
-		t.Errorf("Expected 1 Send call, got %d", len(testBotAPI.SendCalls))
-	}
-
-	if photoMsg, ok := testBotAPI.SendCalls[0].(tgbotapi.PhotoConfig); ok {
-		if photoMsg.Caption != "*Bold Text*" {
-			t.Errorf("Expected caption '*Bold Text*', got '%s'", photoMsg.Caption)
-		}
-		if photoMsg.ParseMode != "Markdown" {
-			t.Errorf("Expected parse mode 'Markdown', got '%s'", photoMsg.ParseMode)
-		}
-	} else {
-		t.Error("Expected PhotoConfig type")
-	}
-}
-
-func TestPromptComposer_ComposeAndSend_MessageRenderError(t *testing.T) {
-
-	testBotAPI := &TestBotAPI{}
-	composer := NewTestablePromptComposer(testBotAPI)
-
-	composer.testMessageRenderer.RenderFunc = func(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
-		return "", ParseModeNone, errors.New("render error")
-	}
-
-	ctx := createTestContext()
-	promptConfig := &PromptConfig{
-		Message: "Hello World",
-	}
-
-	err := composer.ComposeAndSend(ctx, promptConfig)
-
-	if err == nil {
-		t.Error("Expected error, got nil")
-	}
-	if err != nil && err.Error() != "render error" {
-		t.Errorf("Expected 'render error', got '%s'", err.Error())
-	}
-}
-
-func TestPromptComposer_ComposeAndSend_ImageProcessingError(t *testing.T) {
-
-	testBotAPI := &TestBotAPI{}
-	composer := NewTestablePromptComposer(testBotAPI)
-
-	composer.testMessageRenderer.RenderFunc = func(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
-		return "", ParseModeNone, nil
-	}
-	composer.testImageHandler.ProcessFunc = func(imageSpec ImageSpec, ctx *Context) (*processedImage, error) {
-		return nil, errors.New("image error")
-	}
-
-	ctx := createTestContext()
-	promptConfig := &PromptConfig{
-		Image: "invalid.jpg",
-	}
-
-	err := composer.ComposeAndSend(ctx, promptConfig)
-
-	if err == nil {
-		t.Error("Expected error, got nil")
-	}
-	if err != nil && err.Error() != "image error" {
-		t.Errorf("Expected 'image error', got '%s'", err.Error())
-	}
-}
-
-func TestPromptComposer_ComposeAndSend_KeyboardBuildingError(t *testing.T) {
-
-	testBotAPI := &TestBotAPI{}
-	composer := NewTestablePromptComposer(testBotAPI)
-
-	composer.testMessageRenderer.RenderFunc = func(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
-		return "", ParseModeNone, nil
-	}
-	composer.testKeyboardHandler.BuildFunc = func(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error) {
-		return nil, errors.New("keyboard error")
-	}
-
-	ctx := createTestContext()
-	keyboardFunc := func(ctx *Context) *PromptKeyboardBuilder {
-		return NewPromptKeyboard()
-	}
-	promptConfig := &PromptConfig{
-		Keyboard: keyboardFunc,
-	}
-
-	err := composer.ComposeAndSend(ctx, promptConfig)
-
-	if err == nil {
-		t.Error("Expected error, got nil")
-	}
-	if err != nil && err.Error() != "keyboard error" {
-		t.Errorf("Expected 'keyboard error', got '%s'", err.Error())
+	if composer.keyboardHandler == nil {
+		t.Error("keyboardHandler not set")
 	}
 }
 
 func TestPromptComposer_ValidatePromptConfig(t *testing.T) {
-	testBotAPI := &TestBotAPI{}
-	composer := NewTestablePromptComposer(testBotAPI)
+	composer := &PromptComposer{}
 
 	tests := []struct {
-		name        string
-		config      *PromptConfig
-		expectError bool
+		name    string
+		config  *PromptConfig
+		wantErr bool
 	}{
 		{
-			name:        "Empty config",
-			config:      &PromptConfig{},
-			expectError: true,
-		},
-		{
-			name: "Message only",
+			name: "valid config with message",
 			config: &PromptConfig{
-				Message: "Hello",
+				Message: "test message",
 			},
-			expectError: false,
+			wantErr: false,
 		},
 		{
-			name: "Image only",
+			name: "valid config with image",
 			config: &PromptConfig{
 				Image: "test.jpg",
 			},
-			expectError: false,
+			wantErr: false,
 		},
 		{
-			name: "Keyboard only",
+			name: "valid config with keyboard",
 			config: &PromptConfig{
-				Keyboard: func(ctx *Context) *PromptKeyboardBuilder {
-					return NewPromptKeyboard()
-				},
+				Keyboard: func(ctx *Context) *PromptKeyboardBuilder { return nil },
 			},
-			expectError: false,
+			wantErr: false,
+		},
+		{
+			name: "invalid config - all nil",
+			config: &PromptConfig{
+				Message:  nil,
+				Image:    nil,
+				Keyboard: nil,
+			},
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := composer.validatePromptConfig(tt.config)
-			if tt.expectError && err == nil {
-				t.Error("Expected error, got nil")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Expected no error, got: %v", err)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validatePromptConfig() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func TestPromptComposer_SendAPIError(t *testing.T) {
+func TestPromptComposer_ComposeAndSend_TextOnly(t *testing.T) {
+	mockClient := &mockTelegramClient{}
+	mockTM := &mockTemplateManager{}
 
-	testBotAPI := &TestBotAPI{
-		SendFunc: func(c tgbotapi.Chattable) (tgbotapi.Message, error) {
-			return tgbotapi.Message{}, errors.New("API error")
-		},
-	}
-	composer := NewTestablePromptComposer(testBotAPI)
-
-	composer.testMessageRenderer.RenderFunc = func(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
-		return "Hello World", ParseModeNone, nil
-	}
-
+	composer := createTestPromptComposer(mockClient, mockTM)
 	ctx := createTestContext()
-	promptConfig := &PromptConfig{
-		Message: "Hello World",
+
+	config := &PromptConfig{
+		Message: "Hello World!",
 	}
 
-	err := composer.ComposeAndSend(ctx, promptConfig)
-
-	if err == nil {
-		t.Error("Expected error, got nil")
+	err := composer.ComposeAndSend(ctx, config)
+	if err != nil {
+		t.Fatalf("ComposeAndSend failed: %v", err)
 	}
-	if err != nil && err.Error() != "API error" {
-		t.Errorf("Expected 'API error', got '%s'", err.Error())
+
+	if len(mockClient.sentMessages) != 1 {
+		t.Fatalf("Expected 1 message sent, got %d", len(mockClient.sentMessages))
+	}
+
+	msgConfig, ok := mockClient.sentMessages[0].(tgbotapi.MessageConfig)
+	if !ok {
+		t.Fatalf("Expected MessageConfig, got %T", mockClient.sentMessages[0])
+	}
+
+	if msgConfig.Text != "Hello World!" {
+		t.Errorf("Expected text 'Hello World!', got '%s'", msgConfig.Text)
+	}
+
+	if msgConfig.ChatID != ctx.ChatID() {
+		t.Errorf("Expected ChatID %d, got %d", ctx.ChatID(), msgConfig.ChatID)
 	}
 }
 
-func TestPromptComposer_NilKeyboardFunc(t *testing.T) {
-
-	testBotAPI := &TestBotAPI{}
-	composer := NewTestablePromptComposer(testBotAPI)
-
-	composer.testMessageRenderer.RenderFunc = func(config *PromptConfig, ctx *Context) (string, ParseMode, error) {
-		return "Hello World", ParseModeNone, nil
+func TestPromptComposer_ComposeAndSend_WithTemplate(t *testing.T) {
+	mockClient := &mockTelegramClient{}
+	mockTM := &mockTemplateManager{
+		renderFunc: func(name string, data map[string]interface{}) (string, ParseMode, error) {
+			if name == "greeting" {
+				if nameVal, ok := data["name"].(string); ok {
+					return "Hello " + nameVal + "!", ParseModeHTML, nil
+				}
+				return "Hello World!", ParseModeHTML, nil
+			}
+			return "Unknown template", ParseModeNone, nil
+		},
 	}
 
+	composer := createTestPromptComposer(mockClient, mockTM)
 	ctx := createTestContext()
-	promptConfig := &PromptConfig{
-		Message:  "Hello World",
-		Keyboard: nil,
+
+	config := &PromptConfig{
+		Message: "template:greeting",
+		TemplateData: map[string]interface{}{
+			"name": "John",
+		},
 	}
 
-	err := composer.ComposeAndSend(ctx, promptConfig)
-
+	err := composer.ComposeAndSend(ctx, config)
 	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
+		t.Fatalf("ComposeAndSend failed: %v", err)
 	}
 
-	if len(composer.testKeyboardHandler.BuildCalls) != 0 {
-		t.Errorf("Expected 0 keyboard build calls, got %d", len(composer.testKeyboardHandler.BuildCalls))
+	if len(mockClient.sentMessages) != 1 {
+		t.Fatalf("Expected 1 message sent, got %d", len(mockClient.sentMessages))
 	}
 
-	if msg, ok := testBotAPI.SendCalls[0].(tgbotapi.MessageConfig); ok {
-		if msg.Text != "Hello World" {
-			t.Errorf("Expected message text 'Hello World', got '%s'", msg.Text)
-		}
-		if msg.ReplyMarkup != nil {
-			t.Error("Expected no reply markup, got some")
-		}
-	} else {
-		t.Error("Expected MessageConfig type")
+	msgConfig, ok := mockClient.sentMessages[0].(tgbotapi.MessageConfig)
+	if !ok {
+		t.Fatalf("Expected MessageConfig, got %T", mockClient.sentMessages[0])
 	}
+
+	if msgConfig.Text != "Hello John!" {
+		t.Errorf("Expected text 'Hello John!', got '%s'", msgConfig.Text)
+	}
+
+	if msgConfig.ParseMode != string(ParseModeHTML) {
+		t.Errorf("Expected ParseMode '%s', got '%s'", ParseModeHTML, msgConfig.ParseMode)
+	}
+}
+
+func TestPromptComposer_ComposeAndSend_WithImage_ByteData(t *testing.T) {
+	mockClient := &mockTelegramClient{}
+	mockTM := &mockTemplateManager{}
+
+	composer := createTestPromptComposer(mockClient, mockTM)
+	ctx := createTestContext()
+
+	// Test with byte data
+	imageData := []byte("fake image data")
+	config := &PromptConfig{
+		Message: "Image caption",
+		Image:   imageData,
+	}
+
+	err := composer.ComposeAndSend(ctx, config)
+	if err != nil {
+		t.Fatalf("ComposeAndSend failed: %v", err)
+	}
+
+	if len(mockClient.sentMessages) != 1 {
+		t.Fatalf("Expected 1 message sent, got %d", len(mockClient.sentMessages))
+	}
+
+	photoConfig, ok := mockClient.sentMessages[0].(tgbotapi.PhotoConfig)
+	if !ok {
+		t.Fatalf("Expected PhotoConfig, got %T", mockClient.sentMessages[0])
+	}
+
+	if photoConfig.Caption != "Image caption" {
+		t.Errorf("Expected caption 'Image caption', got '%s'", photoConfig.Caption)
+	}
+
+	if photoConfig.ChatID != ctx.ChatID() {
+		t.Errorf("Expected ChatID %d, got %d", ctx.ChatID(), photoConfig.ChatID)
+	}
+}
+
+func TestPromptComposer_ComposeAndSend_WithImage_URL(t *testing.T) {
+	mockClient := &mockTelegramClient{}
+	mockTM := &mockTemplateManager{}
+
+	composer := createTestPromptComposer(mockClient, mockTM)
+	ctx := createTestContext()
+
+	config := &PromptConfig{
+		Message: "URL Image caption",
+		Image:   "https://example.com/image.jpg",
+	}
+
+	err := composer.ComposeAndSend(ctx, config)
+	if err != nil {
+		t.Fatalf("ComposeAndSend failed: %v", err)
+	}
+
+	if len(mockClient.sentMessages) != 1 {
+		t.Fatalf("Expected 1 message sent, got %d", len(mockClient.sentMessages))
+	}
+
+	photoConfig, ok := mockClient.sentMessages[0].(tgbotapi.PhotoConfig)
+	if !ok {
+		t.Fatalf("Expected PhotoConfig, got %T", mockClient.sentMessages[0])
+	}
+
+	if photoConfig.Caption != "URL Image caption" {
+		t.Errorf("Expected caption 'URL Image caption', got '%s'", photoConfig.Caption)
+	}
+}
+
+func TestPromptComposer_ComposeAndSend_WithKeyboard(t *testing.T) {
+	mockClient := &mockTelegramClient{}
+	mockTM := &mockTemplateManager{}
+
+	composer := createTestPromptComposer(mockClient, mockTM)
+	ctx := createTestContext()
+
+	config := &PromptConfig{
+		Message: "Choose an option:",
+		Keyboard: func(ctx *Context) *PromptKeyboardBuilder {
+			return NewPromptKeyboard().
+				ButtonCallback("Option 1", "opt1").
+				ButtonCallback("Option 2", "opt2")
+		},
+	}
+
+	err := composer.ComposeAndSend(ctx, config)
+	if err != nil {
+		t.Fatalf("ComposeAndSend failed: %v", err)
+	}
+
+	if len(mockClient.sentMessages) != 1 {
+		t.Fatalf("Expected 1 message sent, got %d", len(mockClient.sentMessages))
+	}
+
+	msgConfig, ok := mockClient.sentMessages[0].(tgbotapi.MessageConfig)
+	if !ok {
+		t.Fatalf("Expected MessageConfig, got %T", mockClient.sentMessages[0])
+	}
+
+	if msgConfig.Text != "Choose an option:" {
+		t.Errorf("Expected text 'Choose an option:', got '%s'", msgConfig.Text)
+	}
+
+	if msgConfig.ReplyMarkup == nil {
+		t.Error("Expected ReplyMarkup to be set")
+	}
+}
+
+func TestPromptComposer_ComposeAndSend_KeyboardOnly(t *testing.T) {
+	mockClient := &mockTelegramClient{}
+	mockTM := &mockTemplateManager{}
+
+	composer := createTestPromptComposer(mockClient, mockTM)
+	ctx := createTestContext()
+
+	config := &PromptConfig{
+		Keyboard: func(ctx *Context) *PromptKeyboardBuilder {
+			return NewPromptKeyboard().
+				ButtonCallback("Only Button", "only")
+		},
+	}
+
+	err := composer.ComposeAndSend(ctx, config)
+	if err != nil {
+		t.Fatalf("ComposeAndSend failed: %v", err)
+	}
+
+	if len(mockClient.sentMessages) != 1 {
+		t.Fatalf("Expected 1 message sent, got %d", len(mockClient.sentMessages))
+	}
+
+	msgConfig, ok := mockClient.sentMessages[0].(tgbotapi.MessageConfig)
+	if !ok {
+		t.Fatalf("Expected MessageConfig, got %T", mockClient.sentMessages[0])
+	}
+
+	// Should send invisible character when only keyboard
+	if msgConfig.Text != "\u200B" {
+		t.Errorf("Expected invisible character, got '%s'", msgConfig.Text)
+	}
+
+	if msgConfig.ReplyMarkup == nil {
+		t.Error("Expected ReplyMarkup to be set")
+	}
+}
+
+func TestPromptComposer_ComposeAndSend_ImageWithKeyboard(t *testing.T) {
+	mockClient := &mockTelegramClient{}
+	mockTM := &mockTemplateManager{}
+
+	composer := createTestPromptComposer(mockClient, mockTM)
+	ctx := createTestContext()
+
+	config := &PromptConfig{
+		Message: "Image with buttons",
+		Image:   []byte("fake image"),
+		Keyboard: func(ctx *Context) *PromptKeyboardBuilder {
+			return NewPromptKeyboard().
+				ButtonCallback("Action", "action")
+		},
+	}
+
+	err := composer.ComposeAndSend(ctx, config)
+	if err != nil {
+		t.Fatalf("ComposeAndSend failed: %v", err)
+	}
+
+	if len(mockClient.sentMessages) != 1 {
+		t.Fatalf("Expected 1 message sent, got %d", len(mockClient.sentMessages))
+	}
+
+	photoConfig, ok := mockClient.sentMessages[0].(tgbotapi.PhotoConfig)
+	if !ok {
+		t.Fatalf("Expected PhotoConfig, got %T", mockClient.sentMessages[0])
+	}
+
+	if photoConfig.Caption != "Image with buttons" {
+		t.Errorf("Expected caption 'Image with buttons', got '%s'", photoConfig.Caption)
+	}
+
+	if photoConfig.ReplyMarkup == nil {
+		t.Error("Expected ReplyMarkup to be set")
+	}
+}
+
+func TestPromptComposer_ComposeAndSend_ErrorHandling(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupClient   func() *mockTelegramClient
+		setupTM       func() *mockTemplateManager
+		config        *PromptConfig
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name: "telegram send error",
+			setupClient: func() *mockTelegramClient {
+				return &mockTelegramClient{
+					sendFunc: func(c tgbotapi.Chattable) (tgbotapi.Message, error) {
+						return tgbotapi.Message{}, errors.New("send failed")
+					},
+				}
+			},
+			setupTM: func() *mockTemplateManager {
+				return &mockTemplateManager{}
+			},
+			config: &PromptConfig{
+				Message: "test",
+			},
+			expectError:   true,
+			errorContains: "send failed",
+		},
+		{
+			name: "template rendering error",
+			setupClient: func() *mockTelegramClient {
+				return &mockTelegramClient{}
+			},
+			setupTM: func() *mockTemplateManager {
+				return &mockTemplateManager{
+					renderFunc: func(name string, data map[string]interface{}) (string, ParseMode, error) {
+						return "", ParseModeNone, errors.New("template render failed")
+					},
+				}
+			},
+			config: &PromptConfig{
+				Message: "template:bad",
+			},
+			expectError:   true,
+			errorContains: "message rendering failed",
+		},
+		{
+			name: "invalid prompt config",
+			setupClient: func() *mockTelegramClient {
+				return &mockTelegramClient{}
+			},
+			setupTM: func() *mockTemplateManager {
+				return &mockTemplateManager{}
+			},
+			config: &PromptConfig{
+				// All fields nil
+			},
+			expectError:   true,
+			errorContains: "invalid PromptConfig",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := tt.setupClient()
+			mockTM := tt.setupTM()
+			composer := createTestPromptComposer(mockClient, mockTM)
+			ctx := createTestContext()
+
+			err := composer.ComposeAndSend(ctx, tt.config)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error containing '%s', got nil", tt.errorContains)
+				} else if !contains(err.Error(), tt.errorContains) {
+					t.Errorf("Expected error containing '%s', got '%s'", tt.errorContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestPromptComposer_ComposeAndSend_FunctionMessage(t *testing.T) {
+	mockClient := &mockTelegramClient{}
+	mockTM := &mockTemplateManager{}
+
+	composer := createTestPromptComposer(mockClient, mockTM)
+	ctx := createTestContext()
+
+	config := &PromptConfig{
+		Message: func(ctx *Context) string {
+			return "Dynamic message for user " + string(rune(ctx.UserID()))
+		},
+	}
+
+	err := composer.ComposeAndSend(ctx, config)
+	if err != nil {
+		t.Fatalf("ComposeAndSend failed: %v", err)
+	}
+
+	if len(mockClient.sentMessages) != 1 {
+		t.Fatalf("Expected 1 message sent, got %d", len(mockClient.sentMessages))
+	}
+
+	msgConfig, ok := mockClient.sentMessages[0].(tgbotapi.MessageConfig)
+	if !ok {
+		t.Fatalf("Expected MessageConfig, got %T", mockClient.sentMessages[0])
+	}
+
+	// Should contain dynamic content
+	if msgConfig.Text == "" {
+		t.Error("Expected non-empty dynamic message")
+	}
+}
+
+func TestPromptComposer_ComposeAndSend_FunctionImage(t *testing.T) {
+	mockClient := &mockTelegramClient{}
+	mockTM := &mockTemplateManager{}
+
+	composer := createTestPromptComposer(mockClient, mockTM)
+	ctx := createTestContext()
+
+	config := &PromptConfig{
+		Message: "Dynamic image",
+		Image: func(ctx *Context) []byte {
+			return []byte("dynamic image data")
+		},
+	}
+
+	err := composer.ComposeAndSend(ctx, config)
+	if err != nil {
+		t.Fatalf("ComposeAndSend failed: %v", err)
+	}
+
+	if len(mockClient.sentMessages) != 1 {
+		t.Fatalf("Expected 1 message sent, got %d", len(mockClient.sentMessages))
+	}
+
+	photoConfig, ok := mockClient.sentMessages[0].(tgbotapi.PhotoConfig)
+	if !ok {
+		t.Fatalf("Expected PhotoConfig, got %T", mockClient.sentMessages[0])
+	}
+
+	if photoConfig.Caption != "Dynamic image" {
+		t.Errorf("Expected caption 'Dynamic image', got '%s'", photoConfig.Caption)
+	}
+}
+
+// Helper function to check if string contains substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || (len(s) > len(substr) &&
+		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			findSubstring(s, substr))))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

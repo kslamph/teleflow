@@ -35,15 +35,17 @@ type AccessManager interface {
 }
 
 type Bot struct {
-	api *tgbotapi.BotAPI
+	api  TelegramClient
+	self tgbotapi.User
 
 	handlers           map[string]HandlerFunc
 	textHandlers       map[string]HandlerFunc
 	defaultTextHandler HandlerFunc
 
 	flowManager           *flowManager
-	promptKeyboardHandler *PromptKeyboardHandler
+	promptKeyboardHandler PromptKeyboardActions
 	promptComposer        *PromptComposer
+	templateManager       TemplateManager
 
 	middleware []MiddlewareFunc
 
@@ -51,17 +53,14 @@ type Bot struct {
 	flowConfig    FlowConfig
 }
 
-func NewBot(token string, options ...BotOption) (*Bot, error) {
-	api, err := tgbotapi.NewBotAPI(token)
-	if err != nil {
-		return nil, err
-	}
+func newBotInternal(client TelegramClient, botUser tgbotapi.User, options ...BotOption) (*Bot, error) {
 	b := &Bot{
-		api:                   api,
+		api:                   client,
+		self:                  botUser,
 		handlers:              make(map[string]HandlerFunc),
 		textHandlers:          make(map[string]HandlerFunc),
-		flowManager:           newFlowManager(),
 		promptKeyboardHandler: newPromptKeyboardHandler(),
+		templateManager:       GetDefaultTemplateManager(),
 		middleware:            make([]MiddlewareFunc, 0),
 		flowConfig: FlowConfig{
 			ExitCommands:        []string{"/cancel"},
@@ -72,16 +71,31 @@ func NewBot(token string, options ...BotOption) (*Bot, error) {
 		},
 	}
 
-	messageRenderer := newMessageRenderer()
+	msgHandler := newMessageHandler(b.templateManager)
 	imageHandler := newImageHandler()
-	b.promptComposer = newPromptComposer(api, messageRenderer, imageHandler, b.promptKeyboardHandler)
+	b.promptComposer = newPromptComposer(b.api, msgHandler, imageHandler, b.promptKeyboardHandler.(*PromptKeyboardHandler))
 
 	for _, opt := range options {
 		opt(b)
 	}
 
-	b.flowManager.initialize(b)
+	// Initialize flowManager with its new dependencies
+	b.flowManager = newFlowManager(&b.flowConfig, b.promptComposer, b.promptKeyboardHandler, b)
 	return b, nil
+}
+
+func NewBot(token string, options ...BotOption) (*Bot, error) {
+	realAPI, err := tgbotapi.NewBotAPI(token)
+	if err != nil {
+		return nil, err
+	}
+
+	botUser, err := realAPI.GetMe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get bot info: %w", err)
+	}
+
+	return newBotInternal(realAPI, botUser, options...)
 }
 
 func WithFlowConfig(config FlowConfig) BotOption {
@@ -139,7 +153,7 @@ func (b *Bot) RegisterFlow(flow *Flow) {
 	b.flowManager.registerFlow(flow)
 }
 
-func (b *Bot) GetPromptKeyboardHandler() *PromptKeyboardHandler {
+func (b *Bot) GetPromptKeyboardHandler() PromptKeyboardActions {
 	return b.promptKeyboardHandler
 }
 
@@ -151,7 +165,7 @@ func (b *Bot) applyMiddleware(handler HandlerFunc) HandlerFunc {
 }
 
 func (b *Bot) processUpdate(update tgbotapi.Update) {
-	ctx := newContext(b, update)
+	ctx := newContext(update, b.api, b.templateManager, b.flowManager, b.promptComposer, b.accessManager)
 	var err error
 
 	if b.flowManager.isUserInFlow(ctx.UserID()) {
@@ -273,8 +287,37 @@ func (b *Bot) SetBotCommands(commands map[string]string) error {
 	return nil
 }
 
+// DeleteMessage deletes a specific message using the context and message ID.
+func (b *Bot) DeleteMessage(ctx *Context, messageID int) error {
+	deleteMsg := tgbotapi.NewDeleteMessage(ctx.ChatID(), messageID)
+	_, err := b.api.Send(deleteMsg)
+	return err
+}
+
+// EditMessageReplyMarkup edits the reply markup of a specific message
+// using the context, message ID, and new reply markup.
+// To remove a keyboard, 'replyMarkup' can be nil.
+func (b *Bot) EditMessageReplyMarkup(ctx *Context, messageID int, replyMarkup interface{}) error {
+	var editMsg tgbotapi.EditMessageReplyMarkupConfig
+
+	if replyMarkup == nil {
+		// Remove keyboard by setting empty markup
+		editMsg = tgbotapi.NewEditMessageReplyMarkup(ctx.ChatID(), messageID, tgbotapi.InlineKeyboardMarkup{})
+	} else {
+		// Assert to expected type
+		keyboard, ok := replyMarkup.(tgbotapi.InlineKeyboardMarkup)
+		if !ok {
+			return fmt.Errorf("replyMarkup must be of type tgbotapi.InlineKeyboardMarkup")
+		}
+		editMsg = tgbotapi.NewEditMessageReplyMarkup(ctx.ChatID(), messageID, keyboard)
+	}
+
+	_, err := b.api.Send(editMsg)
+	return err
+}
+
 func (b *Bot) Start() error {
-	log.Printf("Authorized on account %s", b.api.Self.UserName)
+	log.Printf("Authorized on account %s", b.self.UserName)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60

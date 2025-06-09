@@ -7,14 +7,8 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-type BotAPI interface {
-	Send(c tgbotapi.Chattable) (tgbotapi.Message, error)
-
-	Request(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error)
-}
-
 type PromptComposer struct {
-	botAPI BotAPI
+	botAPI TelegramClient
 
 	messageRenderer *messageHandler
 
@@ -23,7 +17,7 @@ type PromptComposer struct {
 	keyboardHandler *PromptKeyboardHandler
 }
 
-func newPromptComposer(botAPI BotAPI, msgRenderer *messageHandler, imgHandler *imageHandler, kbdHandler *PromptKeyboardHandler) *PromptComposer {
+func newPromptComposer(botAPI TelegramClient, msgRenderer *messageHandler, imgHandler *imageHandler, kbdHandler *PromptKeyboardHandler) *PromptComposer {
 	return &PromptComposer{
 		botAPI:          botAPI,
 		messageRenderer: msgRenderer,
@@ -32,7 +26,7 @@ func newPromptComposer(botAPI BotAPI, msgRenderer *messageHandler, imgHandler *i
 	}
 }
 
-func (pc *PromptComposer) composeAndSend(ctx *Context, promptConfig *PromptConfig) error {
+func (pc *PromptComposer) ComposeAndSend(ctx *Context, promptConfig *PromptConfig) error {
 	if err := pc.validatePromptConfig(promptConfig); err != nil {
 		return fmt.Errorf("invalid PromptConfig: %w", err)
 	}
@@ -49,7 +43,7 @@ func (pc *PromptComposer) composeAndSend(ctx *Context, promptConfig *PromptConfi
 
 	var tgInlineKeyboard *tgbotapi.InlineKeyboardMarkup
 	if promptConfig.Keyboard != nil {
-		builtKeyboard, err := pc.keyboardHandler.buildKeyboard(ctx, promptConfig.Keyboard)
+		builtKeyboard, err := pc.keyboardHandler.BuildKeyboard(ctx, promptConfig.Keyboard)
 		if err != nil {
 			return fmt.Errorf("keyboard building failed: %w", err)
 		}

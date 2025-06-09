@@ -7,364 +7,1011 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-type TestableBotAPI struct {
-	*TestBotAPI
-	RequestFunc  func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error)
-	RequestCalls []tgbotapi.Chattable
+// Mock implementations for testing
+
+type MockTelegramClient struct {
+	RequestFunc         func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error)
+	RequestCalls        []tgbotapi.Chattable
+	SendFunc            func(c tgbotapi.Chattable) (tgbotapi.Message, error)
+	SendCalls           []tgbotapi.Chattable
+	GetUpdatesChanFunc  func(config tgbotapi.UpdateConfig) tgbotapi.UpdatesChannel
+	GetUpdatesChanCalls []tgbotapi.UpdateConfig
+	GetMeFunc           func() (tgbotapi.User, error)
+	GetMeCalls          int
 }
 
-func NewTestableBotAPI() *TestableBotAPI {
-	return &TestableBotAPI{
-		TestBotAPI:   &TestBotAPI{},
-		RequestCalls: make([]tgbotapi.Chattable, 0),
+func NewMockTelegramClient() *MockTelegramClient {
+	return &MockTelegramClient{
+		RequestCalls:        make([]tgbotapi.Chattable, 0),
+		SendCalls:           make([]tgbotapi.Chattable, 0),
+		GetUpdatesChanCalls: make([]tgbotapi.UpdateConfig, 0),
 	}
 }
 
-func (t *TestableBotAPI) Request(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error) {
-	t.RequestCalls = append(t.RequestCalls, c)
-	if t.RequestFunc != nil {
-		return t.RequestFunc(c)
+func (m *MockTelegramClient) Request(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error) {
+	m.RequestCalls = append(m.RequestCalls, c)
+	if m.RequestFunc != nil {
+		return m.RequestFunc(c)
 	}
 	return &tgbotapi.APIResponse{Ok: true}, nil
 }
 
-type TestableBot struct {
-	api *TestableBotAPI
+func (m *MockTelegramClient) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
+	m.SendCalls = append(m.SendCalls, c)
+	if m.SendFunc != nil {
+		return m.SendFunc(c)
+	}
+	return tgbotapi.Message{MessageID: 123}, nil
 }
 
-func NewTestableBot(api *TestableBotAPI) *TestableBot {
-	return &TestableBot{
-		api: api,
+func (m *MockTelegramClient) GetUpdatesChan(config tgbotapi.UpdateConfig) tgbotapi.UpdatesChannel {
+	m.GetUpdatesChanCalls = append(m.GetUpdatesChanCalls, config)
+	if m.GetUpdatesChanFunc != nil {
+		return m.GetUpdatesChanFunc(config)
+	}
+	return make(chan tgbotapi.Update)
+}
+
+func (m *MockTelegramClient) GetMe() (tgbotapi.User, error) {
+	m.GetMeCalls++
+	if m.GetMeFunc != nil {
+		return m.GetMeFunc()
+	}
+	return tgbotapi.User{ID: 12345, UserName: "TestBot"}, nil
+}
+
+type MockTemplateManager struct {
+	AddTemplateFunc    func(name, templateText string, parseMode ParseMode) error
+	HasTemplateFunc    func(name string) bool
+	GetTemplateFunc    func(name string) *TemplateInfo
+	ListTemplatesFunc  func() []string
+	RenderTemplateFunc func(name string, data map[string]interface{}) (string, ParseMode, error)
+
+	AddTemplateCalls []struct {
+		Name, Text string
+		ParseMode  ParseMode
+	}
+	HasTemplateCalls    []string
+	GetTemplateCalls    []string
+	ListTemplatesCalls  int
+	RenderTemplateCalls []struct {
+		Name string
+		Data map[string]interface{}
 	}
 }
 
-func (tb *TestableBot) SetBotCommands(commands map[string]string) error {
-	if tb.api == nil {
-		return errors.New("bot API not initialized")
+func NewMockTemplateManager() *MockTemplateManager {
+	return &MockTemplateManager{
+		AddTemplateCalls: make([]struct {
+			Name, Text string
+			ParseMode  ParseMode
+		}, 0),
+		HasTemplateCalls: make([]string, 0),
+		GetTemplateCalls: make([]string, 0),
+		RenderTemplateCalls: make([]struct {
+			Name string
+			Data map[string]interface{}
+		}, 0),
 	}
+}
 
-	if len(commands) == 0 {
-
-		clearCmdCfg := tgbotapi.NewSetMyCommands()
-		_, err := tb.api.Request(clearCmdCfg)
-		if err != nil {
-			return errors.New("failed to clear bot commands: " + err.Error())
-		}
-		return nil
-	}
-
-	var tgCommands []tgbotapi.BotCommand
-	for cmd, desc := range commands {
-		tgCommands = append(tgCommands, tgbotapi.BotCommand{Command: cmd, Description: desc})
-	}
-	cmdCfg := tgbotapi.NewSetMyCommands(tgCommands...)
-	_, err := tb.api.Request(cmdCfg)
-	if err != nil {
-		return errors.New("failed to set bot commands: " + err.Error())
+func (m *MockTemplateManager) AddTemplate(name, templateText string, parseMode ParseMode) error {
+	m.AddTemplateCalls = append(m.AddTemplateCalls, struct {
+		Name, Text string
+		ParseMode  ParseMode
+	}{name, templateText, parseMode})
+	if m.AddTemplateFunc != nil {
+		return m.AddTemplateFunc(name, templateText, parseMode)
 	}
 	return nil
 }
 
-func TestBot_SetBotCommands_NewCommands(t *testing.T) {
+func (m *MockTemplateManager) HasTemplate(name string) bool {
+	m.HasTemplateCalls = append(m.HasTemplateCalls, name)
+	if m.HasTemplateFunc != nil {
+		return m.HasTemplateFunc(name)
+	}
+	return false
+}
 
-	api := NewTestableBotAPI()
-	bot := NewTestableBot(api)
+func (m *MockTemplateManager) GetTemplateInfo(name string) *TemplateInfo {
+	m.GetTemplateCalls = append(m.GetTemplateCalls, name)
+	if m.GetTemplateFunc != nil {
+		return m.GetTemplateFunc(name)
+	}
+	return nil
+}
 
-	commands := map[string]string{
-		"start": "Start the bot",
-		"help":  "Show help information",
-		"about": "About this bot",
+func (m *MockTemplateManager) ListTemplates() []string {
+	m.ListTemplatesCalls++
+	if m.ListTemplatesFunc != nil {
+		return m.ListTemplatesFunc()
+	}
+	return []string{}
+}
+
+func (m *MockTemplateManager) RenderTemplate(name string, data map[string]interface{}) (string, ParseMode, error) {
+	m.RenderTemplateCalls = append(m.RenderTemplateCalls, struct {
+		Name string
+		Data map[string]interface{}
+	}{name, data})
+	if m.RenderTemplateFunc != nil {
+		return m.RenderTemplateFunc(name, data)
+	}
+	return "rendered", ParseModeNone, nil
+}
+
+type MockAccessManager struct {
+	CheckPermissionFunc  func(ctx *PermissionContext) error
+	GetReplyKeyboardFunc func(ctx *PermissionContext) *ReplyKeyboard
+
+	CheckPermissionCalls  []*PermissionContext
+	GetReplyKeyboardCalls []*PermissionContext
+}
+
+func NewMockAccessManager() *MockAccessManager {
+	return &MockAccessManager{
+		CheckPermissionCalls:  make([]*PermissionContext, 0),
+		GetReplyKeyboardCalls: make([]*PermissionContext, 0),
+	}
+}
+
+func (m *MockAccessManager) CheckPermission(ctx *PermissionContext) error {
+	m.CheckPermissionCalls = append(m.CheckPermissionCalls, ctx)
+	if m.CheckPermissionFunc != nil {
+		return m.CheckPermissionFunc(ctx)
+	}
+	return nil
+}
+
+func (m *MockAccessManager) GetReplyKeyboard(ctx *PermissionContext) *ReplyKeyboard {
+	m.GetReplyKeyboardCalls = append(m.GetReplyKeyboardCalls, ctx)
+	if m.GetReplyKeyboardFunc != nil {
+		return m.GetReplyKeyboardFunc(ctx)
+	}
+	return nil
+}
+
+type MockPromptComposer struct {
+	ComposeAndSendFunc  func(ctx *Context, config *PromptConfig) error
+	ComposeAndSendCalls []struct {
+		Ctx    *Context
+		Config *PromptConfig
+	}
+}
+
+func NewMockPromptComposer() *MockPromptComposer {
+	return &MockPromptComposer{
+		ComposeAndSendCalls: make([]struct {
+			Ctx    *Context
+			Config *PromptConfig
+		}, 0),
+	}
+}
+
+func (m *MockPromptComposer) ComposeAndSend(ctx *Context, config *PromptConfig) error {
+	m.ComposeAndSendCalls = append(m.ComposeAndSendCalls, struct {
+		Ctx    *Context
+		Config *PromptConfig
+	}{ctx, config})
+	if m.ComposeAndSendFunc != nil {
+		return m.ComposeAndSendFunc(ctx, config)
+	}
+	return nil
+}
+
+type MockPromptKeyboardActions struct {
+	BuildKeyboardFunc       func(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error)
+	GetCallbackDataFunc     func(userID int64, uuid string) (interface{}, bool)
+	CleanupUserMappingsFunc func(userID int64)
+
+	BuildKeyboardCalls []struct {
+		Ctx          *Context
+		KeyboardFunc KeyboardFunc
+	}
+	GetCallbackDataCalls []struct {
+		UserID int64
+		UUID   string
+	}
+	CleanupUserMappingsCalls []int64
+}
+
+func NewMockPromptKeyboardActions() *MockPromptKeyboardActions {
+	return &MockPromptKeyboardActions{
+		BuildKeyboardCalls: make([]struct {
+			Ctx          *Context
+			KeyboardFunc KeyboardFunc
+		}, 0),
+		GetCallbackDataCalls: make([]struct {
+			UserID int64
+			UUID   string
+		}, 0),
+		CleanupUserMappingsCalls: make([]int64, 0),
+	}
+}
+
+func (m *MockPromptKeyboardActions) BuildKeyboard(ctx *Context, keyboardFunc KeyboardFunc) (interface{}, error) {
+	m.BuildKeyboardCalls = append(m.BuildKeyboardCalls, struct {
+		Ctx          *Context
+		KeyboardFunc KeyboardFunc
+	}{ctx, keyboardFunc})
+	if m.BuildKeyboardFunc != nil {
+		return m.BuildKeyboardFunc(ctx, keyboardFunc)
+	}
+	return tgbotapi.InlineKeyboardMarkup{}, nil
+}
+
+func (m *MockPromptKeyboardActions) GetCallbackData(userID int64, uuid string) (interface{}, bool) {
+	m.GetCallbackDataCalls = append(m.GetCallbackDataCalls, struct {
+		UserID int64
+		UUID   string
+	}{userID, uuid})
+	if m.GetCallbackDataFunc != nil {
+		return m.GetCallbackDataFunc(userID, uuid)
+	}
+	return nil, false
+}
+
+func (m *MockPromptKeyboardActions) CleanupUserMappings(userID int64) {
+	m.CleanupUserMappingsCalls = append(m.CleanupUserMappingsCalls, userID)
+	if m.CleanupUserMappingsFunc != nil {
+		m.CleanupUserMappingsFunc(userID)
+	}
+}
+
+type MockFlowManager struct {
+	RegisterFlowFunc    func(flow *Flow)
+	IsUserInFlowFunc    func(userID int64) bool
+	CancelFlowFunc      func(userID int64)
+	HandleUpdateFunc    func(ctx *Context) (bool, error)
+	StartFlowFunc       func(userID int64, flowName string, ctx *Context) error
+	SetUserFlowDataFunc func(userID int64, key string, value interface{}) error
+	GetUserFlowDataFunc func(userID int64, key string) (interface{}, bool)
+
+	RegisterFlowCalls []*Flow
+	IsUserInFlowCalls []int64
+	CancelFlowCalls   []int64
+	HandleUpdateCalls []*Context
+	StartFlowCalls    []struct {
+		UserID   int64
+		FlowName string
+		Ctx      *Context
+	}
+	SetUserFlowDataCalls []struct {
+		UserID int64
+		Key    string
+		Value  interface{}
+	}
+	GetUserFlowDataCalls []struct {
+		UserID int64
+		Key    string
+	}
+}
+
+func NewMockFlowManager() *MockFlowManager {
+	return &MockFlowManager{
+		RegisterFlowCalls: make([]*Flow, 0),
+		IsUserInFlowCalls: make([]int64, 0),
+		CancelFlowCalls:   make([]int64, 0),
+		HandleUpdateCalls: make([]*Context, 0),
+		StartFlowCalls: make([]struct {
+			UserID   int64
+			FlowName string
+			Ctx      *Context
+		}, 0),
+		SetUserFlowDataCalls: make([]struct {
+			UserID int64
+			Key    string
+			Value  interface{}
+		}, 0),
+		GetUserFlowDataCalls: make([]struct {
+			UserID int64
+			Key    string
+		}, 0),
+	}
+}
+
+func (m *MockFlowManager) isUserInFlow(userID int64) bool {
+	m.IsUserInFlowCalls = append(m.IsUserInFlowCalls, userID)
+	if m.IsUserInFlowFunc != nil {
+		return m.IsUserInFlowFunc(userID)
+	}
+	return false
+}
+
+func (m *MockFlowManager) cancelFlow(userID int64) {
+	m.CancelFlowCalls = append(m.CancelFlowCalls, userID)
+	if m.CancelFlowFunc != nil {
+		m.CancelFlowFunc(userID)
+	}
+}
+
+func (m *MockFlowManager) HandleUpdate(ctx *Context) (bool, error) {
+	m.HandleUpdateCalls = append(m.HandleUpdateCalls, ctx)
+	if m.HandleUpdateFunc != nil {
+		return m.HandleUpdateFunc(ctx)
+	}
+	return false, nil
+}
+
+func (m *MockFlowManager) startFlow(userID int64, flowName string, ctx *Context) error {
+	m.StartFlowCalls = append(m.StartFlowCalls, struct {
+		UserID   int64
+		FlowName string
+		Ctx      *Context
+	}{userID, flowName, ctx})
+	if m.StartFlowFunc != nil {
+		return m.StartFlowFunc(userID, flowName, ctx)
+	}
+	return nil
+}
+
+func (m *MockFlowManager) setUserFlowData(userID int64, key string, value interface{}) error {
+	m.SetUserFlowDataCalls = append(m.SetUserFlowDataCalls, struct {
+		UserID int64
+		Key    string
+		Value  interface{}
+	}{userID, key, value})
+	if m.SetUserFlowDataFunc != nil {
+		return m.SetUserFlowDataFunc(userID, key, value)
+	}
+	return nil
+}
+
+func (m *MockFlowManager) getUserFlowData(userID int64, key string) (interface{}, bool) {
+	m.GetUserFlowDataCalls = append(m.GetUserFlowDataCalls, struct {
+		UserID int64
+		Key    string
+	}{userID, key})
+	if m.GetUserFlowDataFunc != nil {
+		return m.GetUserFlowDataFunc(userID, key)
+	}
+	return nil, false
+}
+
+// Helper function to create a bot with mocked dependencies
+func createTestBot(options ...BotOption) (*Bot, *MockTelegramClient, *MockTemplateManager, *MockAccessManager) {
+	mockClient := NewMockTelegramClient()
+	mockTemplateManager := NewMockTemplateManager()
+	mockAccessManager := NewMockAccessManager()
+	mockUser := tgbotapi.User{ID: 12345, UserName: "TestBot"}
+
+	// Create bot options that inject mocked dependencies
+	allOptions := append(options,
+		func(b *Bot) {
+			b.templateManager = mockTemplateManager
+			b.accessManager = mockAccessManager
+		},
+	)
+
+	bot, _ := newBotInternal(mockClient, mockUser, allOptions...)
+
+	return bot, mockClient, mockTemplateManager, mockAccessManager
+}
+
+// Test NewBot constructor with options
+func TestNewBot_DefaultInitialization(t *testing.T) {
+	mockClient := NewMockTelegramClient()
+	mockUser := tgbotapi.User{ID: 12345, UserName: "TestBot"}
+
+	bot, err := newBotInternal(mockClient, mockUser)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	err := bot.SetBotCommands(commands)
+	if bot.api != mockClient {
+		t.Error("Expected telegram client to be set")
+	}
+
+	if bot.self != mockUser {
+		t.Error("Expected bot user to be set")
+	}
+
+	if bot.handlers == nil {
+		t.Error("Expected handlers map to be initialized")
+	}
+
+	if bot.textHandlers == nil {
+		t.Error("Expected text handlers map to be initialized")
+	}
+
+	if bot.middleware == nil {
+		t.Error("Expected middleware slice to be initialized")
+	}
+
+	if len(bot.flowConfig.ExitCommands) == 0 {
+		t.Error("Expected default exit commands to be set")
+	}
+
+	if bot.flowConfig.ExitMessage == "" {
+		t.Error("Expected default exit message to be set")
+	}
+}
+
+func TestNewBot_WithFlowConfig(t *testing.T) {
+	customConfig := FlowConfig{
+		ExitCommands:        []string{"/quit", "/exit"},
+		ExitMessage:         "Custom exit message",
+		AllowGlobalCommands: true,
+		HelpCommands:        []string{"/help", "/info"},
+		OnProcessAction:     ProcessDeleteMessage,
+	}
+
+	mockClient := NewMockTelegramClient()
+	mockUser := tgbotapi.User{ID: 12345, UserName: "TestBot"}
+
+	bot, err := newBotInternal(mockClient, mockUser, WithFlowConfig(customConfig))
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(bot.flowConfig.ExitCommands) != 2 {
+		t.Errorf("Expected 2 exit commands, got %d", len(bot.flowConfig.ExitCommands))
+	}
+
+	if bot.flowConfig.ExitMessage != "Custom exit message" {
+		t.Errorf("Expected custom exit message, got: %s", bot.flowConfig.ExitMessage)
+	}
+
+	if !bot.flowConfig.AllowGlobalCommands {
+		t.Error("Expected AllowGlobalCommands to be true")
+	}
+}
+
+func TestNewBot_WithAccessManager(t *testing.T) {
+	mockAccessManager := NewMockAccessManager()
+	mockClient := NewMockTelegramClient()
+	mockUser := tgbotapi.User{ID: 12345, UserName: "TestBot"}
+
+	bot, err := newBotInternal(mockClient, mockUser, WithAccessManager(mockAccessManager))
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if bot.accessManager != mockAccessManager {
+		t.Error("Expected access manager to be set")
+	}
+
+	// WithAccessManager should also add auth middleware
+	if len(bot.middleware) == 0 {
+		t.Error("Expected auth middleware to be added")
+	}
+}
+
+// Test middleware functionality
+func TestBot_UseMiddleware(t *testing.T) {
+	bot, _, _, _ := createTestBot()
+
+	var executionOrder []string
+
+	middleware1 := func(next HandlerFunc) HandlerFunc {
+		return func(ctx *Context) error {
+			executionOrder = append(executionOrder, "middleware1")
+			return next(ctx)
+		}
+	}
+
+	middleware2 := func(next HandlerFunc) HandlerFunc {
+		return func(ctx *Context) error {
+			executionOrder = append(executionOrder, "middleware2")
+			return next(ctx)
+		}
+	}
+
+	bot.UseMiddleware(middleware1)
+	bot.UseMiddleware(middleware2)
+
+	if len(bot.middleware) != 2 {
+		t.Errorf("Expected 2 middleware, got %d", len(bot.middleware))
+	}
+}
+
+func TestBot_ApplyMiddleware(t *testing.T) {
+	bot, _, _, _ := createTestBot()
+
+	var executionOrder []string
+
+	middleware1 := func(next HandlerFunc) HandlerFunc {
+		return func(ctx *Context) error {
+			executionOrder = append(executionOrder, "middleware1")
+			return next(ctx)
+		}
+	}
+
+	middleware2 := func(next HandlerFunc) HandlerFunc {
+		return func(ctx *Context) error {
+			executionOrder = append(executionOrder, "middleware2")
+			return next(ctx)
+		}
+	}
+
+	baseHandler := func(ctx *Context) error {
+		executionOrder = append(executionOrder, "handler")
+		return nil
+	}
+
+	bot.UseMiddleware(middleware1)
+	bot.UseMiddleware(middleware2)
+
+	wrappedHandler := bot.applyMiddleware(baseHandler)
+
+	// Create a mock context for testing
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			From: &tgbotapi.User{ID: 123},
+			Chat: &tgbotapi.Chat{ID: 456},
+		},
+	}
+	ctx := newContext(update, NewMockTelegramClient(), NewMockTemplateManager(), NewMockFlowManager(), NewMockPromptComposer(), NewMockAccessManager())
+
+	err := wrappedHandler(ctx)
 
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	if len(api.RequestCalls) != 1 {
-		t.Errorf("Expected 1 Request call, got %d", len(api.RequestCalls))
+	expectedOrder := []string{"middleware1", "middleware2", "handler"}
+	if len(executionOrder) != len(expectedOrder) {
+		t.Errorf("Expected %d executions, got %d", len(expectedOrder), len(executionOrder))
 	}
 
-	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
-		if len(cmdConfig.Commands) != 3 {
-			t.Errorf("Expected 3 commands, got %d", len(cmdConfig.Commands))
+	for i, expected := range expectedOrder {
+		if i >= len(executionOrder) || executionOrder[i] != expected {
+			t.Errorf("Expected execution order %v, got %v", expectedOrder, executionOrder)
+			break
 		}
-
-		expectedCommands := map[string]string{
-			"start": "Start the bot",
-			"help":  "Show help information",
-			"about": "About this bot",
-		}
-
-		for _, cmd := range cmdConfig.Commands {
-			expectedDesc, exists := expectedCommands[cmd.Command]
-			if !exists {
-				t.Errorf("Unexpected command: %s", cmd.Command)
-				continue
-			}
-			if cmd.Description != expectedDesc {
-				t.Errorf("Command %s: expected description '%s', got '%s'", cmd.Command, expectedDesc, cmd.Description)
-			}
-		}
-	} else {
-		t.Errorf("Expected SetMyCommandsConfig, got %T", api.RequestCalls[0])
 	}
 }
 
-func TestBot_SetBotCommands_SingleCommand(t *testing.T) {
+// Test command handling
+func TestBot_HandleCommand(t *testing.T) {
+	bot, _, _, _ := createTestBot()
 
-	api := NewTestableBotAPI()
-	bot := NewTestableBot(api)
+	var handlerCalled bool
+	var receivedCommand, receivedArgs string
 
-	commands := map[string]string{
-		"start": "Start the bot",
+	handler := func(ctx *Context, command string, args string) error {
+		handlerCalled = true
+		receivedCommand = command
+		receivedArgs = args
+		return nil
 	}
 
-	err := bot.SetBotCommands(commands)
+	bot.HandleCommand("start", handler)
+
+	if _, exists := bot.handlers["start"]; !exists {
+		t.Error("Expected command handler to be registered")
+	}
+
+	// Test command execution
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			Text: "/start hello world",
+			From: &tgbotapi.User{ID: 123},
+			Chat: &tgbotapi.Chat{ID: 456},
+		},
+	}
+	ctx := newContext(update, NewMockTelegramClient(), NewMockTemplateManager(), NewMockFlowManager(), NewMockPromptComposer(), NewMockAccessManager())
+
+	err := bot.handlers["start"](ctx)
 
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
-		if len(cmdConfig.Commands) != 1 {
-			t.Errorf("Expected 1 command, got %d", len(cmdConfig.Commands))
-		}
-		if cmdConfig.Commands[0].Command != "start" {
-			t.Errorf("Expected command 'start', got '%s'", cmdConfig.Commands[0].Command)
-		}
-		if cmdConfig.Commands[0].Description != "Start the bot" {
-			t.Errorf("Expected description 'Start the bot', got '%s'", cmdConfig.Commands[0].Description)
-		}
-	} else {
-		t.Errorf("Expected SetMyCommandsConfig, got %T", api.RequestCalls[0])
+	if !handlerCalled {
+		t.Error("Expected handler to be called")
+	}
+
+	if receivedCommand != "start" {
+		t.Errorf("Expected command 'start', got '%s'", receivedCommand)
+	}
+
+	if receivedArgs != " hello world" {
+		t.Errorf("Expected args ' hello world', got '%s'", receivedArgs)
 	}
 }
 
-func TestBot_SetBotCommands_ClearCommands(t *testing.T) {
+// Test flow registration
+func TestBot_RegisterFlow(t *testing.T) {
+	bot, _, _, _ := createTestBot()
 
-	api := NewTestableBotAPI()
-	bot := NewTestableBot(api)
+	flow := &Flow{
+		Name: "test-flow",
+	}
 
-	err := bot.SetBotCommands(map[string]string{})
+	// We can't easily mock the flowManager here since it's a concrete type
+	// But we can verify the method doesn't panic and completes
+	bot.RegisterFlow(flow)
+
+	// This test verifies the method works without error
+	// The actual flow registration logic is tested separately in flow_test.go
+}
+
+// Test processUpdate logic
+func TestBot_ProcessUpdate_CommandMessage(t *testing.T) {
+	bot, _, _, _ := createTestBot()
+
+	var handlerCalled bool
+	handler := func(ctx *Context, command string, args string) error {
+		handlerCalled = true
+		return nil
+	}
+
+	bot.HandleCommand("test", handler)
+
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			Text:     "/test",
+			From:     &tgbotapi.User{ID: 123},
+			Chat:     &tgbotapi.Chat{ID: 456},
+			Entities: []tgbotapi.MessageEntity{{Type: "bot_command", Offset: 0, Length: 5}},
+		},
+	}
+
+	bot.processUpdate(update)
+
+	if !handlerCalled {
+		t.Error("Expected command handler to be called")
+	}
+}
+
+func TestBot_ProcessUpdate_UserInFlow(t *testing.T) {
+	// This test is more complex to implement without direct flow manager mocking
+	// The processUpdate method creates its own context and calls flowManager methods
+	// For now, we verify the method runs without panicking
+	bot, _, _, _ := createTestBot()
+
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			Text: "some text",
+			From: &tgbotapi.User{ID: 123},
+			Chat: &tgbotapi.Chat{ID: 456},
+		},
+	}
+
+	// This should not panic
+	bot.processUpdate(update)
+}
+
+func TestBot_ProcessUpdate_CallbackQuery(t *testing.T) {
+	bot, mockClient, _, _ := createTestBot()
+
+	update := tgbotapi.Update{
+		CallbackQuery: &tgbotapi.CallbackQuery{
+			ID:   "callback123",
+			From: &tgbotapi.User{ID: 123},
+			Message: &tgbotapi.Message{
+				Chat: &tgbotapi.Chat{ID: 456},
+			},
+		},
+	}
+
+	bot.processUpdate(update)
+
+	// Check that callback query was answered
+	if len(mockClient.RequestCalls) == 0 {
+		t.Error("Expected callback query to be answered")
+	}
+}
+
+func TestBot_ProcessUpdate_ExitCommand(t *testing.T) {
+	// This test verifies that exit commands are processed
+	// We can't easily mock flow state, but we can verify the method runs
+	bot, _, _, _ := createTestBot()
+
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			Text: "/cancel",
+			From: &tgbotapi.User{ID: 123},
+			Chat: &tgbotapi.Chat{ID: 456},
+		},
+	}
+
+	// This should not panic and should handle the exit command logic
+	bot.processUpdate(update)
+}
+
+// Test MessageCleaner implementation
+func TestBot_DeleteMessage(t *testing.T) {
+	bot, mockClient, _, _ := createTestBot()
+
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			From: &tgbotapi.User{ID: 123},
+			Chat: &tgbotapi.Chat{ID: 456},
+		},
+	}
+	ctx := newContext(update, mockClient, NewMockTemplateManager(), NewMockFlowManager(), NewMockPromptComposer(), NewMockAccessManager())
+
+	err := bot.DeleteMessage(ctx, 789)
 
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	if len(api.RequestCalls) != 1 {
-		t.Errorf("Expected 1 Request call, got %d", len(api.RequestCalls))
+	if len(mockClient.SendCalls) != 1 {
+		t.Errorf("Expected 1 Send call, got %d", len(mockClient.SendCalls))
 	}
 
-	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
-		if len(cmdConfig.Commands) != 0 {
-			t.Errorf("Expected 0 commands for clearing, got %d", len(cmdConfig.Commands))
+	if deleteMsg, ok := mockClient.SendCalls[0].(tgbotapi.DeleteMessageConfig); ok {
+		if deleteMsg.ChatID != 456 {
+			t.Errorf("Expected ChatID 456, got %d", deleteMsg.ChatID)
+		}
+		if deleteMsg.MessageID != 789 {
+			t.Errorf("Expected MessageID 789, got %d", deleteMsg.MessageID)
 		}
 	} else {
-		t.Errorf("Expected SetMyCommandsConfig, got %T", api.RequestCalls[0])
+		t.Errorf("Expected DeleteMessageConfig, got %T", mockClient.SendCalls[0])
 	}
 }
 
-func TestBot_SetBotCommands_NilCommands(t *testing.T) {
+func TestBot_EditMessageReplyMarkup(t *testing.T) {
+	bot, mockClient, _, _ := createTestBot()
 
-	api := NewTestableBotAPI()
-	bot := NewTestableBot(api)
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			From: &tgbotapi.User{ID: 123},
+			Chat: &tgbotapi.Chat{ID: 456},
+		},
+	}
+	ctx := newContext(update, mockClient, NewMockTemplateManager(), NewMockFlowManager(), NewMockPromptComposer(), NewMockAccessManager())
 
-	err := bot.SetBotCommands(nil)
+	keyboard := tgbotapi.InlineKeyboardMarkup{
+		InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
+			{{Text: "Button", CallbackData: &[]string{"data"}[0]}},
+		},
+	}
+
+	err := bot.EditMessageReplyMarkup(ctx, 789, keyboard)
 
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	if len(api.RequestCalls) != 1 {
-		t.Errorf("Expected 1 Request call, got %d", len(api.RequestCalls))
+	if len(mockClient.SendCalls) != 1 {
+		t.Errorf("Expected 1 Send call, got %d", len(mockClient.SendCalls))
 	}
 
-	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
-		if len(cmdConfig.Commands) != 0 {
-			t.Errorf("Expected 0 commands for nil map, got %d", len(cmdConfig.Commands))
+	if editMsg, ok := mockClient.SendCalls[0].(tgbotapi.EditMessageReplyMarkupConfig); ok {
+		if editMsg.ChatID != 456 {
+			t.Errorf("Expected ChatID 456, got %d", editMsg.ChatID)
+		}
+		if editMsg.MessageID != 789 {
+			t.Errorf("Expected MessageID 789, got %d", editMsg.MessageID)
 		}
 	} else {
-		t.Errorf("Expected SetMyCommandsConfig, got %T", api.RequestCalls[0])
+		t.Errorf("Expected EditMessageReplyMarkupConfig, got %T", mockClient.SendCalls[0])
 	}
 }
 
-func TestBot_SetBotCommands_APIError(t *testing.T) {
+func TestBot_EditMessageReplyMarkup_RemoveKeyboard(t *testing.T) {
+	bot, mockClient, _, _ := createTestBot()
 
-	api := NewTestableBotAPI()
-	api.RequestFunc = func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error) {
-		return nil, errors.New("API request failed")
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			From: &tgbotapi.User{ID: 123},
+			Chat: &tgbotapi.Chat{ID: 456},
+		},
 	}
-	bot := NewTestableBot(api)
+	ctx := newContext(update, mockClient, NewMockTemplateManager(), NewMockFlowManager(), NewMockPromptComposer(), NewMockAccessManager())
 
-	commands := map[string]string{
-		"start": "Start the bot",
+	err := bot.EditMessageReplyMarkup(ctx, 789, nil)
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	err := bot.SetBotCommands(commands)
+	if len(mockClient.SendCalls) != 1 {
+		t.Errorf("Expected 1 Send call, got %d", len(mockClient.SendCalls))
+	}
+
+	if editMsg, ok := mockClient.SendCalls[0].(tgbotapi.EditMessageReplyMarkupConfig); ok {
+		if len(editMsg.ReplyMarkup.InlineKeyboard) != 0 {
+			t.Error("Expected empty keyboard when removing")
+		}
+	} else {
+		t.Errorf("Expected EditMessageReplyMarkupConfig, got %T", mockClient.SendCalls[0])
+	}
+}
+
+func TestBot_EditMessageReplyMarkup_InvalidType(t *testing.T) {
+	bot, _, _, _ := createTestBot()
+
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			From: &tgbotapi.User{ID: 123},
+			Chat: &tgbotapi.Chat{ID: 456},
+		},
+	}
+	ctx := newContext(update, NewMockTelegramClient(), NewMockTemplateManager(), NewMockFlowManager(), NewMockPromptComposer(), NewMockAccessManager())
+
+	err := bot.EditMessageReplyMarkup(ctx, 789, "invalid")
 
 	if err == nil {
-		t.Error("Expected error, got nil")
+		t.Error("Expected error for invalid reply markup type")
 	}
-	if err != nil && err.Error() != "failed to set bot commands: API request failed" {
-		t.Errorf("Expected 'failed to set bot commands: API request failed', got '%s'", err.Error())
+
+	if err.Error() != "replyMarkup must be of type tgbotapi.InlineKeyboardMarkup" {
+		t.Errorf("Expected specific error message, got: %v", err)
 	}
 }
 
-func TestBot_SetBotCommands_ClearCommandsAPIError(t *testing.T) {
+// Test error handling in MessageCleaner methods
+func TestBot_DeleteMessage_Error(t *testing.T) {
+	bot, mockClient, _, _ := createTestBot()
 
-	api := NewTestableBotAPI()
-	api.RequestFunc = func(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error) {
-		return nil, errors.New("Clear API request failed")
+	mockClient.SendFunc = func(c tgbotapi.Chattable) (tgbotapi.Message, error) {
+		return tgbotapi.Message{}, errors.New("API error")
 	}
-	bot := NewTestableBot(api)
 
-	err := bot.SetBotCommands(map[string]string{})
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			From: &tgbotapi.User{ID: 123},
+			Chat: &tgbotapi.Chat{ID: 456},
+		},
+	}
+	ctx := newContext(update, mockClient, NewMockTemplateManager(), NewMockFlowManager(), NewMockPromptComposer(), NewMockAccessManager())
+
+	err := bot.DeleteMessage(ctx, 789)
 
 	if err == nil {
-		t.Error("Expected error, got nil")
+		t.Error("Expected error from API")
 	}
-	if err != nil && err.Error() != "failed to clear bot commands: Clear API request failed" {
-		t.Errorf("Expected 'failed to clear bot commands: Clear API request failed', got '%s'", err.Error())
+
+	if err.Error() != "API error" {
+		t.Errorf("Expected 'API error', got: %v", err)
 	}
 }
 
-func TestBot_SetBotCommands_NilAPIError(t *testing.T) {
+func TestBot_EditMessageReplyMarkup_Error(t *testing.T) {
+	bot, mockClient, _, _ := createTestBot()
 
-	bot := NewTestableBot(nil)
-
-	commands := map[string]string{
-		"start": "Start the bot",
+	mockClient.SendFunc = func(c tgbotapi.Chattable) (tgbotapi.Message, error) {
+		return tgbotapi.Message{}, errors.New("API error")
 	}
 
-	err := bot.SetBotCommands(commands)
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			From: &tgbotapi.User{ID: 123},
+			Chat: &tgbotapi.Chat{ID: 456},
+		},
+	}
+	ctx := newContext(update, mockClient, NewMockTemplateManager(), NewMockFlowManager(), NewMockPromptComposer(), NewMockAccessManager())
+
+	keyboard := tgbotapi.InlineKeyboardMarkup{}
+	err := bot.EditMessageReplyMarkup(ctx, 789, keyboard)
 
 	if err == nil {
-		t.Error("Expected error for nil API, got nil")
+		t.Error("Expected error from API")
 	}
-	if err != nil && err.Error() != "bot API not initialized" {
-		t.Errorf("Expected 'bot API not initialized', got '%s'", err.Error())
+
+	if err.Error() != "API error" {
+		t.Errorf("Expected 'API error', got: %v", err)
 	}
 }
 
-func TestBot_SetBotCommands_LongDescriptions(t *testing.T) {
+// Integration test with multiple components
+func TestBot_Integration_CommandWithMiddleware(t *testing.T) {
+	bot, _, _, _ := createTestBot()
 
-	api := NewTestableBotAPI()
-	bot := NewTestableBot(api)
+	var middlewareExecuted, handlerExecuted bool
 
-	commands := map[string]string{
-		"help":      "This is a very long description that explains what this command does in great detail and provides comprehensive information about its usage",
-		"settings":  "Configure bot settings and preferences",
-		"analytics": "View detailed analytics and statistics about bot usage and performance metrics",
+	// Add middleware
+	bot.UseMiddleware(func(next HandlerFunc) HandlerFunc {
+		return func(ctx *Context) error {
+			middlewareExecuted = true
+			return next(ctx)
+		}
+	})
+
+	// Add command handler
+	bot.HandleCommand("test", func(ctx *Context, command string, args string) error {
+		handlerExecuted = true
+		return nil
+	})
+
+	// Process update
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			Text:     "/test",
+			From:     &tgbotapi.User{ID: 123},
+			Chat:     &tgbotapi.Chat{ID: 456},
+			Entities: []tgbotapi.MessageEntity{{Type: "bot_command", Offset: 0, Length: 5}},
+		},
 	}
 
-	err := bot.SetBotCommands(commands)
+	bot.processUpdate(update)
 
-	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
+	if !middlewareExecuted {
+		t.Error("Expected middleware to be executed")
 	}
 
-	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
-		if len(cmdConfig.Commands) != 3 {
-			t.Errorf("Expected 3 commands, got %d", len(cmdConfig.Commands))
-		}
+	if !handlerExecuted {
+		t.Error("Expected handler to be executed")
+	}
+}
 
-		foundCommands := make(map[string]string)
-		for _, cmd := range cmdConfig.Commands {
-			foundCommands[cmd.Command] = cmd.Description
-		}
+// Test table-driven scenarios for processUpdate
+func TestBot_ProcessUpdate_Scenarios(t *testing.T) {
+	tests := []struct {
+		name           string
+		update         tgbotapi.Update
+		userInFlow     bool
+		flowHandles    bool
+		expectFlowCall bool
+		expectCmdCall  bool
+	}{
+		{
+			name: "Command when not in flow",
+			update: tgbotapi.Update{
+				Message: &tgbotapi.Message{
+					Text:     "/start",
+					From:     &tgbotapi.User{ID: 123},
+					Chat:     &tgbotapi.Chat{ID: 456},
+					Entities: []tgbotapi.MessageEntity{{Type: "bot_command", Offset: 0, Length: 6}},
+				},
+			},
+			userInFlow:     false,
+			flowHandles:    false,
+			expectFlowCall: true,
+			expectCmdCall:  true,
+		},
+		{
+			name: "Text when in flow",
+			update: tgbotapi.Update{
+				Message: &tgbotapi.Message{
+					Text: "some text",
+					From: &tgbotapi.User{ID: 123},
+					Chat: &tgbotapi.Chat{ID: 456},
+				},
+			},
+			userInFlow:     true,
+			flowHandles:    true,
+			expectFlowCall: true,
+			expectCmdCall:  false,
+		},
+		{
+			name: "Callback query",
+			update: tgbotapi.Update{
+				CallbackQuery: &tgbotapi.CallbackQuery{
+					ID:   "callback123",
+					From: &tgbotapi.User{ID: 123},
+					Message: &tgbotapi.Message{
+						Chat: &tgbotapi.Chat{ID: 456},
+					},
+				},
+			},
+			userInFlow:     false,
+			flowHandles:    true,
+			expectFlowCall: true,
+			expectCmdCall:  false,
+		},
+	}
 
-		for expectedCmd, expectedDesc := range commands {
-			if actualDesc, exists := foundCommands[expectedCmd]; !exists {
-				t.Errorf("Command '%s' not found", expectedCmd)
-			} else if actualDesc != expectedDesc {
-				t.Errorf("Command '%s': expected description '%s', got '%s'", expectedCmd, expectedDesc, actualDesc)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bot, _, _, _ := createTestBot()
+
+			var cmdHandlerCalled bool
+			bot.HandleCommand("start", func(ctx *Context, command string, args string) error {
+				cmdHandlerCalled = true
+				return nil
+			})
+
+			bot.processUpdate(tt.update)
+
+			// For command messages, we can verify the handler was called
+			if tt.expectCmdCall && !cmdHandlerCalled {
+				t.Error("Expected command handler to be called")
 			}
-		}
-	} else {
-		t.Errorf("Expected SetMyCommandsConfig, got %T", api.RequestCalls[0])
-	}
-}
 
-func TestBot_SetBotCommands_SpecialCharacters(t *testing.T) {
-
-	api := NewTestableBotAPI()
-	bot := NewTestableBot(api)
-
-	commands := map[string]string{
-		"start":    "🚀 Start the bot",
-		"help":     "❓ Get help & support",
-		"settings": "⚙️ Configure settings",
-	}
-
-	err := bot.SetBotCommands(commands)
-
-	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
-	}
-
-	if cmdConfig, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
-		foundCommands := make(map[string]string)
-		for _, cmd := range cmdConfig.Commands {
-			foundCommands[cmd.Command] = cmd.Description
-		}
-
-		for expectedCmd, expectedDesc := range commands {
-			if actualDesc, exists := foundCommands[expectedCmd]; !exists {
-				t.Errorf("Command '%s' not found", expectedCmd)
-			} else if actualDesc != expectedDesc {
-				t.Errorf("Command '%s': expected description '%s', got '%s'", expectedCmd, expectedDesc, actualDesc)
+			if !tt.expectCmdCall && cmdHandlerCalled {
+				t.Error("Expected command handler not to be called")
 			}
-		}
-	} else {
-		t.Errorf("Expected SetMyCommandsConfig, got %T", api.RequestCalls[0])
-	}
-}
-
-func TestBot_SetBotCommands_MultipleCallsSequential(t *testing.T) {
-
-	api := NewTestableBotAPI()
-	bot := NewTestableBot(api)
-
-	commands1 := map[string]string{
-		"start": "Start the bot",
-		"help":  "Get help",
-	}
-
-	commands2 := map[string]string{
-		"info":     "Bot information",
-		"settings": "Configure settings",
-		"about":    "About this bot",
-	}
-
-	err1 := bot.SetBotCommands(commands1)
-	if err1 != nil {
-		t.Errorf("Expected no error for first set, got: %v", err1)
-	}
-
-	err2 := bot.SetBotCommands(commands2)
-	if err2 != nil {
-		t.Errorf("Expected no error for second set, got: %v", err2)
-	}
-
-	if len(api.RequestCalls) != 2 {
-		t.Errorf("Expected 2 Request calls, got %d", len(api.RequestCalls))
-	}
-
-	if cmdConfig1, ok := api.RequestCalls[0].(tgbotapi.SetMyCommandsConfig); ok {
-		if len(cmdConfig1.Commands) != 2 {
-			t.Errorf("Expected 2 commands in first set, got %d", len(cmdConfig1.Commands))
-		}
-	} else {
-		t.Errorf("Expected SetMyCommandsConfig for first call, got %T", api.RequestCalls[0])
-	}
-
-	if cmdConfig2, ok := api.RequestCalls[1].(tgbotapi.SetMyCommandsConfig); ok {
-		if len(cmdConfig2.Commands) != 3 {
-			t.Errorf("Expected 3 commands in second set, got %d", len(cmdConfig2.Commands))
-		}
-	} else {
-		t.Errorf("Expected SetMyCommandsConfig for second call, got %T", api.RequestCalls[1])
+		})
 	}
 }

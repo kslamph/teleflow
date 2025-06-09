@@ -8,9 +8,9 @@ type messageHandler struct {
 	templateManager TemplateManager
 }
 
-func newMessageRenderer() *messageHandler {
+func newMessageHandler(tm TemplateManager) *messageHandler {
 	return &messageHandler{
-		templateManager: GetDefaultTemplateManager(),
+		templateManager: tm,
 	}
 }
 
