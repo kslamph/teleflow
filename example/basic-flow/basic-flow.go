@@ -65,7 +65,7 @@ func main() {
 				teleflow.ButtonCallback("Python", "lang_python"),
 				teleflow.ButtonCallback("Rust", "lang_rust"),
 			).Build()
-			return ctx.ReplyKeyboard("What is your favorite programming language?", keyboard)
+			return ctx.ReplyInlineKeyboard("What is your favorite programming language?", keyboard)
 		},
 		Process: func(ctx *teleflow.Context, data *RegistrationData) (teleflow.FlowAction, error) {
 			// We expect a callback query here.
@@ -100,7 +100,7 @@ func main() {
 				"Please confirm your details:\nName: %s\nAge: %d\nFavorite Language: %s",
 				data.Name, data.Age, data.FavoriteLanguage,
 			)
-			return ctx.ReplyKeyboard(promptText, keyboard)
+			return ctx.ReplyInlineKeyboard(promptText, keyboard)
 		},
 		Process: func(ctx *teleflow.Context, data *RegistrationData) (teleflow.FlowAction, error) {
 			switch ctx.Text() {
@@ -166,11 +166,11 @@ func main() {
 			),
 		)
 		keyboard.ResizeKeyboard = true
-		return ctx.ReplyKeyboard("Menu:", keyboard)
+		return ctx.ReplyInlineKeyboard("Menu:", keyboard)
 	}))
 
 	router.Handle("close", teleflow.Func(func(ctx *teleflow.Context) error {
-		return ctx.ReplyKeyboard("Closing menu.", tgbotapi.NewRemoveKeyboard(true))
+		return ctx.ReplyInlineKeyboard("Closing menu.", tgbotapi.NewRemoveKeyboard(true))
 	}))
 
 	router.Default(teleflow.Func(func(ctx *teleflow.Context) error {

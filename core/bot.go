@@ -21,6 +21,7 @@ type Bot struct {
 	self             tgbotapi.User
 	handler          Handler
 	callbackRegistry map[string]func(ctx *Context) error
+	dataRegistry     map[string]interface{}
 	mu               sync.Mutex
 }
 
@@ -45,6 +46,7 @@ func NewBot(token string, handler Handler) (*Bot, error) {
 		self:             botUser,
 		handler:          handler,
 		callbackRegistry: make(map[string]func(ctx *Context) error),
+		dataRegistry:     make(map[string]interface{}),
 	}, nil
 }
 
@@ -83,6 +85,28 @@ func (b *Bot) registerCallback(handler func(ctx *Context) error) string {
 	id := uuid.New().String()
 	b.callbackRegistry[id] = handler
 	return id
+}
+
+// RegisterData stores arbitrary data for one-time retrieval via a unique ID.
+func (b *Bot) RegisterData(data interface{}) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	id := uuid.New().String()
+	b.dataRegistry[id] = data
+	return id
+}
+
+// GetData retrieves and deletes data from the registry.
+func (b *Bot) GetData(id string) (interface{}, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	data, ok := b.dataRegistry[id]
+	if ok {
+		delete(b.dataRegistry, id)
+	}
+	return data, ok
 }
 
 // Start begins the bot's main event loop for polling updates from Telegram.

@@ -2,6 +2,7 @@ package teleflow
 
 import (
 	"fmt"
+
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
@@ -82,6 +83,19 @@ func (c *Context) RegisterCallback(handler func(ctx *Context) error) string {
 	return c.bot.registerCallback(handler)
 }
 
+// RegisterData registers arbitrary data for one-time retrieval and returns a unique ID.
+func (c *Context) RegisterData(data interface{}) string {
+	return c.bot.RegisterData(data)
+}
+
+// GetData retrieves the data associated with the current callback query's data field.
+func (c *Context) GetData() (interface{}, bool) {
+	if c.update.CallbackQuery == nil {
+		return nil, false
+	}
+	return c.bot.GetData(c.update.CallbackQuery.Data)
+}
+
 // ReplyText sends a simple text message back to the user.
 func (c *Context) ReplyText(text string) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
@@ -89,8 +103,8 @@ func (c *Context) ReplyText(text string) error {
 	return err
 }
 
-// ReplyKeyboard sends a message with a keyboard.
-func (c *Context) ReplyKeyboard(text string, markup interface{}) error {
+// ReplyInlineKeyboard sends a message with a keyboard.
+func (c *Context) ReplyInlineKeyboard(text string, markup interface{}) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
 	msg.ReplyMarkup = markup
 	_, err := c.api.Send(msg)
