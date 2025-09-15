@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	teleflow "github.com/kslamph/teleflow/core"
 )
 
@@ -29,7 +30,10 @@ func main() {
 	welcomeStep := teleflow.Step[RegistrationData]{
 		Name: "Welcome",
 		Prompt: func(ctx *teleflow.Context, data *RegistrationData) error {
-			return ctx.ReplyText("Welcome! What is your name?")
+			photo := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL("https://www.vhv.rs/dpng/d/525-5254072_go-language-logo-png-transparent-png.png"))
+			photo.Caption = "Welcome! What is your name?"
+			_, err := ctx.API().Send(photo)
+			return err
 		},
 		Process: func(ctx *teleflow.Context, data *RegistrationData) (teleflow.FlowAction, error) {
 			data.Name = ctx.Text()
@@ -136,6 +140,39 @@ func main() {
 		return ctx.ReplyText("No active flow to cancel.")
 	}))
 
+	router.Handle("hello", teleflow.Func(func(ctx *teleflow.Context) error {
+		return ctx.ReplyText("Hello!")
+	}))
+
+	router.Handle("broadcast", teleflow.Func(func(ctx *teleflow.Context) error {
+		msg := tgbotapi.NewMessage(-640141289, "This is a broadcast message.")
+		if _, err := ctx.API().Send(msg); err != nil {
+			log.Printf("Failed to send broadcast message: %v", err)
+			return ctx.ReplyText("Sorry, I couldn't send the broadcast message.")
+		}
+		return ctx.ReplyText("Broadcast message sent successfully!")
+	}))
+
+	router.Handle("menu", teleflow.Func(func(ctx *teleflow.Context) error {
+		keyboard := tgbotapi.NewReplyKeyboard(
+			tgbotapi.NewKeyboardButtonRow(
+				tgbotapi.NewKeyboardButton("/hello"),
+				tgbotapi.NewKeyboardButton("/broadcast"),
+				tgbotapi.NewKeyboardButton("/register"),
+			),
+			tgbotapi.NewKeyboardButtonRow(
+				tgbotapi.NewKeyboardButton("/cancel"),
+				tgbotapi.NewKeyboardButton("/close"),
+			),
+		)
+		keyboard.ResizeKeyboard = true
+		return ctx.ReplyKeyboard("Menu:", keyboard)
+	}))
+
+	router.Handle("close", teleflow.Func(func(ctx *teleflow.Context) error {
+		return ctx.ReplyKeyboard("Closing menu.", tgbotapi.NewRemoveKeyboard(true))
+	}))
+
 	router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
 		// If the user is already in a flow, pass the update to the flow.
 		if registrationFlow.IsUserInFlow(ctx.UserID()) {
@@ -150,8 +187,12 @@ func main() {
 	}
 
 	bot.SetBotCommands(map[string]string{
-		"register": "Start the user registration flow",
-		"cancel":   "Cancel the current flow",
+		"register":  "Start the user registration flow",
+		"cancel":    "Cancel the current flow",
+		"hello":     "Say hello",
+		"broadcast": "Send a broadcast message",
+		"menu":      "Show the main menu",
+		"close":     "Close the main menu",
 	})
 
 	log.Println("Bot starting...")
