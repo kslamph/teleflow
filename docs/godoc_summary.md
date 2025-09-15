@@ -1,6 +1,6 @@
 # GoDoc Documentation Summary for Teleflow Package
 
-This document summarizes all the comprehensive GoDoc comments added to the Teleflow package to provide thorough API documentation.
+This document summarizes the comprehensive GoDoc comments in the Teleflow package to provide thorough API documentation.
 
 ## Package Overview
 
@@ -8,144 +8,92 @@ This document summarizes all the comprehensive GoDoc comments added to the Telef
 - Created comprehensive package-level documentation explaining the framework's purpose
 - Included quick start examples for basic bot creation
 - Documented flow management capabilities with examples
-- Provided template usage examples
-- Explained middleware integration
-- Showed error handling strategies
-- Demonstrated keyboard creation
+- Showed how to use the new simplified API
 
 ## Core Components Documented
 
 ### 1. Bot Management (`core/bot.go`)
 
 **Types:**
-- `HandlerFunc` - Generic handler for processing updates
-- `CommandHandlerFunc` - Handler for Telegram commands
-- `TextHandlerFunc` - Handler for specific text messages
-- `DefaultHandlerFunc` - Fallback handler for unmatched messages
-- `BotOption` - Configuration option for bot customization
-- `PermissionContext` - Context for access control decisions
-- `AccessManager` - Interface for controlling user access
+- `Handler` - Interface for handling Telegram updates
 - `Bot` - Main bot instance with full documentation
 
 **Functions:**
 - `NewBot()` - Bot creation with examples
-- `WithFlowConfig()` - Flow configuration option
-- `WithAccessManager()` - Access control configuration
-- `UseMiddleware()` - Middleware registration
-- `HandleCommand()` - Command handler registration
-- `HandleText()` - Text handler registration
-- `DefaultHandler()` - Default handler registration
-- `RegisterFlow()` - Flow registration
-- `SetBotCommands()` - Telegram command menu configuration
-- `DeleteMessage()` - Message deletion
-- `EditMessageReplyMarkup()` - Keyboard editing
+- `RegisterData()` - Register complex data for callbacks
+- `GetData()` - Retrieve complex callback data
 - `Start()` - Bot event loop
+- `SetBotCommands()` - Telegram command menu configuration
 
 ### 2. Context Management (`core/context.go`)
 
 **Types:**
-- `Context` - Rich interface for handling updates with comprehensive field documentation
+- `Context` - Toolkit for handling a single Telegram update
 
 **Functions:**
+- `Update()` - Access raw Telegram update
+- `API()` - Access underlying Bot API instance
 - `UserID()` - User identification
 - `ChatID()` - Chat identification
+- `Text()` - Get text from message or callback data
 - `Set()/Get()` - Context data storage
-- `SetFlowData()/GetFlowData()` - Flow-specific data management
-- `StartFlow()` - Flow initiation
-- `CancelFlow()` - Flow cancellation
-- `SendPrompt()` - Rich message sending with examples
-- `SendPromptText()` - Simple text sending
-- `SendPromptWithTemplate()` - Template-based messaging
-- Template management methods with examples
-- `IsGroup()/IsChannel()` - Chat type detection
-- `SetPendingReplyKeyboard()` - Keyboard attachment
+- `RegisterCallback()` - Register one-time callback handlers
+- `RegisterData()` - Register complex data for callbacks
+- `GetData()` - Retrieve complex callback data
+- `ReplyText()` - Send simple text message
+- `ReplyWithKeyboard()` - Send message with keyboard
+- `DeleteMessage()` - Delete a message
+- `EditMessageText()` - Edit message text
+- `EditMessageReplyMarkup()` - Edit message keyboard
+- `AnswerCallback()` - Acknowledge callback query
 
-### 3. Flow System (`core/flow_types.go`, `core/flow.go`, `core/flow_builder.go`)
+### 3. Flow System (`core/flow.go`)
 
 **Flow Types:**
-- `FlowBuilder` - Fluent interface for flow construction
-- `StepBuilder` - Individual step configuration
-- `PromptConfig` - Prompt configuration with all options
-- `ProcessFunc` - User input processing function
-- `ButtonClick` - Button interaction data
-- `ProcessResult` - Flow control result with helper methods
-- `ButtonClickAction` - Message action after button clicks
+- `Flow[T]` - Generic flow with type-safe state management
+- `Step[T]` - Individual step with prompt and process functions
+- `FlowAction` - Action to control flow progression
 
 **Flow Management:**
-- `ErrorConfig` - Error handling configuration
-- `FlowConfig` - Global flow behavior configuration
-- `flowManager` - Internal flow state management
+- `NewFlow()` - Create new flow
+- `AddStep()` - Add step to flow
+- `OnComplete()` - Set completion handler
+- `IsUserInFlow()` - Check if user is in flow
+- `CancelFlow()` - Cancel user's flow
+- `HandleUpdate()` - Process update in flow
 
 **Functions:**
-- `NewFlow()` - Flow creation with comprehensive examples
-- `Step()` - Step addition with validation
-- `OnComplete()` - Completion handler setup
-- `OnError()` - Error handling configuration
-- `WithTimeout()` - Flow timeout settings
-- `OnButtonClick()` - Button click behavior
-- `Build()` - Flow finalization and validation
-- `Prompt()` - Step prompt configuration
-- `WithTemplateData()` - Template data addition
-- `WithImage()` - Image attachment
-- `WithPromptKeyboard()` - Keyboard attachment
-- `Process()` - Input processing setup
-
-**Flow Control Functions:**
-- `NextStep()` - Advance to next step
-- `GoToStep()` - Jump to specific step
+- `Next()` - Advance to next step
 - `Retry()` - Repeat current step
-- `CompleteFlow()` - Finish flow successfully
-- `CancelFlow()` - Terminate flow
-- `OnErrorCancel()` - Cancel on error strategy
-- `OnErrorRetry()` - Retry on error strategy
-- `OnErrorIgnore()` - Ignore error strategy
+- `End()` - Finish flow successfully
+- `GoTo()` - Jump to specific named step
 
-### 4. Keyboard System (`core/keyboards.go`)
+### 4. Router System (`core/flow.go`)
 
 **Types:**
-- `ReplyKeyboardButton` - Individual keyboard button
-- `ReplyKeyboard` - Complete keyboard structure
-- `ReplyKeyboardBuilder` - Fluent keyboard construction
+- `Router` - Command-based multiplexer for handlers
 
 **Functions:**
-- `BuildReplyKeyboard()` - Quick keyboard creation
-- `NewReplyKeyboard()` - Builder initialization
-- `AddButton()` - Standard button addition
-- `AddContactButton()` - Contact request button
-- `AddLocationButton()` - Location request button
-- `Row()` - Row management
-- `Resize()` - Keyboard sizing
-- `OneTime()` - One-time keyboard behavior
-- `Placeholder()` - Input field placeholder
-- `Selective()` - Selective display
-- `Build()` - Keyboard finalization
+- `NewRouter()` - Create new router
+- `Handle()` - Register handler for command
+- `Default()` - Set default handler
+- `HandleUpdate()` - Process update in router
 
-### 5. Template System (`core/templates.go`)
+### 5. Keyboard System (`core/flow.go`)
 
 **Types:**
-- `ParseMode` - Telegram formatting modes with detailed explanations
-- `TemplateInfo` - Template metadata structure
+- `InlineKeyboard` - Builder for inline keyboards
 
 **Functions:**
-- `AddTemplate()` - Global template registration
-- `GetTemplateInfo()` - Template information retrieval
-- `ListTemplates()` - Template enumeration
-- `HasTemplate()` - Template existence check
-- `validateParseMode()` - Parse mode validation
-- `validateTemplateIntegrity()` - Template compatibility check
+- `NewInlineKeyboard()` - Create new keyboard builder
+- `AddRow()` - Add row of buttons
+- `Build()` - Finalize keyboard
+- `ButtonCallback()` - Create callback button
 
-### 6. Middleware System (`core/middleware_types.go`)
+### 6. Handler Adapters (`core/flow.go`)
 
 **Types:**
-- `MiddlewareFunc` - Middleware function signature with examples
-
-### 7. Interfaces (`core/interfaces.go`)
-
-**Documented Interfaces:**
-- `PromptSender` - Message composition and sending
-- `MessageCleaner` - Message management operations
-- `ContextFlowOperations` - Flow interaction methods
-- `TelegramClient` - Telegram API abstraction
+- `Func` - Adapter to use functions as handlers
 
 ## Documentation Standards Applied
 
@@ -196,4 +144,3 @@ The comprehensive GoDoc comments enable:
 - API reference websites
 - Code completion improvements
 - Static analysis tool integration
-

@@ -4,18 +4,18 @@ This document explains how to use the Teleflow Go package to build Telegram bots
 
 ## 🎯 Core Goal of Teleflow
 
-Teleflow is a Go framework for building enterprise-grade Telegram bots. Its main goals are to:
+Teleflow is a Go framework for building Telegram bots. Its main goals are to:
 
 1.  **Simplify Conversational Flows**: Provide a structured way to define multi-step interactions with users.
 2.  **Automate State Management**: Handle user session data and flow progress automatically.
-3.  **Enable Type-Safe Interactions**: Allow complex data structures in callbacks, abstracting Telegram's string limitations.
-4.  **Offer Enterprise Features**: Include built-in middleware for common needs like rate limiting and authentication.
+3.  **Enable Type-Safe Interactions**: Use Go generics for compile-time safety.
+4.  **Offer Clean API**: Simple, consistent interface for all common bot operations.
 
 ## 🧩 Key Components
 
 ### 1. `Bot`
 
-*   **Purpose**: The central object representing your Telegram bot. It manages connections, handlers, flows, and middleware.
+*   **Purpose**: The central object representing your Telegram bot. It manages connections and routes updates to handlers.
 *   **Initialization**:
     ```go
     import teleflow "github.com/kslamph/teleflow/core"
@@ -28,9 +28,6 @@ Teleflow is a Go framework for building enterprise-grade Telegram bots. Its main
         log.Fatal(err)
     }
     ```
-*   **Configuration Options (`teleflow.BotOption`)**:
-    *   `teleflow.WithFlowConfig()`: Customize behavior of flows (e.g., exit commands, global command handling).
-    *   `teleflow.WithAccessManager()`: Integrate custom permission logic and automatically apply security middleware.
 *   **Starting the Bot**:
     ```go
     bot.Start() // This starts the long polling loop to receive updates.
@@ -42,226 +39,187 @@ Teleflow is a Go framework for building enterprise-grade Telegram bots. Its main
 *   **Key Functions**:
     *   `ctx.UserID()`: Get the ID of the user.
     *   `ctx.ChatID()`: Get the ID of the chat.
-    *   `ctx.SendPromptText(message string)`: Send a simple text message.
-    *   `ctx.SendPrompt(config *teleflow.PromptConfig)`: Send a rich message with text, image, keyboard, and template data.
-    *   `ctx.StartFlow(flowName string)`: Initiate a conversational flow for the user.
-    *   `ctx.SetFlowData(key string, value interface{})`: Store data within the current flow's session for the user.
-    *   `ctx.GetFlowData(key string) (interface{}, bool)`: Retrieve data stored in the flow session.
+    *   `ctx.ReplyText(message string)`: Send a simple text message.
+    *   `ctx.ReplyWithKeyboard(text string, markup interface{})`: Send a message with a keyboard.
     *   `ctx.Update()`: Access the raw `tgbotapi.Update` object.
+    *   `ctx.API()`: Access the underlying `tgbotapi.BotAPI` instance.
 
 ### 3. Handlers
 
-*   **Purpose**: Functions that process incoming messages or commands when a user is *not* in an active flow.
-*   **Types**:
-    *   `bot.HandleCommand(commandName string, handler teleflow.CommandHandlerFunc)`:
-        ```go
-        // Example: /start command
-        bot.HandleCommand("start", func(ctx *teleflow.Context, command string, args string) error {
-            return ctx.SendPromptText("Welcome!")
-        })
-        ```
-    *   `bot.HandleText(textToMatch string, handler teleflow.TextHandlerFunc)`: Handles exact text matches.
-        ```go
-        bot.HandleText("hello", func(ctx *teleflow.Context, text string) error {
-            return ctx.SendPromptText("Hi there!")
-        })
-        ```
-    *   `bot.DefaultHandler(handler teleflow.DefaultHandlerFunc)`: A fallback handler if no specific command or text handler matches.
+*   **Purpose**: Functions that process incoming messages or commands.
+*   **Using Router**:
+    ```go
+    router := teleflow.NewRouter()
 
-### 4. Flows (`teleflow.Flow`)
+    // Register a simple handler
+    router.Handle("start", teleflow.Func(func(ctx *teleflow.Context) error {
+        return ctx.ReplyText("Welcome!")
+    }))
 
-*   **Purpose**: Define multi-step conversational interactions. Teleflow manages the state and transitions between steps.
+    // Register a flow
+    router.Handle("register", registrationFlow)
+    ```
+*   **Default Handler**:
+    ```go
+    router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
+        return ctx.ReplyText("Unknown command. Use /start to begin.")
+    }))
+    ```
+
+### 4. Flows (`teleflow.Flow[T]`)
+
+*   **Purpose**: Define multi-step conversational interactions with automatic state management.
 *   **Building a Flow**:
     ```go
-    registrationFlow, err := teleflow.NewFlow("user_registration"). // Unique name for the flow
-        Step("ask_name"). // Define a step
-        Prompt("What's your name?"). // Message to send when this step starts
-        Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
-            // 'input' is the user's text response.
-            // 'buttonClick' is non-nil if the user clicked an inline keyboard button.
-            if input == "" {
-                return teleflow.Retry().WithPrompt("Please provide a name.") // Ask the same step again
+    // 1. Define a struct for your flow's data.
+    type RegistrationData struct {
+        Name string
+        Age  int
+    }
+
+    // 2. Create a new Flow with your data type.
+    registrationFlow := teleflow.NewFlow[RegistrationData]()
+
+    // 3. Define steps with clean, type-safe functions.
+    welcomeStep := teleflow.Step[RegistrationData]{
+        Name: "Welcome",
+        Prompt: func(ctx *teleflow.Context, data *RegistrationData) error {
+            return ctx.ReplyText("Welcome! What is your name?")
+        },
+        Process: func(ctx *teleflow.Context, data *RegistrationData) (teleflow.FlowAction, error) {
+            data.Name = ctx.Text()
+            return teleflow.Next(), nil
+        },
+    }
+
+    ageStep := teleflow.Step[RegistrationData]{
+        Name: "Age",
+        Prompt: func(ctx *teleflow.Context, data *RegistrationData) error {
+            return ctx.ReplyText(fmt.Sprintf("Nice to meet you, %s! How old are you?", data.Name))
+        },
+        Process: func(ctx *teleflow.Context, data *RegistrationData) (teleflow.FlowAction, error) {
+            age, err := strconv.Atoi(ctx.Text())
+            if err != nil {
+                ctx.ReplyText("Please enter a valid number.")
+                return teleflow.Retry(), nil
             }
-            ctx.SetFlowData("userName", input) // Store data for this flow instance
-            return teleflow.NextStep()         // Proceed to the next defined step
-        }).
+            data.Age = age
+            return teleflow.End(), nil
+        },
+    }
 
-        Step("ask_email").
-        Prompt(func(ctx *teleflow.Context) string { // Prompt can be a dynamic function
-            name, _ := ctx.GetFlowData("userName")
-            return fmt.Sprintf("Nice to meet you, %s! What's your email?", name)
-        }).
-        Process(func(ctx *teleflow.Context, input string, buttonClick *teleflow.ButtonClick) teleflow.ProcessResult {
-            if !isValidEmail(input) { // Assume isValidEmail is defined elsewhere
-                return teleflow.Retry().WithPrompt("Invalid email. Please try again.")
-            }
-            ctx.SetFlowData("userEmail", input)
-            return teleflow.CompleteFlow() // End the flow successfully
-        }).
+    // 4. Add steps to the flow.
+    registrationFlow.AddStep(welcomeStep).AddStep(ageStep)
 
-        OnComplete(func(ctx *teleflow.Context) error { // Executed after CompleteFlow()
-            name, _ := ctx.GetFlowData("userName")
-            email, _ := ctx.GetFlowData("userEmail")
-            // Send a summary or save data
-            return ctx.SendPromptText(fmt.Sprintf("Registered: %s, %s", name, email))
-        }).
-        Build()
+    // 5. Set a completion handler.
+    registrationFlow.OnComplete(func(ctx *teleflow.Context, data RegistrationData) error {
+        // The final `data` is type-safe.
+        return ctx.ReplyText(fmt.Sprintf("Thanks, %s! Registration complete. Age: %d", data.Name, data.Age))
+    })
+    ```
+*   **Flow Control Functions**:
+    *   `teleflow.Next()`: Move to the next step in sequence.
+    *   `teleflow.Retry()`: Re-prompt the current step.
+    *   `teleflow.End()`: Successfully end the flow and trigger `OnComplete`.
+    *   `teleflow.GoTo("step_name")`: Jump to a specific named step.
 
-    if err != nil {
-        log.Fatal(err)
+### 5. Keyboards
+
+*   **Inline Keyboards (`teleflow.InlineKeyboard`)**: Attached to messages.
+    ```go
+    keyboard := teleflow.NewInlineKeyboard().AddRow(
+        teleflow.ButtonCallback("Option 1", "opt1"),
+        teleflow.ButtonCallback("Option 2", "opt2"),
+    ).Build()
+
+    ctx.ReplyWithKeyboard("Choose an option:", keyboard)
+    ```
+*   **Complex Callback Data**:
+    ```go
+    // Register complex data for callbacks
+    complexData := MyStruct{Field: "value"}
+    dataID := ctx.RegisterData(complexData)
+
+    keyboard := teleflow.NewInlineKeyboard().AddRow(
+        teleflow.ButtonCallback("Click me", dataID),
+    ).Build()
+
+    // Later, retrieve the data
+    retrievedData, ok := ctx.GetData()
+    if ok {
+        myData := retrievedData.(MyStruct)
+        // Use myData
     }
     ```
-*   **Registering a Flow**:
-    ```go
-    bot.RegisterFlow(registrationFlow)
-    ```
-*   **Starting a Flow (e.g., from a command handler)**:
-    ```go
-    bot.HandleCommand("register", func(ctx *teleflow.Context, command string, args string) error {
-        return ctx.StartFlow("user_registration") // Use the flow's unique name
-    })
-    ```
-*   **Flow Control in `Process` function**:
-    *   `teleflow.NextStep()`: Move to the next step in sequence.
-    *   `teleflow.GoToStep(stepName string)`: Jump to a specific step.
-    *   `teleflow.Retry()`: Re-prompt the current step. Can be chained with `.WithPrompt()` for a custom retry message.
-    *   `teleflow.CompleteFlow()`: Successfully end the flow and trigger `OnComplete`.
-    *   `teleflow.CancelFlow()`: Abort the flow.
 
-### 5. Prompts (`teleflow.PromptConfig`)
+### 6. Middleware
 
-*   **Purpose**: Define the message to be sent to the user. Can include text, images, keyboards, and use templates.
-*   **Sending a Rich Prompt**:
-    ```go
-    // Assume imageBytes is []byte content of an image
-    return ctx.SendPrompt(&teleflow.PromptConfig{
-        Message:      "template:welcome_message", // Can be literal text or "template:template_name"
-        Image:        imageBytes,                 // Optional image
-        TemplateData: map[string]interface{}{    // Data for the template
-            "UserName": "John Doe",
-        },
-        Keyboard: teleflow.NewPromptKeyboard(). // Optional inline keyboard
-            ButtonCallback("Option 1", "callback_data_1").
-            ButtonURL("Visit Site", "https://example.com").
-            Build(),
-        ParseMode: teleflow.ParseModeMarkdownV2, // Optional, defaults based on template or global config
-    })
-    ```
-
-### 6. Keyboards
-
-*   **Inline Keyboards (`teleflow.PromptKeyboardBuilder`)**: Attached to messages.
-    ```go
-    keyboard := teleflow.NewPromptKeyboard().
-        ButtonCallback("✅ Approve", approveCallbackData). // approveCallbackData can be a struct or map
-        ButtonCallback("❌ Reject", "reject_action").
-        Row(). // Start a new row of buttons
-        ButtonURL("More Info", "https://example.com/info").
-        Build() // Returns *tgbotapi.InlineKeyboardMarkup
-
-    // Use in PromptConfig:
-    // Keyboard: keyboard,
-    ```
-    *   `ButtonCallback(text string, data interface{})`: `data` can be a simple string, or a struct/map. Teleflow handles serialization and deserialization. The `data` is available in `buttonClick.Data` in the `Process` function.
-*   **Reply Keyboards (`teleflow.ReplyKeyboard`)**: Replace the user's standard keyboard. Often used for main menus via `AccessManager`.
-
-### 7. Templates
-
-*   **Purpose**: Define reusable message formats with placeholders. Supports Go's `text/template` syntax.
-*   **Registration**:
-    ```go
-    teleflow.AddTemplate("welcome_message", "Hello {{.UserName}}! Welcome to our bot.", teleflow.ParseModeMarkdownV2)
-    ```
-*   **Usage**:
-    *   In `PromptConfig.Message`: `"template:welcome_message"`
-    *   With `PromptConfig.TemplateData`: `map[string]interface{}{"UserName": "Jane"}`
-    *   Directly: `ctx.SendPromptWithTemplate("template_name", dataMap)`
-
-### 8. Middleware (`teleflow.MiddlewareFunc`)
-
-*   **Purpose**: Intercept and process updates before they reach handlers. Useful for logging, authentication, rate limiting, etc.
+*   **Purpose**: Intercept and process updates before they reach handlers.
 *   **Structure**:
     ```go
-    func MyMiddleware(next teleflow.HandlerFunc) teleflow.HandlerFunc {
-        return func(ctx *teleflow.Context) error {
+    func LoggingMiddleware(next teleflow.Handler) teleflow.Handler {
+        return teleflow.Func(func(ctx *teleflow.Context) error {
             // Code before handler
-            log.Printf("User %d accessing: %s", ctx.UserID(), ctx.Update().Message.Text)
+            log.Printf("User %d accessing: %s", ctx.UserID(), ctx.Text())
 
-            err := next(ctx) // Call the next middleware or the actual handler
+            err := next.HandleUpdate(ctx) // Call the next handler
 
             // Code after handler
             return err
-        }
+        })
     }
     ```
 *   **Applying Middleware**:
     ```go
-    bot.UseMiddleware(MyMiddleware)
-    bot.UseMiddleware(teleflow.RateLimitMiddleware(10, time.Minute*1)) // Built-in
+    // Apply middleware when registering handlers
+    router.Handle("admin", LoggingMiddleware(adminFlow))
     ```
-    If an `AccessManager` is provided via `WithAccessManager`, an `AuthMiddleware` is automatically added.
 
 ## ✨ Key Teleflow Features for LLMs
 
-1.  **Automatic State Management**:
-    *   LLMs don't need to manually track which step a user is in a flow. Teleflow does this.
-    *   `ctx.SetFlowData()` and `ctx.GetFlowData()` provide a simple key-value store scoped to the user's current flow session.
+1.  **Type-Safe Flows**:
+    *   Use Go generics (`teleflow.Flow[T]`) for compile-time safety.
+    *   No more type assertions for flow data.
 
-2.  **Type-Safe Callbacks**:
-    *   When creating inline keyboard buttons with `ButtonCallback("Text", data)`, `data` can be a Go struct or map.
-    *   In the flow's `Process` function, `buttonClick.Data` will be the deserialized struct/map. This avoids manual JSON parsing of callback strings.
-    *   Example:
-        ```go
-        type UserAction struct {
-            Action string `json:"action"`
-            ItemID int    `json:"item_id"`
-        }
-        // ... in keyboard setup
-        ButtonCallback("Delete Item 5", UserAction{Action: "delete", ItemID: 5})
-        // ... in Process function
-        if buttonClick != nil {
-            if actionData, ok := buttonClick.Data.(UserAction); ok {
-                // actionData is now a UserAction struct
-                if actionData.Action == "delete" { /* ... */ }
-            }
-        }
-        ```
+2.  **Automatic State Management**:
+    *   Teleflow automatically manages user state within a flow.
+    *   Each user has their own isolated data instance.
 
-3.  **Fluent Flow Definition**:
-    *   The chained `.Step().Prompt().Process()` syntax makes defining conversational logic intuitive.
+3.  **Non-Linear Conversations**:
+    *   Named steps and `GoTo` actions enable complex flow control.
+    *   Easy to create loops, branches, and restartable flows.
 
-4.  **Clear Separation of Concerns**:
-    *   Command/text handlers for general interactions.
-    *   Flows for structured conversations.
-    *   Middleware for cross-cutting concerns.
+4.  **Large Callback Data**:
+    *   Overcome Telegram's 64-byte callback data limit with `ctx.RegisterData()` and `ctx.GetData()`.
 
 ## 📝 Common Tasks for LLMs using Teleflow
 
 *   **Creating a new command handler**:
-    *   Use `bot.HandleCommand("mycommand", ...)`
-    *   Inside the handler, use `ctx.SendPromptText()` or `ctx.SendPrompt()` or `ctx.StartFlow()`.
+    *   Use `router.Handle("command", teleflow.Func(...))`
+    *   Inside the handler, use `ctx.ReplyText()` or `ctx.ReplyWithKeyboard()`.
 
 *   **Defining a new conversational flow**:
-    *   Use `teleflow.NewFlow("flow_name").Step(...).Process(...).Build()`.
-    *   Register it with `bot.RegisterFlow(myFlow)`.
-    *   Start it using `ctx.StartFlow("flow_name")`.
+    *   Define a data struct `T`.
+    *   Create a flow with `teleflow.NewFlow[T]()`.
+    *   Define `teleflow.Step[T]` with `Prompt` and `Process` functions.
+    *   Add steps with `flow.AddStep()`.
+    *   Register with `router.Handle("command", flow)`.
 
 *   **Asking a question and getting a response in a flow**:
-    *   Define a `Step()`.
-    *   Use `.Prompt("Your question?")`.
-    *   In `.Process(func(ctx *teleflow.Context, input string, ...))`, the `input` variable will contain the user's text reply.
+    *   Define a `Step` with a `Prompt` function that sends a message.
+    *   In the `Process` function, use `ctx.Text()` to get the user's response.
 
-*   **Adding buttons to a message in a flow**:
-    *   In a `Step()`, use `.WithPromptKeyboard(func(ctx *teleflow.Context) *teleflow.PromptKeyboardBuilder { ... })`.
-    *   Build the keyboard using `teleflow.NewPromptKeyboard().ButtonCallback(...).Build()`.
-    *   In `.Process(func(ctx *teleflow.Context, ..., buttonClick *teleflow.ButtonClick))`, check if `buttonClick != nil` and access `buttonClick.Data`.
+*   **Adding buttons to a message**:
+    *   In a `Prompt` or handler, create a keyboard with `teleflow.NewInlineKeyboard()`.
+    *   Add buttons with `ButtonCallback()`.
+    *   Send with `ctx.ReplyWithKeyboard()`.
 
 *   **Storing and retrieving data during a flow**:
-    *   `ctx.SetFlowData("myKey", myValue)`
-    *   `value, ok := ctx.GetFlowData("myKey")`
+    *   Use the `data *T` parameter in `Prompt` and `Process` functions.
+    *   Modify the struct fields directly.
 
-*   **Using templates for messages**:
-    *   `teleflow.AddTemplate("my_template", "Content with {{.Placeholder}}", teleflow.ParseModeMarkdownV2)`
-    *   In `PromptConfig`, set `Message: "template:my_template"` and provide `TemplateData`.
+*   **Handling complex callback data**:
+    *   Use `ctx.RegisterData(complexData)` to store data.
+    *   Use `ctx.GetData()` to retrieve data in the next step.
 
 This guide should provide a solid foundation for an LLM to understand and generate Go code using the Teleflow package. Refer to the `README.md` and specific Go files in the `core` directory for more detailed examples and advanced features.
