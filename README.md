@@ -120,6 +120,29 @@ keyboard := teleflow.NewInlineKeyboard().AddRow(
 ctx.ReplyWithKeyboard("Choose an option:", keyboard)
 ```
 
+### Formatted Messaging with Parse Modes
+
+Teleflow supports sending formatted messages using HTML, Markdown, or MarkdownV2 parse modes:
+
+```go
+// HTML formatting
+ctx.ReplyTextWithParseMode("<b>Bold text</b> and <i>italic text</i>", teleflow.ParseModeHTML)
+
+// MarkdownV2 formatting
+ctx.ReplyTextWithParseMode("*Bold text* and _italic text_", teleflow.ParseModeMarkdownV2)
+
+// With keyboard and formatting
+keyboard := teleflow.NewInlineKeyboard().AddRow(
+    teleflow.ButtonCallback("Option 1", "opt1"),
+    teleflow.ButtonCallback("Option 2", "opt2"),
+).Build()
+
+ctx.ReplyWithKeyboardAndParseMode("*Choose an option:*", keyboard, teleflow.ParseModeMarkdownV2)
+
+// Editing messages with formatting
+ctx.EditMessageTextWithParseMode(messageID, "<u>Updated</u> <s>text</s>", teleflow.ParseModeHTML)
+```
+
 ## 🌊 Flow Architecture
 
 ### Simple Flow with OnComplete
@@ -329,8 +352,11 @@ func TestUserRegistrationFlow(t *testing.T) {
 ### Message Actions
 - `ctx.ReplyText(msg)` - Simple text message
 - `ctx.ReplyWithKeyboard(text, keyboard)` - Message with inline keyboard
-- `ctx.AnswerCallback()` - Acknowledge callback query
+- `ctx.ReplyTextWithParseMode(text, parseMode)` - Text message with formatting
+- `ctx.ReplyWithKeyboardAndParseMode(text, keyboard, parseMode)` - Message with keyboard and formatting
 - `ctx.EditMessageText(messageID, text)` - Edit existing message
+- `ctx.EditMessageTextWithParseMode(messageID, text, parseMode)` - Edit existing message with formatting
+- `ctx.AnswerCallback()` - Acknowledge callback query
 
 ### Data Management
 - `ctx.Set(key, value)` - Store request-scoped data

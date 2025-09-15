@@ -30,6 +30,11 @@ This document summarizes the comprehensive GoDoc comments in the Teleflow packag
 **Types:**
 - `Context` - Toolkit for handling a single Telegram update
 
+**Constants:**
+- `ParseModeHTML` - HTML parse mode for message formatting
+- `ParseModeMarkdown` - Markdown parse mode for message formatting
+- `ParseModeMarkdownV2` - MarkdownV2 parse mode for message formatting
+
 **Functions:**
 - `Update()` - Access raw Telegram update
 - `API()` - Access underlying Bot API instance
@@ -42,8 +47,11 @@ This document summarizes the comprehensive GoDoc comments in the Teleflow packag
 - `GetData()` - Retrieve complex callback data
 - `ReplyText()` - Send simple text message
 - `ReplyWithKeyboard()` - Send message with keyboard
+- `ReplyTextWithParseMode()` - Send formatted text message
+- `ReplyWithKeyboardAndParseMode()` - Send formatted message with keyboard
 - `DeleteMessage()` - Delete a message
 - `EditMessageText()` - Edit message text
+- `EditMessageTextWithParseMode()` - Edit message text with formatting
 - `EditMessageReplyMarkup()` - Edit message keyboard
 - `AnswerCallback()` - Acknowledge callback query
 

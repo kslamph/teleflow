@@ -41,8 +41,17 @@ Teleflow is a Go framework for building Telegram bots. Its main goals are to:
     *   `ctx.ChatID()`: Get the ID of the chat.
     *   `ctx.ReplyText(message string)`: Send a simple text message.
     *   `ctx.ReplyWithKeyboard(text string, markup interface{})`: Send a message with a keyboard.
+    *   `ctx.ReplyTextWithParseMode(text string, parseMode string)`: Send a formatted text message.
+    *   `ctx.ReplyWithKeyboardAndParseMode(text string, markup interface{}, parseMode string)`: Send a formatted message with a keyboard.
+    *   `ctx.EditMessageText(messageID int, text string)`: Edit an existing message.
+    *   `ctx.EditMessageTextWithParseMode(messageID int, text string, parseMode string)`: Edit an existing message with formatting.
     *   `ctx.Update()`: Access the raw `tgbotapi.Update` object.
     *   `ctx.API()`: Access the underlying `tgbotapi.BotAPI` instance.
+
+*   **Parse Mode Constants**: Teleflow provides constants for message formatting:
+    *   `teleflow.ParseModeHTML`: HTML formatting
+    *   `teleflow.ParseModeMarkdown`: Markdown formatting
+    *   `teleflow.ParseModeMarkdownV2`: MarkdownV2 formatting (recommended)
 
 ### 3. Handlers
 
