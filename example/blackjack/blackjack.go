@@ -280,7 +280,7 @@ func main() {
 				teleflow.ButtonCallback("No", "quit"),
 			).Build()
 
-			return ctx.ReplyInlineKeyboard(finalMsg+"\nPlay again?", keyboard)
+			return ctx.ReplyWithKeyboard(finalMsg+"\nPlay again?", keyboard)
 		},
 		Process: func(ctx *teleflow.Context, data *BlackjackData) (teleflow.FlowAction, error) {
 			ctx.AnswerCallback()

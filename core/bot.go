@@ -14,8 +14,9 @@ type Handler interface {
 	HandleUpdate(ctx *Context) error
 }
 
-// Bot represents the main bot instance. It listens for updates from Telegram
-// and dispatches them to a registered handler or a callback from the registry.
+// Bot represents the main bot instance. It listens for updates from Telegram,
+// manages callback and data registries, and dispatches updates to the appropriate
+// handler.
 type Bot struct {
 	api              *tgbotapi.BotAPI
 	self             tgbotapi.User
@@ -25,7 +26,10 @@ type Bot struct {
 	mu               sync.Mutex
 }
 
-// NewBot creates a new Bot instance. It requires a Telegram bot token and a root Handler.
+// NewBot creates and initializes a new Bot instance. It requires a valid Telegram
+// bot token and a root Handler (typically a Router) to which all non-callback
+// updates will be dispatched. It returns an error if the token is invalid or
+// the bot's details cannot be fetched.
 func NewBot(token string, handler Handler) (*Bot, error) {
 	if handler == nil {
 		return nil, fmt.Errorf("handler cannot be nil")
@@ -87,7 +91,11 @@ func (b *Bot) registerCallback(handler func(ctx *Context) error) string {
 	return id
 }
 
-// RegisterData stores arbitrary data for one-time retrieval via a unique ID.
+// RegisterData stores an arbitrary data object for one-time retrieval via a
+// unique ID. This is the core mechanism for passing complex data through
+// callback buttons, overcoming Telegram's 64-byte callback data limit. The
+// returned ID should be used as the callback data for a button. The data is
+// automatically deleted after it is retrieved once.
 func (b *Bot) RegisterData(data interface{}) string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -97,7 +105,9 @@ func (b *Bot) RegisterData(data interface{}) string {
 	return id
 }
 
-// GetData retrieves and deletes data from the registry.
+// GetData retrieves and immediately deletes a data object from the registry using
+// the unique ID provided by a callback query. It returns the data and a boolean
+// indicating if the data was found.
 func (b *Bot) GetData(id string) (interface{}, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -109,7 +119,8 @@ func (b *Bot) GetData(id string) (interface{}, bool) {
 	return data, ok
 }
 
-// Start begins the bot's main event loop for polling updates from Telegram.
+// Start begins the bot's main event loop. It connects to Telegram and starts
+// polling for updates. Each update is processed in a separate goroutine.
 func (b *Bot) Start() error {
 	log.Printf("Authorized on account %s", b.self.UserName)
 
@@ -124,7 +135,8 @@ func (b *Bot) Start() error {
 	return nil
 }
 
-// SetBotCommands sets the list of commands for the bot.
+// SetBotCommands sets the list of commands that will be displayed to the user
+// in the Telegram interface. This should be called once after the bot is created.
 func (b *Bot) SetBotCommands(commands map[string]string) error {
 	var tgCommands []tgbotapi.BotCommand
 	for cmd, desc := range commands {

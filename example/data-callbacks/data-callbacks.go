@@ -56,7 +56,7 @@ func main() {
 				prompt += fmt.Sprintf("- %s\n", deptName)
 			}
 
-			return ctx.ReplyInlineKeyboard(prompt, keyboard.Build())
+			return ctx.ReplyWithKeyboard(prompt, keyboard.Build())
 		},
 		Process: func(ctx *teleflow.Context, data *FlowData) (teleflow.FlowAction, error) {
 			// Retrieve the data associated with the button press.
