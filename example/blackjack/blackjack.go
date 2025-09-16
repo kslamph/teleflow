@@ -16,6 +16,8 @@ import (
 
 const (
 	CardRepoURL = "https://raw.githubusercontent.com/hanhaechi/playing-cards/master/"
+	// Using a more reliable image optimization service with explicit resizing to 100x140
+	ImageProxyURL = "https://wsrv.nl/?url=&w=100&h=140&fit=contain"
 )
 
 type Card struct {
@@ -36,15 +38,19 @@ func (c Card) ImageURL() string {
 		// Ace, King, Queen, Jack -> A, K, Q, J
 		rank = string(rank[0])
 	}
-	return fmt.Sprintf("%s%s_%s.png", CardRepoURL, strings.ToLower(c.Suit), rank)
+	// Use wsrv.nl (a more reliable version of images.weserv.nl) to optimize images
+	originalURL := fmt.Sprintf("%s%s_%s.png", CardRepoURL, strings.ToLower(c.Suit), rank)
+	return ImageProxyURL + originalURL
 }
 
 // BlackjackData holds the state for a single user's game.
 type BlackjackData struct {
-	Deck       []Card
-	PlayerHand []Card
-	DealerHand []Card
-	MessageIDs []int // To keep track of card messages to delete later
+	Deck            []Card
+	PlayerHand      []Card
+	DealerHand      []Card
+	PlayerMessageIDs []int // To keep track of player card messages
+	DealerMessageIDs []int // To keep track of dealer card messages
+	MessageIDs       []int // To keep track of other messages to delete later
 }
 
 func newDeck() []Card {
@@ -92,6 +98,98 @@ func calculateHandValue(hand []Card) int {
 
 // --- Bot and Flow Setup ---
 
+// updateHand updates photos of the cards by editing existing messages or sending new ones.
+func updateHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard bool, existingMessageIDs []int) ([]int, error) {
+	if len(hand) == 0 {
+		// Delete any existing messages if hand is empty
+		for _, id := range existingMessageIDs {
+			ctx.DeleteMessage(id)
+		}
+		return []int{}, nil
+	}
+
+	// If no existing messages, send new ones
+	if len(existingMessageIDs) == 0 {
+		return sendHand(ctx, title, hand, showHoleCard)
+	}
+
+	// Edit existing messages and send new ones if needed
+	messageIDs := make([]int, len(hand))
+	
+	// Edit existing messages
+	for i := 0; i < len(hand) && i < len(existingMessageIDs); i++ {
+		var photoURL string
+		if i == 0 && !showHoleCard { // Dealer's first card is hidden
+			// Use wsrv.nl to optimize the back card image
+			originalURL := CardRepoURL + "back_dark.png"
+			photoURL = ImageProxyURL + originalURL
+		} else {
+			photoURL = hand[i].ImageURL()
+		}
+
+		// Create media object for editing
+		media := tgbotapi.NewInputMediaPhoto(tgbotapi.FileURL(photoURL))
+		if i == 0 {
+			media.Caption = title
+		}
+		
+		// Try to edit the existing message
+		err := ctx.EditMessageMedia(existingMessageIDs[i], media)
+		if err != nil {
+			// If editing fails, fall back to sending a new message
+			photo := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(photoURL))
+			if i == 0 {
+				photo.Caption = title
+			}
+			msg, sendErr := ctx.API().Send(photo)
+			if sendErr != nil {
+				return nil, sendErr
+			}
+			messageIDs[i] = msg.MessageID
+		} else {
+			messageIDs[i] = existingMessageIDs[i]
+		}
+	}
+
+	// Send new messages for additional cards
+	for i := len(existingMessageIDs); i < len(hand); i++ {
+		var photoURL string
+		if i == 0 && !showHoleCard { // Dealer's first card is hidden
+			// Use wsrv.nl to optimize the back card image
+			originalURL := CardRepoURL + "back_dark.png"
+			photoURL = ImageProxyURL + originalURL
+		} else {
+			photoURL = hand[i].ImageURL()
+		}
+
+		photo := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(photoURL))
+		if i == 0 {
+			photo.Caption = title
+		}
+		msg, err := ctx.API().Send(photo)
+		if err != nil {
+			// Fallback to original image URL
+			originalURL := strings.TrimPrefix(photoURL, ImageProxyURL)
+			photoFallback := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(originalURL))
+			if i == 0 {
+				photoFallback.Caption = title
+			}
+			msg, err = ctx.API().Send(photoFallback)
+			if err != nil {
+				return nil, err
+			}
+		}
+		messageIDs[i] = msg.MessageID
+	}
+
+	// Delete excess messages
+	for i := len(hand); i < len(existingMessageIDs); i++ {
+		ctx.DeleteMessage(existingMessageIDs[i])
+	}
+
+	return messageIDs, nil
+}
+
 // sendHand sends photos of the cards as a media group and returns their message IDs.
 func sendHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard bool) ([]int, error) {
 	if len(hand) == 0 {
@@ -102,7 +200,9 @@ func sendHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard boo
 	for i, card := range hand {
 		var photoURL string
 		if i == 0 && !showHoleCard { // Dealer's first card is hidden
-			photoURL = CardRepoURL + "back_dark.png"
+			// Use wsrv.nl to optimize the back card image
+			originalURL := CardRepoURL + "back_dark.png"
+			photoURL = ImageProxyURL + originalURL
 		} else {
 			photoURL = card.ImageURL()
 		}
@@ -115,30 +215,72 @@ func sendHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard boo
 	}
 
 	// For a single card (e.g., when hitting), send as a single photo to avoid media group overhead.
-	if len(media) == 1 {
-		photo := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(hand[0].ImageURL()))
-		photo.Caption = title
-		msg, err := ctx.API().Send(photo)
-		if err != nil {
-			return nil, err
+		if len(media) == 1 {
+			photo := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(hand[0].ImageURL()))
+			photo.Caption = title
+			// Try sending with optimized image first, fallback to original if it fails
+			msg, err := ctx.API().Send(photo)
+			if err != nil {
+				// Fallback to original image URL
+				originalURL := strings.TrimPrefix(hand[0].ImageURL(), ImageProxyURL)
+				photoFallback := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(originalURL))
+				photoFallback.Caption = title
+				msg, err = ctx.API().Send(photoFallback)
+				if err != nil {
+					return nil, err
+				}
+			}
+			return []int{msg.MessageID}, nil
 		}
-		return []int{msg.MessageID}, nil
+	
+		// Try sending media group with optimized images first
+		msgs, err := ctx.API().SendMediaGroup(tgbotapi.NewMediaGroup(ctx.ChatID(), media))
+		if err != nil {
+			// Fallback to original image URLs
+			mediaFallback := make([]interface{}, len(hand))
+			for i, card := range hand {
+				var photoURL string
+				if i == 0 && !showHoleCard { // Dealer's first card is hidden
+					photoURL = CardRepoURL + "back_dark.png"
+				} else {
+					// Get original URL by removing proxy prefix
+					photoURL = strings.TrimPrefix(card.ImageURL(), ImageProxyURL)
+				}
+	
+				p := tgbotapi.NewInputMediaPhoto(tgbotapi.FileURL(photoURL))
+				if i == 0 {
+					p.Caption = title
+				}
+				mediaFallback[i] = p
+			}
+			msgs, err = ctx.API().SendMediaGroup(tgbotapi.NewMediaGroup(ctx.ChatID(), mediaFallback))
+			if err != nil {
+				return nil, err
+			}
+		}
+	
+		messageIDs := make([]int, len(msgs))
+		for i, msg := range msgs {
+			messageIDs[i] = msg.MessageID
+		}
+		return messageIDs, nil
 	}
-
-	msgs, err := ctx.API().SendMediaGroup(tgbotapi.NewMediaGroup(ctx.ChatID(), media))
-	if err != nil {
-		return nil, err
-	}
-
-	messageIDs := make([]int, len(msgs))
-	for i, msg := range msgs {
-		messageIDs[i] = msg.MessageID
-	}
-	return messageIDs, nil
-}
 
 // clearPreviousCards deletes the messages for the previous hand.
 func clearPreviousCards(ctx *teleflow.Context, data *BlackjackData) {
+	// Clear player card messages
+	for _, id := range data.PlayerMessageIDs {
+		ctx.DeleteMessage(id)
+	}
+	data.PlayerMessageIDs = []int{}
+	
+	// Clear dealer card messages
+	for _, id := range data.DealerMessageIDs {
+		ctx.DeleteMessage(id)
+	}
+	data.DealerMessageIDs = []int{}
+	
+	// Clear other messages
 	for _, id := range data.MessageIDs {
 		ctx.DeleteMessage(id)
 	}
@@ -170,8 +312,8 @@ func main() {
 
 				dealerIDs, _ := sendHand(ctx, "Dealer's Hand:", data.DealerHand, false)
 				playerIDs, _ := sendHand(ctx, "Your Hand:", data.PlayerHand, true)
-				data.MessageIDs = append(data.MessageIDs, dealerIDs...)
-				data.MessageIDs = append(data.MessageIDs, playerIDs...)
+				data.DealerMessageIDs = dealerIDs
+				data.PlayerMessageIDs = playerIDs
 
 				// Check for immediate blackjack
 				if calculateHandValue(data.PlayerHand) == 21 || calculateHandValue(data.DealerHand) == 21 {
@@ -210,8 +352,9 @@ func main() {
 				newCard := deal(&data.Deck)
 				data.PlayerHand = append(data.PlayerHand, newCard)
 
-				newCardIDs, _ := sendHand(ctx, fmt.Sprintf("You drew a %s", newCard.String()), []Card{newCard}, true)
-				data.MessageIDs = append(data.MessageIDs, newCardIDs...)
+				// Update player's hand with the new card
+				playerIDs, _ := updateHand(ctx, fmt.Sprintf("You drew a %s", newCard.String()), data.PlayerHand, true, data.PlayerMessageIDs)
+				data.PlayerMessageIDs = playerIDs
 
 				if calculateHandValue(data.PlayerHand) > 21 {
 					ctx.ReplyText("Bust! You lose.")
@@ -223,18 +366,19 @@ func main() {
 				clearPreviousCards(ctx, data)
 
 				// Show hands with dealer's card revealed
-				dealerIDs, _ := sendHand(ctx, "Dealer's Hand:", data.DealerHand, true)
-				playerIDs, _ := sendHand(ctx, "Your Hand:", data.PlayerHand, true)
-				data.MessageIDs = append(data.MessageIDs, dealerIDs...)
-				data.MessageIDs = append(data.MessageIDs, playerIDs...)
+				dealerIDs, _ := updateHand(ctx, "Dealer's Hand:", data.DealerHand, true, data.DealerMessageIDs)
+				playerIDs, _ := updateHand(ctx, "Your Hand:", data.PlayerHand, true, data.PlayerMessageIDs)
+				data.DealerMessageIDs = dealerIDs
+				data.PlayerMessageIDs = playerIDs
 
 				time.Sleep(1 * time.Second)
 
 				for calculateHandValue(data.DealerHand) < 17 {
 					newCard := deal(&data.Deck)
 					data.DealerHand = append(data.DealerHand, newCard)
-					newCardIDs, _ := sendHand(ctx, fmt.Sprintf("Dealer draws a %s", newCard.String()), []Card{newCard}, true)
-					data.MessageIDs = append(data.MessageIDs, newCardIDs...)
+					// Update dealer's hand with the new card
+					dealerIDs, _ := updateHand(ctx, fmt.Sprintf("Dealer draws a %s", newCard.String()), data.DealerHand, true, data.DealerMessageIDs)
+					data.DealerMessageIDs = dealerIDs
 					time.Sleep(1 * time.Second) // Pause for dramatic effect
 				}
 				return teleflow.GoTo("EndGame"), nil
@@ -268,12 +412,11 @@ func main() {
 
 			finalMsg := fmt.Sprintf("Game over! Your hand: %d, Dealer's hand: %d. %s", playerValue, dealerValue, result)
 
-			// Always clear previous cards and show the final hands for clarity.
-			clearPreviousCards(ctx, data)
-			dealerIDs, _ := sendHand(ctx, "Dealer's Final Hand:", data.DealerHand, true)
-			playerIDs, _ := sendHand(ctx, "Your Final Hand:", data.PlayerHand, true)
-			data.MessageIDs = append(data.MessageIDs, dealerIDs...)
-			data.MessageIDs = append(data.MessageIDs, playerIDs...)
+			// Show the final hands for clarity.
+			dealerIDs, _ := updateHand(ctx, "Dealer's Final Hand:", data.DealerHand, true, data.DealerMessageIDs)
+			playerIDs, _ := updateHand(ctx, "Your Final Hand:", data.PlayerHand, true, data.PlayerMessageIDs)
+			data.DealerMessageIDs = dealerIDs
+			data.PlayerMessageIDs = playerIDs
 
 			keyboard := teleflow.NewInlineKeyboard().AddRow(
 				teleflow.ButtonCallback("Yes", "play_again"),
@@ -286,7 +429,8 @@ func main() {
 			ctx.AnswerCallback()
 			switch ctx.Text() {
 			case "play_again":
-				// Reset hands to trigger new deal in PlayerTurn prompt
+				// Clear card messages and reset hands to trigger new deal in PlayerTurn prompt
+				clearPreviousCards(ctx, data)
 				data.PlayerHand = []Card{}
 				data.DealerHand = []Card{}
 				return teleflow.GoTo("PlayerTurn"), nil

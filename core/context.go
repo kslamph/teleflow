@@ -189,6 +189,19 @@ func (c *Context) EditMessageReplyMarkup(messageID int, markup *tgbotapi.InlineK
 	return err
 }
 
+// EditMessageMedia edits the media of a previously sent message.
+func (c *Context) EditMessageMedia(messageID int, media interface{}) error {
+	config := tgbotapi.EditMessageMediaConfig{
+		BaseEdit: tgbotapi.BaseEdit{
+			ChatID:    c.ChatID(),
+			MessageID: messageID,
+		},
+		Media: media,
+	}
+	_, err := c.api.Request(config)
+	return err
+}
+
 // AnswerCallback acknowledges a callback query. This must be called after a user
 // presses an inline keyboard button to stop the loading animation on their client.
 func (c *Context) AnswerCallback() error {
