@@ -28,7 +28,12 @@ For comprehensive guides and architectural details, see our documentation:
 
 ### Minimal Bot
 ```go
-import teleflow "github.com/kslamph/teleflow/core"
+import (
+	"log"
+	"os"
+
+	teleflow "github.com/kslamph/teleflow/core"
+)
 
 // Set up router with handlers
 router := teleflow.NewRouter()
