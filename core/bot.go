@@ -3,6 +3,7 @@ package teleflow
 import (
 	"fmt"
 	"log"
+	"sort"
 	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -139,8 +140,13 @@ func (b *Bot) Start() error {
 // in the Telegram interface. This should be called once after the bot is created.
 func (b *Bot) SetBotCommands(commands map[string]string) error {
 	var tgCommands []tgbotapi.BotCommand
-	for cmd, desc := range commands {
-		tgCommands = append(tgCommands, tgbotapi.BotCommand{Command: cmd, Description: desc})
+	keys := make([]string, 0, len(commands))
+	for cmd := range commands {
+		keys = append(keys, cmd)
+	}
+	sort.Strings(keys)
+	for _, cmd := range keys {
+		tgCommands = append(tgCommands, tgbotapi.BotCommand{Command: cmd, Description: commands[cmd]})
 	}
 
 	config := tgbotapi.NewSetMyCommands(tgCommands...)
