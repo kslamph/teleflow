@@ -25,7 +25,7 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Test with coverage
-        run: go test ./... -coverprofile=coverage.out
+        run: go test ./... -coverpkg=./core/... -coverprofile=coverage.out
       - name: Format check
         run: test -z "$(gofmt -l core example)"
       - name: Upload coverage to Codecov

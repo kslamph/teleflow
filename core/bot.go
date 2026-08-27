@@ -55,6 +55,17 @@ func NewBot(token string, handler Handler) (*Bot, error) {
 		return nil, fmt.Errorf("failed to create bot API: %w", err)
 	}
 
+	return newBotWithAPI(api, handler)
+}
+
+// newBotWithAPI builds a Bot from an already-constructed API client. It is the
+// internal (and testable) core of NewBot, which fetches the bot's own details
+// and initializes the registries.
+func newBotWithAPI(api *tgbotapi.BotAPI, handler Handler) (*Bot, error) {
+	if handler == nil {
+		return nil, fmt.Errorf("handler cannot be nil")
+	}
+
 	botUser, err := api.GetMe()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get bot info: %w", err)
@@ -156,11 +167,17 @@ func (b *Bot) Start() error {
 	u.Timeout = 60
 	updates := b.api.GetUpdatesChan(u)
 
+	b.processUpdates(updates)
+
+	return nil
+}
+
+// processUpdates drains an updates channel, dispatching each update to a new
+// goroutine. It is the testable loop body behind Start.
+func (b *Bot) processUpdates(updates <-chan tgbotapi.Update) {
 	for update := range updates {
 		go b.processUpdate(update)
 	}
-
-	return nil
 }
 
 // sweepRegistries periodically removes expired entries from both registries.
@@ -168,19 +185,24 @@ func (b *Bot) sweepRegistries() {
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
-		b.mu.Lock()
-		now := time.Now()
-		for id, entry := range b.callbackRegistry {
-			if now.After(entry.expiresAt) {
-				delete(b.callbackRegistry, id)
-			}
+		b.sweepRegistriesOnce(time.Now())
+	}
+}
+
+// sweepRegistriesOnce removes all expired entries from both registries. It is
+// the testable unit behind sweepRegistries.
+func (b *Bot) sweepRegistriesOnce(now time.Time) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for id, entry := range b.callbackRegistry {
+		if now.After(entry.expiresAt) {
+			delete(b.callbackRegistry, id)
 		}
-		for id, entry := range b.dataRegistry {
-			if now.After(entry.expiresAt) {
-				delete(b.dataRegistry, id)
-			}
+	}
+	for id, entry := range b.dataRegistry {
+		if now.After(entry.expiresAt) {
+			delete(b.dataRegistry, id)
 		}
-		b.mu.Unlock()
 	}
 }
 
