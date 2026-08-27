@@ -241,6 +241,21 @@ confirmationStep := teleflow.Step[RegistrationData]{
 
 ## 🔧 Advanced Features
 
+### Inline-Button Routing
+
+Inline-keyboard button presses arrive as `CallbackQuery` updates, **not** as commands. The `Router` only routes `msg.IsCommand()` messages, so inline buttons will not be dispatched by the router. Instead, buttons reach a `Flow` through one of two mechanisms:
+
+1. **Default handler forwarding** — the pattern used by all examples:
+   ```go
+   router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
+       if flow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
+           return flow.HandleUpdate(ctx)
+       }
+       return ctx.ReplyText("Unknown command. Use /start.")
+   }))
+   ```
+2. **One-time callback handler** — via `ctx.RegisterCallback(handler)`, which runs once and auto-removes.
+
 ### Complex Inline Data Handling
 
 Teleflow transparently handles complex data structures in callback buttons:

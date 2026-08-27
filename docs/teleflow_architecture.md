@@ -162,6 +162,21 @@ graph TD
     *   The corresponding `Handler` is executed.
 5.  If not a command, the default handler is executed.
 
+### Inline-Button Routing
+
+Inline-keyboard button presses arrive as `CallbackQuery` updates, **not** as commands. `Router.HandleUpdate` only routes `msg.IsCommand()` messages, so buttons will never match a `router.Handle` route. Instead, buttons reach a `Flow` via:
+
+1. **Default handler forwarding** (used by all examples):
+   ```go
+   router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
+       if flow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
+           return flow.HandleUpdate(ctx)
+       }
+       return ctx.ReplyText("Unknown command. Use /start.")
+   }))
+   ```
+2. **One-time callback handler** — `ctx.RegisterCallback(handler)`, which runs once then auto-removes.
+
 ### Flow Lifecycle
 
 1.  **Flow Definition:**

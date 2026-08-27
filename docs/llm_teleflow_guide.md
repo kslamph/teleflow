@@ -81,6 +81,16 @@ Teleflow is a Go framework for building Telegram bots. Its main goals are to:
         return ctx.ReplyText("Unknown command. Use /start to begin.")
     }))
     ```
+*   **Important — Inline-Button Routing**: Inline-keyboard button presses arrive as `CallbackQuery` updates, **not** commands. `Router.HandleUpdate` only routes `msg.IsCommand()` messages. To route button presses to a `Flow`, use the `router.Default` forwarding pattern:
+    ```go
+    router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
+        if flow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
+            return flow.HandleUpdate(ctx)
+        }
+        return ctx.ReplyText("Unknown command. Use /start.")
+    }))
+    ```
+    Alternatively, register a one-time callback handler via `ctx.RegisterCallback(handler)`, which auto-removes after execution.
 
 ### 4. Flows (`teleflow.Flow[T]`)
 
