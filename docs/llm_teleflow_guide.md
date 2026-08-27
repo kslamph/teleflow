@@ -22,8 +22,15 @@ Teleflow is a Go framework for building Telegram bots. Its main goals are to:
     import "os"
     import "log"
 
-    // Basic initialization
-    bot, err := teleflow.NewBot(os.Getenv("TELEGRAM_BOT_TOKEN"))
+    // Set up the router with your handlers
+    router := teleflow.NewRouter()
+    router.Handle("start", teleflow.Func(func(ctx *teleflow.Context) error {
+        return ctx.ReplyText("Welcome!")
+    }))
+    // Register more handlers or flows as needed...
+
+    // Create the bot with token and router
+    bot, err := teleflow.NewBot(os.Getenv("TELEGRAM_BOT_TOKEN"), router)
     if err != nil {
         log.Fatal(err)
     }
