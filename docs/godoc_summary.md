@@ -18,7 +18,7 @@ This document summarizes the comprehensive GoDoc comments in the Teleflow packag
 - `Bot` - Main bot instance with full documentation
 
 **Functions:**
-- `NewBot()` - Bot creation with examples
+- `NewBot()` - Bot creation
 - `RegisterData()` - Register complex data for callbacks
 - `GetData()` - Retrieve complex callback data
 - `Start()` - Bot event loop
