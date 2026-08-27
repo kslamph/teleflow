@@ -16,15 +16,11 @@ import (
 // periodically by a background sweeper.
 const registryTTL = 24 * time.Hour
 
-// callbackEntry wraps a callback handler with an expiry timestamp.
-type callbackEntry struct {
-	handler   func(ctx *Context) error
-	expiresAt time.Time
-}
-
-// dataEntry wraps a data value with an expiry timestamp.
-type dataEntry struct {
-	value     interface{}
+// registryEntry wraps a registry value (a callback handler or arbitrary data)
+// with an expiry timestamp. Both the callback and data registries share this
+// shape.
+type registryEntry[T any] struct {
+	value     T
 	expiresAt time.Time
 }
 
@@ -40,8 +36,8 @@ type Bot struct {
 	api              *tgbotapi.BotAPI
 	self             tgbotapi.User
 	handler          Handler
-	callbackRegistry map[string]callbackEntry
-	dataRegistry     map[string]dataEntry
+	callbackRegistry map[string]registryEntry[func(ctx *Context) error]
+	dataRegistry     map[string]registryEntry[interface{}]
 	mu               sync.Mutex
 }
 
@@ -68,8 +64,8 @@ func NewBot(token string, handler Handler) (*Bot, error) {
 		api:              api,
 		self:             botUser,
 		handler:          handler,
-		callbackRegistry: make(map[string]callbackEntry),
-		dataRegistry:     make(map[string]dataEntry),
+		callbackRegistry: make(map[string]registryEntry[func(ctx *Context) error]),
+		dataRegistry:     make(map[string]registryEntry[interface{}]),
 	}, nil
 }
 
@@ -86,7 +82,7 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 			// Handler found, remove it for one-time use and execute
 			delete(b.callbackRegistry, callbackID)
 			b.mu.Unlock()
-			if err := entry.handler(ctx); err != nil {
+			if err := entry.value(ctx); err != nil {
 				log.Printf("Callback handler error: %v", err)
 			}
 			return // Stop further processing
@@ -103,14 +99,20 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 	}
 }
 
+// storeRegistry is the shared implementation behind registerCallback and
+// RegisterData: it generates a unique ID, stores the value with a TTL, and
+// returns the ID. The caller must hold b.mu.
+func storeRegistry[T any](registry map[string]registryEntry[T], value T) string {
+	id := uuid.New().String()
+	registry[id] = registryEntry[T]{value: value, expiresAt: time.Now().Add(registryTTL)}
+	return id
+}
+
 // registerCallback adds a handler to the registry and returns its unique ID.
 func (b *Bot) registerCallback(handler func(ctx *Context) error) string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
-	id := uuid.New().String()
-	b.callbackRegistry[id] = callbackEntry{handler: handler, expiresAt: time.Now().Add(registryTTL)}
-	return id
+	return storeRegistry(b.callbackRegistry, handler)
 }
 
 // RegisterData stores an arbitrary data object for one-time retrieval via a
@@ -121,10 +123,7 @@ func (b *Bot) registerCallback(handler func(ctx *Context) error) string {
 func (b *Bot) RegisterData(data interface{}) string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
-	id := uuid.New().String()
-	b.dataRegistry[id] = dataEntry{value: data, expiresAt: time.Now().Add(registryTTL)}
-	return id
+	return storeRegistry(b.dataRegistry, data)
 }
 
 // GetData retrieves and immediately deletes a data object from the registry using

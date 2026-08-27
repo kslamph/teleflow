@@ -27,12 +27,13 @@ For comprehensive guides and architectural details, see our documentation:
 ## 🏗️ Basic Bot Setup
 
 ### Minimal Bot
+
 ```go
 import (
-	"log"
-	"os"
+ "log"
+ "os"
 
-	teleflow "github.com/kslamph/teleflow/core"
+ teleflow "github.com/kslamph/teleflow/core"
 )
 
 // Set up router with handlers
@@ -47,10 +48,11 @@ if err != nil {
     log.Fatal(err)
 }
 
-bot.Start()
+log.Fatal(bot.Start())
 ```
 
 ### Simple Flow Bot
+
 ```go
 // 1. Define a struct for your flow's data.
 type UserProfile struct {
@@ -100,23 +102,25 @@ profileFlow.OnComplete(func(ctx *teleflow.Context, data UserProfile) error {
 router := teleflow.NewRouter()
 router.Handle("profile", profileFlow)
 
-bot, err := teleflow.NewBot(token, router)
+bot, err := teleflow.NewBot(os.Getenv("TELEGRAM_BOT_TOKEN"), router)
 if err != nil {
     log.Fatal(err)
 }
 
-bot.Start()
+log.Fatal(bot.Start())
 ```
 
 ## 📡 Advanced Messaging
 
 ### Simple Messaging
+
 ```go
 // Simple text only
 ctx.ReplyText("Hello World")
 ```
 
 ### Rich Messaging with Keyboards
+
 ```go
 // Rich message with inline keyboard
 keyboard := teleflow.NewInlineKeyboard().AddRow(
@@ -153,6 +157,7 @@ ctx.EditMessageTextWithParseMode(messageID, "<u>Updated</u> <s>text</s>", telefl
 ## 🌊 Flow Architecture
 
 ### Simple Flow with OnComplete
+
 ```go
 // Define your data structure
 type RegistrationData struct {
@@ -215,6 +220,7 @@ Teleflow provides several flow control actions:
 - `teleflow.GoTo("step_name")` - Jump to specific named step
 
 ### Non-Linear Flow Example
+
 ```go
 confirmationStep := teleflow.Step[RegistrationData]{
     Name: "Confirmation",
@@ -253,6 +259,7 @@ confirmationStep := teleflow.Step[RegistrationData]{
 Inline-keyboard button presses arrive as `CallbackQuery` updates, **not** as commands. The `Router` only routes `msg.IsCommand()` messages, so inline buttons will not be dispatched by the router. Instead, buttons reach a `Flow` through one of two mechanisms:
 
 1. **Default handler forwarding** — the pattern used by all examples:
+
    ```go
    router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
        if flow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
@@ -261,6 +268,7 @@ Inline-keyboard button presses arrive as `CallbackQuery` updates, **not** as com
        return ctx.ReplyText("Unknown command. Use /start.")
    }))
    ```
+
 2. **One-time callback handler** — via `ctx.RegisterCallback(handler)`, which runs once and auto-removes.
 
 ### Complex Inline Data Handling
@@ -358,7 +366,7 @@ func TestUserRegistrationFlow(t *testing.T) {
             return teleflow.End(), nil
         },
     }); err != nil {
-        log.Fatal(err)
+        t.Fatal(err)
     }
 
     // Test flow execution
@@ -369,12 +377,14 @@ func TestUserRegistrationFlow(t *testing.T) {
 ## 🔥 Quick Reference
 
 ### Flow Control
+
 - `teleflow.Next()` - Continue to next step
 - `teleflow.Retry()` - Re-prompt current step
 - `teleflow.End()` - Finish flow, trigger OnComplete
 - `teleflow.GoTo("step_name")` - Jump to specific named step
 
 ### Message Actions
+
 - `ctx.ReplyText(msg)` - Simple text message
 - `ctx.ReplyWithKeyboard(text, keyboard)` - Message with inline keyboard
 - `ctx.ReplyTextWithParseMode(text, parseMode)` - Text message with formatting
@@ -384,6 +394,7 @@ func TestUserRegistrationFlow(t *testing.T) {
 - `ctx.AnswerCallback()` - Acknowledge callback query
 
 ### Data Management
+
 - `ctx.Set(key, value)` - Store request-scoped data
 - `ctx.Get(key)` - Retrieve request data
 - `ctx.RegisterData(data)` - Register complex data for callbacks

@@ -17,6 +17,10 @@ type RegistrationData struct {
 	FavoriteLanguage string
 }
 
+// broadcastChatID is the chat that receives the /broadcast message. Replace
+// with your own chat ID, or make it configurable (e.g. via an env var).
+const broadcastChatID int64 = -640141289
+
 func main() {
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if token == "" {
@@ -149,7 +153,7 @@ func main() {
 	}))
 
 	router.Handle("broadcast", teleflow.Func(func(ctx *teleflow.Context) error {
-		msg := tgbotapi.NewMessage(-640141289, "This is a broadcast message.")
+		msg := tgbotapi.NewMessage(broadcastChatID, "This is a broadcast message.")
 		if _, err := ctx.API().Send(msg); err != nil {
 			log.Printf("Failed to send broadcast message: %v", err)
 			return ctx.ReplyText("Sorry, I couldn't send the broadcast message.")

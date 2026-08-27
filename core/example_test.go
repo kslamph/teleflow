@@ -3,6 +3,8 @@ package teleflow
 import (
 	"fmt"
 	"strings"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 // ExampleNewFlow demonstrates creating a Flow, adding steps, and driving
@@ -139,12 +141,30 @@ func ExampleRouter_HandleUpdate() {
 		return nil
 	}))
 
+	// A command update is routed to the matching handler.
+	cmdCtx := NewContext(tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			Text:     "/hi",
+			Entities: []tgbotapi.MessageEntity{{Type: "bot_command", Offset: 0, Length: 3}},
+			From:     &tgbotapi.User{ID: 1, UserName: "alice"},
+			Chat:     &tgbotapi.Chat{ID: 1},
+		},
+	}, nil, nil)
+	if err := router.HandleUpdate(cmdCtx); err != nil {
+		panic(err)
+	}
+
 	// A non-command update hits the default route.
-	fmt.Println(result.Len() == 0) // nothing yet
-	// (We can't construct tgbotapi.Update in an example without importing the package.)
-	_ = router
+	textCtx := NewContext(tgbotapi.Update{
+		Message: &tgbotapi.Message{Text: "hello", From: &tgbotapi.User{ID: 1}, Chat: &tgbotapi.Chat{ID: 1}},
+	}, nil, nil)
+	if err := router.HandleUpdate(textCtx); err != nil {
+		panic(err)
+	}
+
+	fmt.Println(result.String())
 	// Output:
-	// true
+	// hi:default
 }
 
 // ExampleFunc demonstrates the Func adapter type.

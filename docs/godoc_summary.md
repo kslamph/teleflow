@@ -52,6 +52,7 @@ This document summarizes the comprehensive GoDoc comments in the Teleflow packag
 - `EditMessageText()` - Edit message text
 - `EditMessageTextWithParseMode()` - Edit message text with formatting
 - `EditMessageReplyMarkup()` - Edit message keyboard
+- `EditMessageMedia()` - Edit message media (e.g. photo)
 - `AnswerCallback()` - Acknowledge callback query
 
 ### 3. Flow System (`core/flow.go`)

@@ -43,6 +43,31 @@ func (c Card) ImageURL() string {
 	return ImageProxyURL + originalURL
 }
 
+// cardPhotoURL returns the photo URL for the card at index i. The dealer's
+// first card (i == 0 and showHoleCard is false) is shown as the card back.
+func cardPhotoURL(hand []Card, i int, showHoleCard bool) string {
+	if i == 0 && !showHoleCard {
+		return ImageProxyURL + CardRepoURL + "back_dark.png"
+	}
+	return hand[i].ImageURL()
+}
+
+// gameResult decides the outcome message for the round.
+func gameResult(playerValue, dealerValue int) string {
+	switch {
+	case playerValue > 21:
+		return "You busted! Dealer wins."
+	case dealerValue > 21:
+		return "Dealer busted! You win!"
+	case playerValue == dealerValue:
+		return "Push! It's a tie."
+	case playerValue > dealerValue:
+		return "You win!"
+	default:
+		return "Dealer wins."
+	}
+}
+
 // BlackjackData holds the state for a single user's game.
 type BlackjackData struct {
 	Deck             []Card
@@ -118,14 +143,7 @@ func updateHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard b
 
 	// Edit existing messages
 	for i := 0; i < len(hand) && i < len(existingMessageIDs); i++ {
-		var photoURL string
-		if i == 0 && !showHoleCard { // Dealer's first card is hidden
-			// Use wsrv.nl to optimize the back card image
-			originalURL := CardRepoURL + "back_dark.png"
-			photoURL = ImageProxyURL + originalURL
-		} else {
-			photoURL = hand[i].ImageURL()
-		}
+		photoURL := cardPhotoURL(hand, i, showHoleCard)
 
 		// Create media object for editing
 		media := tgbotapi.NewInputMediaPhoto(tgbotapi.FileURL(photoURL))
@@ -153,14 +171,7 @@ func updateHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard b
 
 	// Send new messages for additional cards
 	for i := len(existingMessageIDs); i < len(hand); i++ {
-		var photoURL string
-		if i == 0 && !showHoleCard { // Dealer's first card is hidden
-			// Use wsrv.nl to optimize the back card image
-			originalURL := CardRepoURL + "back_dark.png"
-			photoURL = ImageProxyURL + originalURL
-		} else {
-			photoURL = hand[i].ImageURL()
-		}
+		photoURL := cardPhotoURL(hand, i, showHoleCard)
 
 		photo := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(photoURL))
 		if i == 0 {
@@ -197,15 +208,8 @@ func sendHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard boo
 	}
 
 	media := make([]interface{}, len(hand))
-	for i, card := range hand {
-		var photoURL string
-		if i == 0 && !showHoleCard { // Dealer's first card is hidden
-			// Use wsrv.nl to optimize the back card image
-			originalURL := CardRepoURL + "back_dark.png"
-			photoURL = ImageProxyURL + originalURL
-		} else {
-			photoURL = card.ImageURL()
-		}
+	for i := range hand {
+		photoURL := cardPhotoURL(hand, i, showHoleCard)
 
 		p := tgbotapi.NewInputMediaPhoto(tgbotapi.FileURL(photoURL))
 		if i == 0 {
@@ -216,13 +220,14 @@ func sendHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard boo
 
 	// For a single card (e.g., when hitting), send as a single photo to avoid media group overhead.
 	if len(media) == 1 {
-		photo := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(hand[0].ImageURL()))
+		photoURL := cardPhotoURL(hand, 0, showHoleCard)
+		photo := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(photoURL))
 		photo.Caption = title
 		// Try sending with optimized image first, fallback to original if it fails
 		msg, err := ctx.API().Send(photo)
 		if err != nil {
 			// Fallback to original image URL
-			originalURL := strings.TrimPrefix(hand[0].ImageURL(), ImageProxyURL)
+			originalURL := strings.TrimPrefix(photoURL, ImageProxyURL)
 			photoFallback := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(originalURL))
 			photoFallback.Caption = title
 			msg, err = ctx.API().Send(photoFallback)
@@ -238,14 +243,8 @@ func sendHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard boo
 	if err != nil {
 		// Fallback to original image URLs
 		mediaFallback := make([]interface{}, len(hand))
-		for i, card := range hand {
-			var photoURL string
-			if i == 0 && !showHoleCard { // Dealer's first card is hidden
-				photoURL = CardRepoURL + "back_dark.png"
-			} else {
-				// Get original URL by removing proxy prefix
-				photoURL = strings.TrimPrefix(card.ImageURL(), ImageProxyURL)
-			}
+		for i := range hand {
+			photoURL := strings.TrimPrefix(cardPhotoURL(hand, i, showHoleCard), ImageProxyURL)
 
 			p := tgbotapi.NewInputMediaPhoto(tgbotapi.FileURL(photoURL))
 			if i == 0 {
@@ -267,25 +266,13 @@ func sendHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard boo
 }
 
 // displayEndGame sends the final result message with a "Play again?" keyboard.
-// Used by PlayerTurn on immediate blackjack (without recursing into HandleUpdate).
+// Used by PlayerTurn on immediate blackjack (without recursing into HandleUpdate)
+// and by EndGame's Prompt.
 func displayEndGame(ctx *teleflow.Context, data *BlackjackData) error {
 	playerValue := calculateHandValue(data.PlayerHand)
 	dealerValue := calculateHandValue(data.DealerHand)
 
-	result := ""
-	if playerValue > 21 {
-		result = "You busted! Dealer wins."
-	} else if dealerValue > 21 {
-		result = "Dealer busted! You win!"
-	} else if playerValue == dealerValue {
-		result = "Push! It's a tie."
-	} else if playerValue > dealerValue {
-		result = "You win!"
-	} else {
-		result = "Dealer wins."
-	}
-
-	finalMsg := fmt.Sprintf("Game over! Your hand: %d, Dealer's hand: %d. %s", playerValue, dealerValue, result)
+	finalMsg := fmt.Sprintf("Game over! Your hand: %d, Dealer's hand: %d. %s", playerValue, dealerValue, gameResult(playerValue, dealerValue))
 
 	dealerIDs, _ := updateHand(ctx, "Dealer's Final Hand:", data.DealerHand, true, data.DealerMessageIDs)
 	playerIDs, _ := updateHand(ctx, "Your Final Hand:", data.PlayerHand, true, data.PlayerMessageIDs)
@@ -438,36 +425,7 @@ func main() {
 	endGameStep := teleflow.Step[BlackjackData]{
 		Name: "EndGame",
 		Prompt: func(ctx *teleflow.Context, data *BlackjackData) error {
-			playerValue := calculateHandValue(data.PlayerHand)
-			dealerValue := calculateHandValue(data.DealerHand)
-
-			result := ""
-			if playerValue > 21 {
-				result = "You busted! Dealer wins."
-			} else if dealerValue > 21 {
-				result = "Dealer busted! You win!"
-			} else if playerValue == dealerValue {
-				result = "Push! It's a tie."
-			} else if playerValue > dealerValue {
-				result = "You win!"
-			} else {
-				result = "Dealer wins."
-			}
-
-			finalMsg := fmt.Sprintf("Game over! Your hand: %d, Dealer's hand: %d. %s", playerValue, dealerValue, result)
-
-			// Show the final hands for clarity.
-			dealerIDs, _ := updateHand(ctx, "Dealer's Final Hand:", data.DealerHand, true, data.DealerMessageIDs)
-			playerIDs, _ := updateHand(ctx, "Your Final Hand:", data.PlayerHand, true, data.PlayerMessageIDs)
-			data.DealerMessageIDs = dealerIDs
-			data.PlayerMessageIDs = playerIDs
-
-			keyboard := teleflow.NewInlineKeyboard().AddRow(
-				teleflow.ButtonCallback("Yes", "play_again"),
-				teleflow.ButtonCallback("No", "quit"),
-			).Build()
-
-			return ctx.ReplyWithKeyboard(finalMsg+"\nPlay again?", keyboard)
+			return displayEndGame(ctx, data)
 		},
 		Process: func(ctx *teleflow.Context, data *BlackjackData) (teleflow.FlowAction, error) {
 			ctx.AnswerCallback()

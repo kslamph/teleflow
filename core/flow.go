@@ -9,7 +9,10 @@ import (
 )
 
 // flowStateTTL is how long an idle user flow state is kept before eviction.
-// States are purged lazily on access.
+// States are purged lazily on access: every HandleUpdate, IsUserInFlow and
+// CancelFlow call removes any state that has been idle beyond this TTL. This is
+// intentionally lazy (no background goroutine) so that a Flow carries no
+// goroutine lifecycle of its own.
 const flowStateTTL = 24 * time.Hour
 
 // --- Flow Control ---
@@ -120,6 +123,28 @@ func (f *Flow[T]) OnComplete(handler func(ctx *Context, data T) error) *Flow[T] 
 	return f
 }
 
+// purgeExpired removes any user state that has been idle beyond flowStateTTL.
+// The caller must hold f.mu.
+func (f *Flow[T]) purgeExpired() {
+	for k, s := range f.userStates {
+		if time.Since(s.lastActive) > flowStateTTL {
+			delete(f.userStates, k)
+		}
+	}
+}
+
+// finish removes the user's state and, if set, invokes the OnComplete handler.
+// It is the single completion path for both the Next-past-the-end and End actions.
+func (f *Flow[T]) finish(ctx *Context, key flowStateKey, state *userFlowState[T]) error {
+	f.mu.Lock()
+	delete(f.userStates, key)
+	f.mu.Unlock()
+	if f.onComplete != nil {
+		return f.onComplete(ctx, state.flowData)
+	}
+	return nil
+}
+
 // HandleUpdate is the entry point for processing a user's message. It manages
 // the user's state, calls the appropriate Prompt or Process function for the
 // current step, and transitions the user between steps based on the returned
@@ -133,11 +158,7 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 	// Step 1: Get or create the user state under f.mu (held briefly).
 	// Lazy-purge any expired state while holding the lock.
 	f.mu.Lock()
-	for k, s := range f.userStates {
-		if time.Since(s.lastActive) > flowStateTTL {
-			delete(f.userStates, k)
-		}
-	}
+	f.purgeExpired()
 	state, inFlow := f.userStates[key]
 	if !inFlow {
 		if len(f.steps) == 0 {
@@ -179,24 +200,12 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 	case actionNext:
 		state.currentStep++
 		if state.currentStep >= len(f.steps) {
-			f.mu.Lock()
-			delete(f.userStates, key)
-			f.mu.Unlock()
-			if f.onComplete != nil {
-				return f.onComplete(ctx, state.flowData)
-			}
-			return nil
+			return f.finish(ctx, key, state)
 		}
 	case actionRetry:
 		// Do nothing, just re-prompt at the end.
 	case actionEnd:
-		f.mu.Lock()
-		delete(f.userStates, key)
-		f.mu.Unlock()
-		if f.onComplete != nil {
-			return f.onComplete(ctx, state.flowData)
-		}
-		return nil
+		return f.finish(ctx, key, state)
 	case actionGoTo:
 		targetIndex, ok := f.stepNameIndex[action.TargetStep]
 		if !ok {
@@ -213,6 +222,7 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 func (f *Flow[T]) IsUserInFlow(chatID, userID int64) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.purgeExpired()
 	_, ok := f.userStates[flowStateKey{ChatID: chatID, UserID: userID}]
 	return ok
 }
@@ -222,6 +232,7 @@ func (f *Flow[T]) IsUserInFlow(chatID, userID int64) bool {
 func (f *Flow[T]) CancelFlow(chatID, userID int64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.purgeExpired()
 	delete(f.userStates, flowStateKey{ChatID: chatID, UserID: userID})
 }
 
