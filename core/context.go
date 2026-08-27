@@ -6,11 +6,14 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// ParseMode constants for message formatting
+// ParseMode specifies the format of a text message. Use the typed constants
+// (ParseModeHTML, ParseModeMarkdown, ParseModeMarkdownV2) instead of raw strings.
+type ParseMode string
+
 const (
-	ParseModeHTML       = "HTML"
-	ParseModeMarkdown   = "Markdown"
-	ParseModeMarkdownV2 = "MarkdownV2"
+	ParseModeHTML       ParseMode = "HTML"
+	ParseModeMarkdown   ParseMode = "Markdown"
+	ParseModeMarkdownV2 ParseMode = "MarkdownV2"
 )
 
 // Context provides a convenient, user-facing API for handling a single Telegram
@@ -131,9 +134,9 @@ func (c *Context) GetData() (interface{}, bool) {
 
 // ReplyTextWithParseMode sends a text message with the given parse mode to
 // the originating chat. Argument order: text first, then parseMode.
-func (c *Context) ReplyTextWithParseMode(text string, parseMode string) error {
+func (c *Context) ReplyTextWithParseMode(text string, parseMode ParseMode) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
-	msg.ParseMode = parseMode
+	msg.ParseMode = string(parseMode)
 	_, err := c.api.Send(msg)
 	return err
 }
@@ -148,10 +151,10 @@ func (c *Context) ReplyText(text string) error {
 // ReplyWithKeyboardAndParseMode sends a message with a keyboard markup and parse mode.
 // Argument order: text, markup, parseMode. The markup can be an
 // InlineKeyboardMarkup, ReplyKeyboardMarkup, or ReplyKeyboardRemove.
-func (c *Context) ReplyWithKeyboardAndParseMode(text string, markup interface{}, parseMode string) error {
+func (c *Context) ReplyWithKeyboardAndParseMode(text string, markup interface{}, parseMode ParseMode) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
 	msg.ReplyMarkup = markup
-	msg.ParseMode = parseMode
+	msg.ParseMode = string(parseMode)
 	_, err := c.api.Send(msg)
 	return err
 }
@@ -183,9 +186,9 @@ func (c *Context) EditMessageText(messageID int, text string) error {
 
 // EditMessageTextWithParseMode edits the text of a previously sent message with parse mode support.
 // Edit* methods take messageID first, then the new content.
-func (c *Context) EditMessageTextWithParseMode(messageID int, text string, parseMode string) error {
+func (c *Context) EditMessageTextWithParseMode(messageID int, text string, parseMode ParseMode) error {
 	editMsg := tgbotapi.NewEditMessageText(c.ChatID(), messageID, text)
-	editMsg.ParseMode = parseMode
+	editMsg.ParseMode = string(parseMode)
 	_, err := c.api.Request(editMsg)
 	return err
 }
