@@ -266,6 +266,40 @@ func sendHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard boo
 	return messageIDs, nil
 }
 
+// displayEndGame sends the final result message with a "Play again?" keyboard.
+// Used by PlayerTurn on immediate blackjack (without recursing into HandleUpdate).
+func displayEndGame(ctx *teleflow.Context, data *BlackjackData) error {
+	playerValue := calculateHandValue(data.PlayerHand)
+	dealerValue := calculateHandValue(data.DealerHand)
+
+	result := ""
+	if playerValue > 21 {
+		result = "You busted! Dealer wins."
+	} else if dealerValue > 21 {
+		result = "Dealer busted! You win!"
+	} else if playerValue == dealerValue {
+		result = "Push! It's a tie."
+	} else if playerValue > dealerValue {
+		result = "You win!"
+	} else {
+		result = "Dealer wins."
+	}
+
+	finalMsg := fmt.Sprintf("Game over! Your hand: %d, Dealer's hand: %d. %s", playerValue, dealerValue, result)
+
+	dealerIDs, _ := updateHand(ctx, "Dealer's Final Hand:", data.DealerHand, true, data.DealerMessageIDs)
+	playerIDs, _ := updateHand(ctx, "Your Final Hand:", data.PlayerHand, true, data.PlayerMessageIDs)
+	data.DealerMessageIDs = dealerIDs
+	data.PlayerMessageIDs = playerIDs
+
+	keyboard := teleflow.NewInlineKeyboard().AddRow(
+		teleflow.ButtonCallback("Yes", "play_again"),
+		teleflow.ButtonCallback("No", "quit"),
+	).Build()
+
+	return ctx.ReplyWithKeyboard(finalMsg+"\nPlay again?", keyboard)
+}
+
 // clearPreviousCards deletes the messages for the previous hand.
 func clearPreviousCards(ctx *teleflow.Context, data *BlackjackData) {
 	// Clear player card messages
@@ -317,9 +351,7 @@ func main() {
 
 				// Check for immediate blackjack
 				if calculateHandValue(data.PlayerHand) == 21 || calculateHandValue(data.DealerHand) == 21 {
-					// The Prompt for EndGame will handle displaying the result.
-					blackjackFlow.HandleUpdate(ctx) // This will trigger EndGame's prompt
-					return nil                      // Stop this prompt, as EndGame will take over.
+					return displayEndGame(ctx, data)
 				}
 			}
 
@@ -340,9 +372,21 @@ func main() {
 		},
 		Process: func(ctx *teleflow.Context, data *BlackjackData) (teleflow.FlowAction, error) {
 			// This process function now handles both the check after dealing and player actions.
-			// If hands have just been dealt and there was a blackjack, move to the end.
+			// If hands have just been dealt and there was a blackjack, the Prompt called displayEndGame
+			// and returned. The user now responds to the "Play again?" buttons.
 			if len(data.PlayerHand) == 2 && (calculateHandValue(data.PlayerHand) == 21 || calculateHandValue(data.DealerHand) == 21) {
-				return teleflow.GoTo("EndGame"), nil
+				ctx.AnswerCallback()
+				switch ctx.Text() {
+				case "play_again":
+					clearPreviousCards(ctx, data)
+					data.PlayerHand = []Card{}
+					data.DealerHand = []Card{}
+					return teleflow.GoTo("PlayerTurn"), nil
+				case "quit":
+					ctx.EditMessageText(ctx.Update().CallbackQuery.Message.MessageID, "Thanks for playing!")
+					return teleflow.End(), nil
+				}
+				return teleflow.Retry(), nil
 			}
 
 			// Otherwise, process player's action from the inline keyboard.

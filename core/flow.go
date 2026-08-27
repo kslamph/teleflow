@@ -68,6 +68,7 @@ type flowStateKey struct {
 }
 
 type userFlowState[T any] struct {
+	mu          sync.Mutex // Serializes HandleUpdate for this user; held across callbacks.
 	currentStep int
 	flowData    T
 }
@@ -117,23 +118,33 @@ func (f *Flow[T]) OnComplete(handler func(ctx *Context, data T) error) *Flow[T] 
 // the user's state, calls the appropriate Prompt or Process function for the
 // current step, and transitions the user between steps based on the returned
 // FlowAction.
+//
+// Callbacks must NOT call HandleUpdate reentrantly on the same flow (i.e.,
+// from within a Prompt or Process function). Doing so will deadlock.
 func (f *Flow[T]) HandleUpdate(ctx *Context) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	key := flowStateKey{ChatID: ctx.ChatID(), UserID: ctx.UserID()}
-	state, inFlow := f.userStates[key]
 
+	// Step 1: Get or create the user state under f.mu (held briefly).
+	f.mu.Lock()
+	state, inFlow := f.userStates[key]
 	if !inFlow {
 		if len(f.steps) == 0 {
+			f.mu.Unlock()
 			return fmt.Errorf("flow has no steps")
 		}
 		var initialData T
-		state = &userFlowState[T]{
-			currentStep: 0,
-			flowData:    initialData,
-		}
+		state = &userFlowState[T]{currentStep: 0, flowData: initialData}
 		f.userStates[key] = state
+	}
+	f.mu.Unlock()
+
+	// Step 2: Acquire per-user mutex (held across callbacks).
+	// Lock ordering: f.mu then state.mu; we never hold f.mu here.
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	// Step 3: Run user callbacks without f.mu held.
+	if !inFlow {
 		return f.steps[0].Prompt(ctx, &state.flowData)
 	}
 
@@ -144,7 +155,9 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 
 	action, err := step.Process(ctx, &state.flowData)
 	if err != nil {
+		f.mu.Lock()
 		delete(f.userStates, key)
+		f.mu.Unlock()
 		return fmt.Errorf("error processing step '%s': %w", step.Name, err)
 	}
 
@@ -152,7 +165,9 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 	case actionNext:
 		state.currentStep++
 		if state.currentStep >= len(f.steps) {
+			f.mu.Lock()
 			delete(f.userStates, key)
+			f.mu.Unlock()
 			if f.onComplete != nil {
 				return f.onComplete(ctx, state.flowData)
 			}
@@ -161,7 +176,9 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 	case actionRetry:
 		// Do nothing, just re-prompt at the end.
 	case actionEnd:
+		f.mu.Lock()
 		delete(f.userStates, key)
+		f.mu.Unlock()
 		if f.onComplete != nil {
 			return f.onComplete(ctx, state.flowData)
 		}
