@@ -36,18 +36,18 @@ graph TD
     style I fill:#cfc,stroke:#333,stroke-width:2px
 ```
 
-### `Bot` ([`core/bot.go`](file:///home/kslam/goproj/teleflow/core/bot.go#L19-L26))
+### `Bot` ([`core/bot.go`](core/bot.go))
 
 *   **Responsibility:** The central orchestrator of the bot. It initializes the connection with the Telegram API, receives incoming updates, and routes them to the appropriate handlers via a `Router`.
 *   **Key Types:** `Bot`, `Handler`.
 *   **Key Methods:**
-    *   `NewBot(token string, router *Router)`: Creates a new bot instance.
+    *   `NewBot(token string, handler Handler)`: Creates a new bot instance.
     *   `Start()`: Begins listening for and processing Telegram updates.
     *   `processUpdate(update tgbotapi.Update)`: The core internal method for handling each incoming update.
     *   `RegisterData(data interface{})`: Registers complex data for callbacks.
     *   `GetData(id string)`: Retrieves complex callback data.
 
-### `Router` ([`core/flow.go`](file:///home/kslam/goproj/teleflow/core/flow.go#L158-L162))
+### `Router` ([`core/flow.go`](core/flow.go))
 
 *   **Responsibility:** Routes incoming updates to the appropriate handlers based on command names.
 *   **Key Types:** `Router`.
