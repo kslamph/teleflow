@@ -195,8 +195,8 @@ func (c *Context) EditMessageTextWithParseMode(messageID int, text string, parse
 
 // EditMessageReplyMarkup edits the inline keyboard of a previously sent message.
 // Edit* methods take messageID first, then the new markup.
-func (c *Context) EditMessageReplyMarkup(messageID int, markup *tgbotapi.InlineKeyboardMarkup) error {
-	config := tgbotapi.NewEditMessageReplyMarkup(c.ChatID(), messageID, *markup)
+func (c *Context) EditMessageReplyMarkup(messageID int, markup tgbotapi.InlineKeyboardMarkup) error {
+	config := tgbotapi.NewEditMessageReplyMarkup(c.ChatID(), messageID, markup)
 	_, err := c.api.Request(config)
 	return err
 }
