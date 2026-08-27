@@ -61,6 +61,12 @@ type Step[T any] struct {
 	Process func(ctx *Context, data *T) (action FlowAction, err error)
 }
 
+// flowStateKey is a composite key that uniquely identifies a user's state
+// within a specific chat, preventing state leakage across group chats.
+type flowStateKey struct {
+	ChatID, UserID int64
+}
+
 type userFlowState[T any] struct {
 	currentStep int
 	flowData    T
@@ -73,7 +79,7 @@ type userFlowState[T any] struct {
 type Flow[T any] struct {
 	steps         []Step[T]
 	stepNameIndex map[string]int // For fast GoTo lookups
-	userStates    map[int64]*userFlowState[T]
+	userStates    map[flowStateKey]*userFlowState[T]
 	mu            sync.Mutex
 	onComplete    func(ctx *Context, data T) error
 }
@@ -83,7 +89,7 @@ func NewFlow[T any]() *Flow[T] {
 	return &Flow[T]{
 		steps:         []Step[T]{},
 		stepNameIndex: make(map[string]int),
-		userStates:    make(map[int64]*userFlowState[T]),
+		userStates:    make(map[flowStateKey]*userFlowState[T]),
 	}
 }
 
@@ -115,8 +121,8 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	userID := ctx.UserID()
-	state, inFlow := f.userStates[userID]
+	key := flowStateKey{ChatID: ctx.ChatID(), UserID: ctx.UserID()}
+	state, inFlow := f.userStates[key]
 
 	if !inFlow {
 		if len(f.steps) == 0 {
@@ -127,7 +133,7 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 			currentStep: 0,
 			flowData:    initialData,
 		}
-		f.userStates[userID] = state
+		f.userStates[key] = state
 		return f.steps[0].Prompt(ctx, &state.flowData)
 	}
 
@@ -138,7 +144,7 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 
 	action, err := step.Process(ctx, &state.flowData)
 	if err != nil {
-		delete(f.userStates, userID)
+		delete(f.userStates, key)
 		return fmt.Errorf("error processing step '%s': %w", step.Name, err)
 	}
 
@@ -146,7 +152,7 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 	case actionNext:
 		state.currentStep++
 		if state.currentStep >= len(f.steps) {
-			delete(f.userStates, userID)
+			delete(f.userStates, key)
 			if f.onComplete != nil {
 				return f.onComplete(ctx, state.flowData)
 			}
@@ -155,7 +161,7 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 	case actionRetry:
 		// Do nothing, just re-prompt at the end.
 	case actionEnd:
-		delete(f.userStates, userID)
+		delete(f.userStates, key)
 		if f.onComplete != nil {
 			return f.onComplete(ctx, state.flowData)
 		}
@@ -173,19 +179,19 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 }
 
 // IsUserInFlow checks if a user is currently active in this flow.
-func (f *Flow[T]) IsUserInFlow(userID int64) bool {
+func (f *Flow[T]) IsUserInFlow(chatID, userID int64) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	_, ok := f.userStates[userID]
+	_, ok := f.userStates[flowStateKey{ChatID: chatID, UserID: userID}]
 	return ok
 }
 
 // CancelFlow immediately removes a user's state from the flow, effectively
 // terminating their session.
-func (f *Flow[T]) CancelFlow(userID int64) {
+func (f *Flow[T]) CancelFlow(chatID, userID int64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	delete(f.userStates, userID)
+	delete(f.userStates, flowStateKey{ChatID: chatID, UserID: userID})
 }
 
 // Router is a command-based multiplexer for Handlers. It inspects incoming

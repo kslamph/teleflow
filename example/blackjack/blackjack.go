@@ -451,7 +451,7 @@ func main() {
 	router := teleflow.NewRouter()
 	router.Handle("blackjack", blackjackFlow)
 	router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
-		if blackjackFlow.IsUserInFlow(ctx.UserID()) {
+		if blackjackFlow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
 			return blackjackFlow.HandleUpdate(ctx)
 		}
 		return ctx.ReplyText("Unknown command. Use /blackjack to play.")
