@@ -24,7 +24,14 @@ jobs:
         run: go build ./...
       - name: Vet
         run: go vet ./...
-      - name: Test
-        run: go test ./...
+      - name: Test with coverage
+        run: go test ./... -coverprofile=coverage.out
       - name: Format check
         run: test -z "$(gofmt -l core example)"
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.out
+          flags: go-${{ matrix.go }}
+          fail_ci_if_error: true

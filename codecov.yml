@@ -1,0 +1,22 @@
+# Codecov configuration for teleflow
+# Docs: https://docs.codecov.com/docs/codecov-yaml
+
+codecov:
+  require_ci_to_pass: true
+  notify:
+    wait_for_ci: true
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 5%
+    patch:
+      default:
+        target: 80%
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false

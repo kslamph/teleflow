@@ -2,6 +2,7 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/kslamph/teleflow/core.svg)](https://pkg.go.dev/github.com/kslamph/teleflow/core)
 [![Go Report Card](https://goreportcard.com/badge/github.com/kslamph/teleflow)](https://goreportcard.com/report/github.com/kslamph/teleflow)
+[![Codecov](https://codecov.io/gh/kslamph/teleflow/graph/badge.svg)](https://codecov.io/gh/kslamph/teleflow)
 
 > **Quick Start for Go Developers**: Simple, type-safe Telegram bot framework with fluent flows and automatic state management.
 
