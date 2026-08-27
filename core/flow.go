@@ -89,14 +89,14 @@ func NewFlow[T any]() *Flow[T] {
 
 // AddStep adds a new step to the flow's sequence. Steps are executed in the order
 // they are added, unless controlled otherwise by a FlowAction like GoTo.
-// This method panics if a step with the same name is added more than once.
-func (f *Flow[T]) AddStep(step Step[T]) *Flow[T] {
+// Returns an error if a step with the same name already exists.
+func (f *Flow[T]) AddStep(step Step[T]) (*Flow[T], error) {
 	if _, exists := f.stepNameIndex[step.Name]; exists {
-		panic(fmt.Sprintf("step with name '%s' already exists", step.Name))
+		return nil, fmt.Errorf("step with name '%s' already exists", step.Name)
 	}
 	f.stepNameIndex[step.Name] = len(f.steps)
 	f.steps = append(f.steps, step)
-	return f
+	return f, nil
 }
 
 // OnComplete sets a final handler that is called only when the flow finishes

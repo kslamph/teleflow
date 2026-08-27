@@ -120,7 +120,11 @@ func main() {
 	}
 
 	// 4. Add steps to the flow.
-	registrationFlow.AddStep(welcomeStep).AddStep(ageStep).AddStep(languageStep).AddStep(confirmationStep)
+	for _, s := range []teleflow.Step[RegistrationData]{welcomeStep, ageStep, languageStep, confirmationStep} {
+		if _, err := registrationFlow.AddStep(s); err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	// 5. Set a completion handler.
 	registrationFlow.OnComplete(func(ctx *teleflow.Context, data RegistrationData) error {

@@ -442,9 +442,11 @@ func main() {
 		},
 	}
 
-	blackjackFlow.
-		AddStep(playerTurnStep).
-		AddStep(endGameStep)
+	for _, s := range []teleflow.Step[BlackjackData]{playerTurnStep, endGameStep} {
+		if _, err := blackjackFlow.AddStep(s); err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	router := teleflow.NewRouter()
 	router.Handle("blackjack", blackjackFlow)
