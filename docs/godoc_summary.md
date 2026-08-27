@@ -5,10 +5,9 @@ This document summarizes the comprehensive GoDoc comments in the Teleflow packag
 ## Package Overview
 
 ### Main Package Documentation (`core/doc.go`)
-- Created comprehensive package-level documentation explaining the framework's purpose
-- Included quick start examples for basic bot creation
-- Documented flow management capabilities with examples
-- Showed how to use the new simplified API
+- Package-level documentation explaining the framework's purpose
+- Quick start example for basic bot creation
+- Flow management capabilities with example code
 
 ## Core Components Documented
 
@@ -105,50 +104,36 @@ This document summarizes the comprehensive GoDoc comments in the Teleflow packag
 
 ## Documentation Standards Applied
 
-### 1. Comprehensive Function Documentation
-- Purpose and behavior explanation
-- Parameter descriptions
-- Return value explanations
-- Usage examples for complex functions
-- Cross-references to related functions
+### 1. Function Documentation
+- Purpose and behavior explanation for each function/method
+- Parameter descriptions where the name alone isn't sufficient
+- Return value explanations for non-obvious returns
+- Notes on thread safety, concurrency, and one-time semantics where relevant
 
 ### 2. Type Documentation
-- Clear purpose statements
-- Field descriptions with types and purposes
-- Usage context explanations
-- Relationship to other types
+- Clear purpose statements for each exported type
+- Field descriptions explaining what each field controls
+- Relationship to other types (e.g., `Step[T]` as a component of `Flow[T]`)
 
 ### 3. Constant Documentation
-- Value meanings and use cases
-- When to use each constant
-- Behavior differences between options
+- Value meanings and when to use each constant
+- Behavior differences between options (e.g., parse modes)
 
-### 4. Example Integration
-- Practical usage examples
-- Complete code snippets
-- Common patterns and best practices
-- Error handling examples
-
-### 5. Cross-Reference Documentation
-- Links between related functions and types
-- Workflow explanations
-- Integration patterns
+### 4. Package-Level Example
+- `core/doc.go` includes a complete, runnable example demonstrating flow creation, step definition, and bot wiring
+- This serves as the primary usage reference for `go doc` and pkg.go.dev viewers
 
 ## Benefits of Added Documentation
 
-1. **Developer Experience**: Clear understanding of API usage
-2. **Maintainability**: Easier codebase navigation and modification
-3. **Onboarding**: Faster learning curve for new developers
-4. **API Discoverability**: Better IDE support and code completion
-5. **Best Practices**: Examples showing recommended usage patterns
-6. **Error Prevention**: Clear parameter requirements and constraints
+1. **Developer Experience**: Purpose and behavior descriptions help users understand API usage without reading implementation
+2. **Maintainability**: Clear doc comments make the codebase easier to navigate and modify
+3. **Onboarding**: Package-level example in `doc.go` provides a working reference for new users
+4. **API Discoverability**: Structured doc comments improve `go doc` output and pkg.go.dev rendering
+5. **Constraint Communication**: Doc comments document one-time callback semantics, thread-safety expectations, and state-management behavior
 
 ## Tools Integration
 
-The comprehensive GoDoc comments enable:
+The GoDoc comments enable:
 - `go doc` command usage for API exploration
-- IDE hover documentation
-- Online documentation generation
-- API reference websites
-- Code completion improvements
-- Static analysis tool integration
+- pkg.go.dev rendering of type/method documentation
+- IDE hover documentation and go-to-definition support
