@@ -89,12 +89,14 @@ func main() {
 		},
 	}
 
-	dataFlow.AddStep(viewStep)
+	if _, err := dataFlow.AddStep(viewStep); err != nil {
+		log.Fatal(err)
+	}
 
 	router := teleflow.NewRouter()
 	router.Handle("data", dataFlow)
 	router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
-		if dataFlow.IsUserInFlow(ctx.UserID()) {
+		if dataFlow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
 			return dataFlow.HandleUpdate(ctx)
 		}
 		return ctx.ReplyText("Unknown command. Use /data to start.")

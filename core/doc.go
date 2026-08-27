@@ -71,7 +71,12 @@ Here is a minimal example of a bot with a simple two-step registration flow:
 		}
 
 		// 4. Add steps to the flow and set a completion handler.
-		profileFlow.AddStep(nameStep).AddStep(ageStep)
+		if _, err := profileFlow.AddStep(nameStep); err != nil {
+			log.Fatal(err)
+		}
+		if _, err := profileFlow.AddStep(ageStep); err != nil {
+			log.Fatal(err)
+		}
 		profileFlow.OnComplete(func(ctx *teleflow.Context, data UserProfile) error {
 			return ctx.ReplyText(fmt.Sprintf("Thanks, %s! Your profile is saved.", data.Name))
 		})

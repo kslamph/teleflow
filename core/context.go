@@ -6,11 +6,14 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// ParseMode constants for message formatting
+// ParseMode specifies the format of a text message. Use the typed constants
+// (ParseModeHTML, ParseModeMarkdown, ParseModeMarkdownV2) instead of raw strings.
+type ParseMode string
+
 const (
-	ParseModeHTML       = "HTML"
-	ParseModeMarkdown   = "Markdown"
-	ParseModeMarkdownV2 = "MarkdownV2"
+	ParseModeHTML       ParseMode = "HTML"
+	ParseModeMarkdown   ParseMode = "Markdown"
+	ParseModeMarkdownV2 ParseMode = "MarkdownV2"
 )
 
 // Context provides a convenient, user-facing API for handling a single Telegram
@@ -101,8 +104,11 @@ func (c *Context) Get(key string) (interface{}, bool) {
 
 // RegisterCallback registers a one-time handler for a callback query. It returns
 // a unique ID to be used as the callback data in a `tgbotapi.InlineKeyboardButton`.
-// The handler will be executed once when the button is pressed, then automatically
-// removed.
+// The handler is executed once when the button is pressed, then automatically
+// removed. Callbacks are NEVER auto-answered by the framework; you must call
+// ctx.AnswerCallback() inside your handler to stop the client loading spinner.
+// Unmatched or stale callback queries silently fall through to the router's
+// default route.
 func (c *Context) RegisterCallback(handler func(ctx *Context) error) string {
 	return c.bot.registerCallback(handler)
 }
@@ -110,13 +116,15 @@ func (c *Context) RegisterCallback(handler func(ctx *Context) error) string {
 // RegisterData registers an arbitrary data object for one-time retrieval via a
 // callback query. It returns a unique ID to be used as the callback data. This
 // allows passing complex data through buttons, bypassing Telegram's size limit.
-// The data is automatically deleted after being retrieved by GetData.
+// The data is automatically deleted on the first call to GetData with the same ID.
 func (c *Context) RegisterData(data interface{}) string {
 	return c.bot.RegisterData(data)
 }
 
 // GetData retrieves and deletes a data object that was previously stored via
 // RegisterData. It uses the data from the current callback query as the lookup key.
+// The lookup key (the callback data string) is consumed on the first call; a
+// subsequent call for the same key returns ok=false.
 func (c *Context) GetData() (interface{}, bool) {
 	if c.update.CallbackQuery == nil {
 		return nil, false
@@ -124,10 +132,11 @@ func (c *Context) GetData() (interface{}, bool) {
 	return c.bot.GetData(c.update.CallbackQuery.Data)
 }
 
-// ReplyTextWithParseMode sends a text message with specified parse mode to the originating chat.
-func (c *Context) ReplyTextWithParseMode(text string, parseMode string) error {
+// ReplyTextWithParseMode sends a text message with the given parse mode to
+// the originating chat. Argument order: text first, then parseMode.
+func (c *Context) ReplyTextWithParseMode(text string, parseMode ParseMode) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
-	msg.ParseMode = parseMode
+	msg.ParseMode = string(parseMode)
 	_, err := c.api.Send(msg)
 	return err
 }
@@ -140,19 +149,19 @@ func (c *Context) ReplyText(text string) error {
 }
 
 // ReplyWithKeyboardAndParseMode sends a message with a keyboard markup and parse mode.
-// The markup can be either a `tgbotapi.InlineKeyboardMarkup`, `tgbotapi.ReplyKeyboardMarkup`,
-// or `tgbotapi.ReplyKeyboardRemove`.
-func (c *Context) ReplyWithKeyboardAndParseMode(text string, markup interface{}, parseMode string) error {
+// Argument order: text, markup, parseMode. The markup can be an
+// InlineKeyboardMarkup, ReplyKeyboardMarkup, or ReplyKeyboardRemove.
+func (c *Context) ReplyWithKeyboardAndParseMode(text string, markup interface{}, parseMode ParseMode) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
 	msg.ReplyMarkup = markup
-	msg.ParseMode = parseMode
+	msg.ParseMode = string(parseMode)
 	_, err := c.api.Send(msg)
 	return err
 }
 
-// ReplyWithKeyboard sends a message with a keyboard markup. The markup can be
-// either a `tgbotapi.InlineKeyboardMarkup`, `tgbotapi.ReplyKeyboardMarkup`,
-// or `tgbotapi.ReplyKeyboardRemove`.
+// ReplyWithKeyboard sends a message with a keyboard markup.
+// Argument order: text first, then markup. The markup can be an
+// InlineKeyboardMarkup, ReplyKeyboardMarkup, or ReplyKeyboardRemove.
 func (c *Context) ReplyWithKeyboard(text string, markup interface{}) error {
 	msg := tgbotapi.NewMessage(c.ChatID(), text)
 	msg.ReplyMarkup = markup
@@ -168,6 +177,7 @@ func (c *Context) DeleteMessage(messageID int) error {
 }
 
 // EditMessageText edits the text of a previously sent message.
+// Edit* methods take messageID first, then the new content.
 func (c *Context) EditMessageText(messageID int, text string) error {
 	editMsg := tgbotapi.NewEditMessageText(c.ChatID(), messageID, text)
 	_, err := c.api.Request(editMsg)
@@ -175,21 +185,24 @@ func (c *Context) EditMessageText(messageID int, text string) error {
 }
 
 // EditMessageTextWithParseMode edits the text of a previously sent message with parse mode support.
-func (c *Context) EditMessageTextWithParseMode(messageID int, text string, parseMode string) error {
+// Edit* methods take messageID first, then the new content.
+func (c *Context) EditMessageTextWithParseMode(messageID int, text string, parseMode ParseMode) error {
 	editMsg := tgbotapi.NewEditMessageText(c.ChatID(), messageID, text)
-	editMsg.ParseMode = parseMode
+	editMsg.ParseMode = string(parseMode)
 	_, err := c.api.Request(editMsg)
 	return err
 }
 
 // EditMessageReplyMarkup edits the inline keyboard of a previously sent message.
-func (c *Context) EditMessageReplyMarkup(messageID int, markup *tgbotapi.InlineKeyboardMarkup) error {
-	config := tgbotapi.NewEditMessageReplyMarkup(c.ChatID(), messageID, *markup)
+// Edit* methods take messageID first, then the new markup.
+func (c *Context) EditMessageReplyMarkup(messageID int, markup tgbotapi.InlineKeyboardMarkup) error {
+	config := tgbotapi.NewEditMessageReplyMarkup(c.ChatID(), messageID, markup)
 	_, err := c.api.Request(config)
 	return err
 }
 
 // EditMessageMedia edits the media of a previously sent message.
+// Edit* methods take messageID first, then the new media.
 func (c *Context) EditMessageMedia(messageID int, media interface{}) error {
 	config := tgbotapi.EditMessageMediaConfig{
 		BaseEdit: tgbotapi.BaseEdit{
@@ -202,8 +215,9 @@ func (c *Context) EditMessageMedia(messageID int, media interface{}) error {
 	return err
 }
 
-// AnswerCallback acknowledges a callback query. This must be called after a user
+// AnswerCallback acknowledges a callback query. This MUST be called after a user
 // presses an inline keyboard button to stop the loading animation on their client.
+// The framework never auto-answers callbacks.
 func (c *Context) AnswerCallback() error {
 	if c.update.CallbackQuery == nil {
 		return fmt.Errorf("not a callback query")

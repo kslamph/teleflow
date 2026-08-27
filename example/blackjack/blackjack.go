@@ -45,9 +45,9 @@ func (c Card) ImageURL() string {
 
 // BlackjackData holds the state for a single user's game.
 type BlackjackData struct {
-	Deck            []Card
-	PlayerHand      []Card
-	DealerHand      []Card
+	Deck             []Card
+	PlayerHand       []Card
+	DealerHand       []Card
 	PlayerMessageIDs []int // To keep track of player card messages
 	DealerMessageIDs []int // To keep track of dealer card messages
 	MessageIDs       []int // To keep track of other messages to delete later
@@ -115,7 +115,7 @@ func updateHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard b
 
 	// Edit existing messages and send new ones if needed
 	messageIDs := make([]int, len(hand))
-	
+
 	// Edit existing messages
 	for i := 0; i < len(hand) && i < len(existingMessageIDs); i++ {
 		var photoURL string
@@ -132,7 +132,7 @@ func updateHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard b
 		if i == 0 {
 			media.Caption = title
 		}
-		
+
 		// Try to edit the existing message
 		err := ctx.EditMessageMedia(existingMessageIDs[i], media)
 		if err != nil {
@@ -215,56 +215,90 @@ func sendHand(ctx *teleflow.Context, title string, hand []Card, showHoleCard boo
 	}
 
 	// For a single card (e.g., when hitting), send as a single photo to avoid media group overhead.
-		if len(media) == 1 {
-			photo := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(hand[0].ImageURL()))
-			photo.Caption = title
-			// Try sending with optimized image first, fallback to original if it fails
-			msg, err := ctx.API().Send(photo)
-			if err != nil {
-				// Fallback to original image URL
-				originalURL := strings.TrimPrefix(hand[0].ImageURL(), ImageProxyURL)
-				photoFallback := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(originalURL))
-				photoFallback.Caption = title
-				msg, err = ctx.API().Send(photoFallback)
-				if err != nil {
-					return nil, err
-				}
-			}
-			return []int{msg.MessageID}, nil
-		}
-	
-		// Try sending media group with optimized images first
-		msgs, err := ctx.API().SendMediaGroup(tgbotapi.NewMediaGroup(ctx.ChatID(), media))
+	if len(media) == 1 {
+		photo := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(hand[0].ImageURL()))
+		photo.Caption = title
+		// Try sending with optimized image first, fallback to original if it fails
+		msg, err := ctx.API().Send(photo)
 		if err != nil {
-			// Fallback to original image URLs
-			mediaFallback := make([]interface{}, len(hand))
-			for i, card := range hand {
-				var photoURL string
-				if i == 0 && !showHoleCard { // Dealer's first card is hidden
-					photoURL = CardRepoURL + "back_dark.png"
-				} else {
-					// Get original URL by removing proxy prefix
-					photoURL = strings.TrimPrefix(card.ImageURL(), ImageProxyURL)
-				}
-	
-				p := tgbotapi.NewInputMediaPhoto(tgbotapi.FileURL(photoURL))
-				if i == 0 {
-					p.Caption = title
-				}
-				mediaFallback[i] = p
-			}
-			msgs, err = ctx.API().SendMediaGroup(tgbotapi.NewMediaGroup(ctx.ChatID(), mediaFallback))
+			// Fallback to original image URL
+			originalURL := strings.TrimPrefix(hand[0].ImageURL(), ImageProxyURL)
+			photoFallback := tgbotapi.NewPhoto(ctx.ChatID(), tgbotapi.FileURL(originalURL))
+			photoFallback.Caption = title
+			msg, err = ctx.API().Send(photoFallback)
 			if err != nil {
 				return nil, err
 			}
 		}
-	
-		messageIDs := make([]int, len(msgs))
-		for i, msg := range msgs {
-			messageIDs[i] = msg.MessageID
-		}
-		return messageIDs, nil
+		return []int{msg.MessageID}, nil
 	}
+
+	// Try sending media group with optimized images first
+	msgs, err := ctx.API().SendMediaGroup(tgbotapi.NewMediaGroup(ctx.ChatID(), media))
+	if err != nil {
+		// Fallback to original image URLs
+		mediaFallback := make([]interface{}, len(hand))
+		for i, card := range hand {
+			var photoURL string
+			if i == 0 && !showHoleCard { // Dealer's first card is hidden
+				photoURL = CardRepoURL + "back_dark.png"
+			} else {
+				// Get original URL by removing proxy prefix
+				photoURL = strings.TrimPrefix(card.ImageURL(), ImageProxyURL)
+			}
+
+			p := tgbotapi.NewInputMediaPhoto(tgbotapi.FileURL(photoURL))
+			if i == 0 {
+				p.Caption = title
+			}
+			mediaFallback[i] = p
+		}
+		msgs, err = ctx.API().SendMediaGroup(tgbotapi.NewMediaGroup(ctx.ChatID(), mediaFallback))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	messageIDs := make([]int, len(msgs))
+	for i, msg := range msgs {
+		messageIDs[i] = msg.MessageID
+	}
+	return messageIDs, nil
+}
+
+// displayEndGame sends the final result message with a "Play again?" keyboard.
+// Used by PlayerTurn on immediate blackjack (without recursing into HandleUpdate).
+func displayEndGame(ctx *teleflow.Context, data *BlackjackData) error {
+	playerValue := calculateHandValue(data.PlayerHand)
+	dealerValue := calculateHandValue(data.DealerHand)
+
+	result := ""
+	if playerValue > 21 {
+		result = "You busted! Dealer wins."
+	} else if dealerValue > 21 {
+		result = "Dealer busted! You win!"
+	} else if playerValue == dealerValue {
+		result = "Push! It's a tie."
+	} else if playerValue > dealerValue {
+		result = "You win!"
+	} else {
+		result = "Dealer wins."
+	}
+
+	finalMsg := fmt.Sprintf("Game over! Your hand: %d, Dealer's hand: %d. %s", playerValue, dealerValue, result)
+
+	dealerIDs, _ := updateHand(ctx, "Dealer's Final Hand:", data.DealerHand, true, data.DealerMessageIDs)
+	playerIDs, _ := updateHand(ctx, "Your Final Hand:", data.PlayerHand, true, data.PlayerMessageIDs)
+	data.DealerMessageIDs = dealerIDs
+	data.PlayerMessageIDs = playerIDs
+
+	keyboard := teleflow.NewInlineKeyboard().AddRow(
+		teleflow.ButtonCallback("Yes", "play_again"),
+		teleflow.ButtonCallback("No", "quit"),
+	).Build()
+
+	return ctx.ReplyWithKeyboard(finalMsg+"\nPlay again?", keyboard)
+}
 
 // clearPreviousCards deletes the messages for the previous hand.
 func clearPreviousCards(ctx *teleflow.Context, data *BlackjackData) {
@@ -273,13 +307,13 @@ func clearPreviousCards(ctx *teleflow.Context, data *BlackjackData) {
 		ctx.DeleteMessage(id)
 	}
 	data.PlayerMessageIDs = []int{}
-	
+
 	// Clear dealer card messages
 	for _, id := range data.DealerMessageIDs {
 		ctx.DeleteMessage(id)
 	}
 	data.DealerMessageIDs = []int{}
-	
+
 	// Clear other messages
 	for _, id := range data.MessageIDs {
 		ctx.DeleteMessage(id)
@@ -317,9 +351,7 @@ func main() {
 
 				// Check for immediate blackjack
 				if calculateHandValue(data.PlayerHand) == 21 || calculateHandValue(data.DealerHand) == 21 {
-					// The Prompt for EndGame will handle displaying the result.
-					blackjackFlow.HandleUpdate(ctx) // This will trigger EndGame's prompt
-					return nil                      // Stop this prompt, as EndGame will take over.
+					return displayEndGame(ctx, data)
 				}
 			}
 
@@ -340,9 +372,21 @@ func main() {
 		},
 		Process: func(ctx *teleflow.Context, data *BlackjackData) (teleflow.FlowAction, error) {
 			// This process function now handles both the check after dealing and player actions.
-			// If hands have just been dealt and there was a blackjack, move to the end.
+			// If hands have just been dealt and there was a blackjack, the Prompt called displayEndGame
+			// and returned. The user now responds to the "Play again?" buttons.
 			if len(data.PlayerHand) == 2 && (calculateHandValue(data.PlayerHand) == 21 || calculateHandValue(data.DealerHand) == 21) {
-				return teleflow.GoTo("EndGame"), nil
+				ctx.AnswerCallback()
+				switch ctx.Text() {
+				case "play_again":
+					clearPreviousCards(ctx, data)
+					data.PlayerHand = []Card{}
+					data.DealerHand = []Card{}
+					return teleflow.GoTo("PlayerTurn"), nil
+				case "quit":
+					ctx.EditMessageText(ctx.Update().CallbackQuery.Message.MessageID, "Thanks for playing!")
+					return teleflow.End(), nil
+				}
+				return teleflow.Retry(), nil
 			}
 
 			// Otherwise, process player's action from the inline keyboard.
@@ -442,14 +486,16 @@ func main() {
 		},
 	}
 
-	blackjackFlow.
-		AddStep(playerTurnStep).
-		AddStep(endGameStep)
+	for _, s := range []teleflow.Step[BlackjackData]{playerTurnStep, endGameStep} {
+		if _, err := blackjackFlow.AddStep(s); err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	router := teleflow.NewRouter()
 	router.Handle("blackjack", blackjackFlow)
 	router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
-		if blackjackFlow.IsUserInFlow(ctx.UserID()) {
+		if blackjackFlow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
 			return blackjackFlow.HandleUpdate(ctx)
 		}
 		return ctx.ReplyText("Unknown command. Use /blackjack to play.")

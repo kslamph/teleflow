@@ -120,7 +120,11 @@ func main() {
 	}
 
 	// 4. Add steps to the flow.
-	registrationFlow.AddStep(welcomeStep).AddStep(ageStep).AddStep(languageStep).AddStep(confirmationStep)
+	for _, s := range []teleflow.Step[RegistrationData]{welcomeStep, ageStep, languageStep, confirmationStep} {
+		if _, err := registrationFlow.AddStep(s); err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	// 5. Set a completion handler.
 	registrationFlow.OnComplete(func(ctx *teleflow.Context, data RegistrationData) error {
@@ -133,8 +137,8 @@ func main() {
 	router.Handle("register", registrationFlow)
 
 	router.Handle("cancel", teleflow.Func(func(ctx *teleflow.Context) error {
-		if registrationFlow.IsUserInFlow(ctx.UserID()) {
-			registrationFlow.CancelFlow(ctx.UserID())
+		if registrationFlow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
+			registrationFlow.CancelFlow(ctx.ChatID(), ctx.UserID())
 			return ctx.ReplyText("Flow cancelled.")
 		}
 		return ctx.ReplyText("No active flow to cancel.")
@@ -175,7 +179,7 @@ func main() {
 
 	router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
 		// If the user is already in a flow, pass the update to the flow.
-		if registrationFlow.IsUserInFlow(ctx.UserID()) {
+		if registrationFlow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
 			return registrationFlow.HandleUpdate(ctx)
 		}
 		return ctx.ReplyText("Unknown command. Use /register to begin.")
