@@ -3,9 +3,14 @@ package teleflow
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+// flowStateTTL is how long an idle user flow state is kept before eviction.
+// States are purged lazily on access.
+const flowStateTTL = 24 * time.Hour
 
 // --- Flow Control ---
 
@@ -71,6 +76,7 @@ type userFlowState[T any] struct {
 	mu          sync.Mutex // Serializes HandleUpdate for this user; held across callbacks.
 	currentStep int
 	flowData    T
+	lastActive  time.Time
 }
 
 // Flow is a stateful handler that manages a multi-step conversation for multiple
@@ -125,7 +131,13 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 	key := flowStateKey{ChatID: ctx.ChatID(), UserID: ctx.UserID()}
 
 	// Step 1: Get or create the user state under f.mu (held briefly).
+	// Lazy-purge any expired state while holding the lock.
 	f.mu.Lock()
+	for k, s := range f.userStates {
+		if time.Since(s.lastActive) > flowStateTTL {
+			delete(f.userStates, k)
+		}
+	}
 	state, inFlow := f.userStates[key]
 	if !inFlow {
 		if len(f.steps) == 0 {
@@ -133,8 +145,10 @@ func (f *Flow[T]) HandleUpdate(ctx *Context) error {
 			return fmt.Errorf("flow has no steps")
 		}
 		var initialData T
-		state = &userFlowState[T]{currentStep: 0, flowData: initialData}
+		state = &userFlowState[T]{currentStep: 0, flowData: initialData, lastActive: time.Now()}
 		f.userStates[key] = state
+	} else {
+		state.lastActive = time.Now()
 	}
 	f.mu.Unlock()
 

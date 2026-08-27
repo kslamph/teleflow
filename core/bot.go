@@ -5,10 +5,28 @@ import (
 	"log"
 	"sort"
 	"sync"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/google/uuid"
 )
+
+// registryTTL is how long a registered callback or data entry lives before
+// being eligible for eviction. Entries are cleaned up lazily on access and
+// periodically by a background sweeper.
+const registryTTL = 24 * time.Hour
+
+// callbackEntry wraps a callback handler with an expiry timestamp.
+type callbackEntry struct {
+	handler   func(ctx *Context) error
+	expiresAt time.Time
+}
+
+// dataEntry wraps a data value with an expiry timestamp.
+type dataEntry struct {
+	value     interface{}
+	expiresAt time.Time
+}
 
 // Handler defines the interface for handling Telegram updates.
 type Handler interface {
@@ -22,8 +40,8 @@ type Bot struct {
 	api              *tgbotapi.BotAPI
 	self             tgbotapi.User
 	handler          Handler
-	callbackRegistry map[string]func(ctx *Context) error
-	dataRegistry     map[string]interface{}
+	callbackRegistry map[string]callbackEntry
+	dataRegistry     map[string]dataEntry
 	mu               sync.Mutex
 }
 
@@ -50,8 +68,8 @@ func NewBot(token string, handler Handler) (*Bot, error) {
 		api:              api,
 		self:             botUser,
 		handler:          handler,
-		callbackRegistry: make(map[string]func(ctx *Context) error),
-		dataRegistry:     make(map[string]interface{}),
+		callbackRegistry: make(map[string]callbackEntry),
+		dataRegistry:     make(map[string]dataEntry),
 	}, nil
 }
 
@@ -63,15 +81,18 @@ func (b *Bot) processUpdate(update tgbotapi.Update) {
 	if update.CallbackQuery != nil {
 		b.mu.Lock()
 		callbackID := update.CallbackQuery.Data
-		handler, ok := b.callbackRegistry[callbackID]
-		if ok {
+		entry, ok := b.callbackRegistry[callbackID]
+		if ok && time.Now().Before(entry.expiresAt) {
 			// Handler found, remove it for one-time use and execute
 			delete(b.callbackRegistry, callbackID)
 			b.mu.Unlock()
-			if err := handler(ctx); err != nil {
+			if err := entry.handler(ctx); err != nil {
 				log.Printf("Callback handler error: %v", err)
 			}
 			return // Stop further processing
+		} else if ok {
+			// Entry expired, remove it
+			delete(b.callbackRegistry, callbackID)
 		}
 		b.mu.Unlock()
 	}
@@ -88,7 +109,7 @@ func (b *Bot) registerCallback(handler func(ctx *Context) error) string {
 	defer b.mu.Unlock()
 
 	id := uuid.New().String()
-	b.callbackRegistry[id] = handler
+	b.callbackRegistry[id] = callbackEntry{handler: handler, expiresAt: time.Now().Add(registryTTL)}
 	return id
 }
 
@@ -102,7 +123,7 @@ func (b *Bot) RegisterData(data interface{}) string {
 	defer b.mu.Unlock()
 
 	id := uuid.New().String()
-	b.dataRegistry[id] = data
+	b.dataRegistry[id] = dataEntry{value: data, expiresAt: time.Now().Add(registryTTL)}
 	return id
 }
 
@@ -113,17 +134,24 @@ func (b *Bot) GetData(id string) (interface{}, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	data, ok := b.dataRegistry[id]
-	if ok {
-		delete(b.dataRegistry, id)
+	entry, ok := b.dataRegistry[id]
+	if !ok || time.Now().After(entry.expiresAt) {
+		if ok {
+			delete(b.dataRegistry, id)
+		}
+		return nil, false
 	}
-	return data, ok
+	delete(b.dataRegistry, id)
+	return entry.value, true
 }
 
 // Start begins the bot's main event loop. It connects to Telegram and starts
 // polling for updates. Each update is processed in a separate goroutine.
 func (b *Bot) Start() error {
 	log.Printf("Authorized on account %s", b.self.UserName)
+
+	// Start background sweeper for registry eviction.
+	go b.sweepRegistries()
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -134,6 +162,27 @@ func (b *Bot) Start() error {
 	}
 
 	return nil
+}
+
+// sweepRegistries periodically removes expired entries from both registries.
+func (b *Bot) sweepRegistries() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		b.mu.Lock()
+		now := time.Now()
+		for id, entry := range b.callbackRegistry {
+			if now.After(entry.expiresAt) {
+				delete(b.callbackRegistry, id)
+			}
+		}
+		for id, entry := range b.dataRegistry {
+			if now.After(entry.expiresAt) {
+				delete(b.dataRegistry, id)
+			}
+		}
+		b.mu.Unlock()
+	}
 }
 
 // SetBotCommands sets the list of commands that will be displayed to the user
