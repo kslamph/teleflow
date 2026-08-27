@@ -85,7 +85,8 @@ ageStep := teleflow.Step[UserProfile]{
 }
 
 // 4. Add steps to the flow and set a completion handler.
-profileFlow.AddStep(nameStep).AddStep(ageStep)
+if _, err := profileFlow.AddStep(nameStep); err != nil { log.Fatal(err) }
+if _, err := profileFlow.AddStep(ageStep); err != nil { log.Fatal(err) }
 profileFlow.OnComplete(func(ctx *teleflow.Context, data UserProfile) error {
     return ctx.ReplyText(fmt.Sprintf("Thanks, %s! Your profile is saved.", data.Name))
 })
@@ -186,7 +187,8 @@ ageStep := teleflow.Step[RegistrationData]{
 }
 
 // Add steps to the flow
-registrationFlow.AddStep(welcomeStep).AddStep(ageStep)
+if _, err := registrationFlow.AddStep(welcomeStep); err != nil { log.Fatal(err) }
+if _, err := registrationFlow.AddStep(ageStep); err != nil { log.Fatal(err) }
 
 // Set completion handler
 registrationFlow.OnComplete(func(ctx *teleflow.Context, data RegistrationData) error {
@@ -341,7 +343,7 @@ func TestUserRegistrationFlow(t *testing.T) {
     flow := teleflow.NewFlow[TestData]()
 
     // Add test steps
-    flow.AddStep(teleflow.Step[TestData]{
+    if _, err := flow.AddStep(teleflow.Step[TestData]{
         Name: "TestStep",
         Prompt: func(ctx *teleflow.Context, data *TestData) error {
             return ctx.ReplyText("Test prompt")
@@ -350,7 +352,9 @@ func TestUserRegistrationFlow(t *testing.T) {
             data.Value = ctx.Text()
             return teleflow.End(), nil
         },
-    })
+    }); err != nil {
+        log.Fatal(err)
+    }
 
     // Test flow execution
     // ... testing logic

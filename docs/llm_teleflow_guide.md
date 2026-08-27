@@ -135,7 +135,8 @@ Teleflow is a Go framework for building Telegram bots. Its main goals are to:
     }
 
     // 4. Add steps to the flow.
-    registrationFlow.AddStep(welcomeStep).AddStep(ageStep)
+    if _, err := registrationFlow.AddStep(welcomeStep); err != nil { log.Fatal(err) }
+    if _, err := registrationFlow.AddStep(ageStep); err != nil { log.Fatal(err) }
 
     // 5. Set a completion handler.
     registrationFlow.OnComplete(func(ctx *teleflow.Context, data RegistrationData) error {
