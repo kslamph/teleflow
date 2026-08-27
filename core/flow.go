@@ -22,7 +22,10 @@ const (
 // completes. It is returned by the Process function to control the conversation's
 // progression.
 type FlowAction struct {
-	Type       actionType
+	// Type is the kind of transition to perform (Next, Retry, End, or GoTo).
+	Type actionType
+	// TargetStep is the name of the destination step when Type is actionGoTo;
+	// empty otherwise.
 	TargetStep string
 }
 
@@ -47,8 +50,14 @@ func GoTo(stepName string) FlowAction {
 // The Process function handles the user's response and returns a FlowAction to
 // direct the conversation.
 type Step[T any] struct {
-	Name    string
-	Prompt  func(ctx *Context, data *T) error
+	// Name is a unique identifier for this step, used by GoTo for non-linear
+	// transitions.
+	Name string
+	// Prompt sends a message to the user (e.g., asks a question). It is called
+	// when the step becomes active.
+	Prompt func(ctx *Context, data *T) error
+	// Process handles the user's response and returns a FlowAction to direct the
+	// conversation.
 	Process func(ctx *Context, data *T) (action FlowAction, err error)
 }
 
@@ -204,6 +213,9 @@ func (r *Router) Default(handler Handler) {
 	r.defaultRoute = handler
 }
 
+// HandleUpdate dispatches the update. It routes command messages to the
+// matching registered handler; all other updates (including callback queries
+// and non-command messages) fall through to the default route.
 func (r *Router) HandleUpdate(ctx *Context) error {
 	if msg := ctx.Update().Message; msg != nil && msg.IsCommand() {
 		if handler, ok := r.routes[msg.Command()]; ok {
@@ -219,6 +231,7 @@ func (r *Router) HandleUpdate(ctx *Context) error {
 // Func is an adapter to allow the use of ordinary functions as Handlers.
 type Func func(ctx *Context) error
 
+// HandleUpdate delegates to the underlying function.
 func (f Func) HandleUpdate(ctx *Context) error { return f(ctx) }
 
 // InlineKeyboard is a helper for building Telegram Inline Keyboards using a
