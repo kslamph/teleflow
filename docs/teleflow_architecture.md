@@ -29,25 +29,25 @@ graph TD
     G -- Uses --> I[Context];
     H -- Uses --> I;
     F -- Uses --> I;
-    I -- Sends via --> J[TelegramClient];
+    I -- Sends via --> J[*tgbotapi.BotAPI];
 
     style B fill:#f9f,stroke:#333,stroke-width:2px
     style G fill:#ccf,stroke:#333,stroke-width:2px
     style I fill:#cfc,stroke:#333,stroke-width:2px
 ```
 
-### `Bot` ([`core/bot.go`](file:///home/kslam/goproj/teleflow/core/bot.go#L19-L26))
+### `Bot` ([`core/bot.go`](core/bot.go))
 
 *   **Responsibility:** The central orchestrator of the bot. It initializes the connection with the Telegram API, receives incoming updates, and routes them to the appropriate handlers via a `Router`.
 *   **Key Types:** `Bot`, `Handler`.
 *   **Key Methods:**
-    *   `NewBot(token string, router *Router)`: Creates a new bot instance.
+    *   `NewBot(token string, handler Handler)`: Creates a new bot instance.
     *   `Start()`: Begins listening for and processing Telegram updates.
     *   `processUpdate(update tgbotapi.Update)`: The core internal method for handling each incoming update.
     *   `RegisterData(data interface{})`: Registers complex data for callbacks.
     *   `GetData(id string)`: Retrieves complex callback data.
 
-### `Router` ([`core/flow.go`](file:///home/kslam/goproj/teleflow/core/flow.go#L158-L162))
+### `Router` ([`core/flow.go`](core/flow.go))
 
 *   **Responsibility:** Routes incoming updates to the appropriate handlers based on command names.
 *   **Key Types:** `Router`.
@@ -57,19 +57,19 @@ graph TD
     *   `Default(handler Handler)`: Registers a fallback handler.
     *   `HandleUpdate(ctx *Context)`: Processes an update and routes it to the appropriate handler.
 
-### `Flow[T]` ([`core/flow.go`](file:///home/kslam/goproj/teleflow/core/flow.go#L49-L56))
+### `Flow[T]` ([`core/flow.go`](core/flow.go))
 
 *   **Responsibility:** Represents a complete, defined multi-step conversation with automatic state management. It's parameterized with a generic type `T` which defines the structure of the data that will be collected and maintained throughout the flow.
 *   **Key Types:** `Flow[T]`, `Step[T]`, `FlowAction`.
 *   **Key Methods:**
     *   `NewFlow[T]()`: Creates a new flow for a given data type.
-    *   `AddStep(step Step[T])`: Adds a new step to the flow.
+    *   `AddStep(step Step[T]) (*Flow[T], error)`: Adds a new step to the flow.
     *   `OnComplete(handler func(*Context, T) error)`: Sets a callback for successful flow completion.
     *   `HandleUpdate(ctx *Context)`: Processes an update in the context of an active flow.
-    *   `IsUserInFlow(userID int64)`: Checks if a user is currently in this flow.
-    *   `CancelFlow(userID int64)`: Terminates a flow for a user.
+    *   `IsUserInFlow(chatID, userID int64) bool`: Checks if a user is currently in this flow.
+    *   `CancelFlow(chatID, userID int64)`: Terminates a flow for a user.
 
-### `Step[T]` ([`core/flow.go](file:///home/kslam/goproj/teleflow/core/flow.go#L37-L42))
+### `Step[T]` ([`core/flow.go`](core/flow.go))
 
 *   **Responsibility:** Represents a single stage or interaction point within a `Flow[T]`. Each step defines what prompt to show the user and how to process their response.
 *   **Key Types:** `Step[T]`.
@@ -78,7 +78,7 @@ graph TD
     *   `Prompt`: A function that sends a message to the user.
     *   `Process`: A function that takes user input and decides the next action.
 
-### `Context` ([`core/context.go](file:///home/kslam/goproj/teleflow/core/context.go#L10-L15))
+### `Context` ([`core/context.go`](core/context.go))
 
 *   **Responsibility:** An object passed to all handlers. It encapsulates the incoming Telegram update and provides convenient methods for sending messages and managing data. Each `Context` is specific to a single update.
 *   **Key Types:** `Context`.
@@ -95,7 +95,7 @@ graph TD
     *   `EditMessageText(messageID int, text string)`: Edits an existing message.
     *   `DeleteMessage(messageID int)`: Deletes a message.
 
-### `InlineKeyboard` ([`core/flow.go](file:///home/kslam/goproj/teleflow/core/flow.go#L193-L194))
+### `InlineKeyboard` ([`core/flow.go`](core/flow.go))
 
 *   **Responsibility:** Provides a fluent API to define and construct inline keyboards.
 *   **Key Types:** `InlineKeyboard`.
@@ -104,14 +104,14 @@ graph TD
     *   `AddRow(buttons ...tgbotapi.InlineKeyboardButton)`: Adds a new row of buttons.
     *   `Build()`: Finalizes the keyboard and returns a `tgbotapi.InlineKeyboardMarkup`.
 
-### Handler ([`core/flow.go](file:///home/kslam/goproj/teleflow/core/flow.go#L188-L190))
+### Handler ([`core/flow.go`](core/flow.go))
 
 *   **Responsibility:** Defines the interface for handling Telegram updates. Both `Flow[T]` and `Func` implement this interface.
 *   **Key Types:** `Handler`.
 *   **Key Methods:**
     *   `HandleUpdate(ctx *Context)`: Processes an update.
 
-### `Func` ([`core/flow.go](file:///home/kslam/goproj/teleflow/core/flow.go#L188-L190))
+### `Func` ([`core/flow.go`](core/flow.go))
 
 *   **Responsibility:** An adapter to allow the use of ordinary functions as Handlers.
 *   **Key Types:** `Func`.
@@ -121,12 +121,12 @@ graph TD
 ### Bot Initialization and Update Handling
 
 1.  **Initialization:**
-    *   `teleflow.NewBot(token, router)` is called.
-    *   A `TelegramClient` (e.g., `tgbotapi.BotAPI`) is created.
+    *   `teleflow.NewBot(token, handler)` is called with a `Handler` (typically a `Router`).
+    *   A `*tgbotapi.BotAPI` client is created internally.
     *   A `Router` is provided to handle command routing.
 2.  **Starting the Bot:**
     *   `bot.Start()` is called.
-    *   The bot begins polling Telegram for updates via `TelegramClient.GetUpdatesChan()`.
+    *   The bot begins polling Telegram for updates via `bot.api.GetUpdatesChan()`.
 3.  **Processing an Update (`Bot.processUpdate`)**:
     This is a critical method that orchestrates how each incoming update is handled.
 
@@ -134,17 +134,21 @@ graph TD
     graph TD
         Start((Update Received)) --> CreateCtx[Create Context];
         CreateCtx --> IsCallback{Callback Query?};
-        IsCallback -- Yes --> AnswerCallback[Answer Callback];
-        IsCallback -- No --> CheckCommand{Is Command?};
-        CheckCommand -- Yes --> RouteCommand[Route via Router];
-        CheckCommand -- No --> DefaultHandler[Use Default Handler];
-        AnswerCallback --> RouteCommand;
-        RouteCommand --> Handler[Handler.ProcessUpdate];
+        IsCallback -- Yes --> CheckReg{Registered Callback?};
+        CheckReg -- Yes --> RunHandler[Run One-Time Handler];
+        CheckReg -- No --> RouterCB[Forward to Router];
+        IsCallback -- No --> RouterDirect[Forward to Router];
+        RunHandler --> End((End));
+        RouterCB --> IsCommand{Is Command?};
+        RouterDirect --> IsCommand;
+        IsCommand -- Yes --> RouteCommand[Route via Router];
+        IsCommand -- No --> DefaultHandler[Use Default Handler];
+        RouteCommand --> Handler[Handler.HandleUpdate];
         DefaultHandler --> Handler;
-        Handler --> End((End));
+        Handler --> End;
     ```
     *   **Context Creation:** A new `Context` object is created for the update.
-    *   **Callback Handling:** If the update is a `CallbackQuery`, it's answered immediately.
+    *   **Callback Handling:** If the update is a `CallbackQuery`, the bot checks for a registered one-time callback handler (via `ctx.RegisterCallback`). If found, it runs that handler. If not found, the callback is forwarded to the `Router`. The framework does NOT auto-answer callbacks; the handler must call `ctx.AnswerCallback()` to stop the client loading spinner.
     *   **Command Routing:** If it's a command, the `Router` routes it to the appropriate handler.
     *   **Default Handling:** If it's not a command, the default handler is used.
 
@@ -157,6 +161,21 @@ graph TD
     *   If yes, it looks up the command in its routes map.
     *   The corresponding `Handler` is executed.
 5.  If not a command, the default handler is executed.
+
+### Inline-Button Routing
+
+Inline-keyboard button presses arrive as `CallbackQuery` updates, **not** as commands. `Router.HandleUpdate` only routes `msg.IsCommand()` messages, so buttons will never match a `router.Handle` route. Instead, buttons reach a `Flow` via:
+
+1. **Default handler forwarding** (used by all examples):
+   ```go
+   router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
+       if flow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
+           return flow.HandleUpdate(ctx)
+       }
+       return ctx.ReplyText("Unknown command. Use /start.")
+   }))
+   ```
+2. **One-time callback handler** — `ctx.RegisterCallback(handler)`, which runs once then auto-removes.
 
 ### Flow Lifecycle
 
@@ -190,12 +209,11 @@ graph TD
 ### Message Sending
 
 1.  Handler or flow step calls `ctx.ReplyText()` or `ctx.ReplyWithKeyboard()`.
-2.  These methods construct the appropriate `tgbotapi.Chattable` and send it via `TelegramClient.Send()`.
+2.  These methods construct the appropriate `tgbotapi.Chattable` and send it via `bot.api.Send()`.
 
 ## 4. Important Interfaces
 
-*   **`Handler` ([`core/flow.go](file:///home/kslam/goproj/teleflow/core/flow.go#L13-L15)):** Defines the contract for handling updates. Implemented by `Flow[T]` and `Func`.
-*   **`TelegramClient` ([`core/bot.go](file:///home/kslam/goproj/teleflow/core/bot.go#L20-L21)):** An abstraction over the Telegram Bot API communication library.
+*   **`Handler` ([`core/flow.go`](core/flow.go)):** Defines the contract for handling updates. Implemented by `Flow[T]` and `Func`.
 
 ## 5. Extensibility
 

@@ -1,6 +1,6 @@
 # Teleflow - Simple Telegram Bot Framework
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/kslamph/teleflow.svg)](https://pkg.go.dev/github.com/kslamph/teleflow)
+[![Go Reference](https://pkg.go.dev/badge/github.com/kslamph/teleflow/core.svg)](https://pkg.go.dev/github.com/kslamph/teleflow/core)
 [![Go Report Card](https://goreportcard.com/badge/github.com/kslamph/teleflow)](https://goreportcard.com/report/github.com/kslamph/teleflow)
 
 > **Quick Start for Go Developers**: Simple, type-safe Telegram bot framework with fluent flows and automatic state management.
@@ -28,18 +28,24 @@ For comprehensive guides and architectural details, see our documentation:
 
 ### Minimal Bot
 ```go
-import teleflow "github.com/kslamph/teleflow/core"
+import (
+	"log"
+	"os"
 
-// Basic initialization
-bot, err := teleflow.NewBot(os.Getenv("TELEGRAM_BOT_TOKEN"))
+	teleflow "github.com/kslamph/teleflow/core"
+)
+
+// Set up router with handlers
+router := teleflow.NewRouter()
+router.Handle("start", teleflow.Func(func(ctx *teleflow.Context) error {
+    return ctx.ReplyText("Welcome to Teleflow!")
+}))
+
+// Create bot with token and router
+bot, err := teleflow.NewBot(os.Getenv("TELEGRAM_BOT_TOKEN"), router)
 if err != nil {
     log.Fatal(err)
 }
-
-// Simple message handler
-bot.Router().Handle("start", teleflow.Func(func(ctx *teleflow.Context) error {
-    return ctx.ReplyText("Welcome to Teleflow!")
-}))
 
 bot.Start()
 ```
@@ -84,7 +90,8 @@ ageStep := teleflow.Step[UserProfile]{
 }
 
 // 4. Add steps to the flow and set a completion handler.
-profileFlow.AddStep(nameStep).AddStep(ageStep)
+if _, err := profileFlow.AddStep(nameStep); err != nil { log.Fatal(err) }
+if _, err := profileFlow.AddStep(ageStep); err != nil { log.Fatal(err) }
 profileFlow.OnComplete(func(ctx *teleflow.Context, data UserProfile) error {
     return ctx.ReplyText(fmt.Sprintf("Thanks, %s! Your profile is saved.", data.Name))
 })
@@ -185,7 +192,8 @@ ageStep := teleflow.Step[RegistrationData]{
 }
 
 // Add steps to the flow
-registrationFlow.AddStep(welcomeStep).AddStep(ageStep)
+if _, err := registrationFlow.AddStep(welcomeStep); err != nil { log.Fatal(err) }
+if _, err := registrationFlow.AddStep(ageStep); err != nil { log.Fatal(err) }
 
 // Set completion handler
 registrationFlow.OnComplete(func(ctx *teleflow.Context, data RegistrationData) error {
@@ -239,6 +247,21 @@ confirmationStep := teleflow.Step[RegistrationData]{
 ```
 
 ## 🔧 Advanced Features
+
+### Inline-Button Routing
+
+Inline-keyboard button presses arrive as `CallbackQuery` updates, **not** as commands. The `Router` only routes `msg.IsCommand()` messages, so inline buttons will not be dispatched by the router. Instead, buttons reach a `Flow` through one of two mechanisms:
+
+1. **Default handler forwarding** — the pattern used by all examples:
+   ```go
+   router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
+       if flow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
+           return flow.HandleUpdate(ctx)
+       }
+       return ctx.ReplyText("Unknown command. Use /start.")
+   }))
+   ```
+2. **One-time callback handler** — via `ctx.RegisterCallback(handler)`, which runs once and auto-removes.
 
 ### Complex Inline Data Handling
 
@@ -325,7 +348,7 @@ func TestUserRegistrationFlow(t *testing.T) {
     flow := teleflow.NewFlow[TestData]()
 
     // Add test steps
-    flow.AddStep(teleflow.Step[TestData]{
+    if _, err := flow.AddStep(teleflow.Step[TestData]{
         Name: "TestStep",
         Prompt: func(ctx *teleflow.Context, data *TestData) error {
             return ctx.ReplyText("Test prompt")
@@ -334,7 +357,9 @@ func TestUserRegistrationFlow(t *testing.T) {
             data.Value = ctx.Text()
             return teleflow.End(), nil
         },
-    })
+    }); err != nil {
+        log.Fatal(err)
+    }
 
     // Test flow execution
     // ... testing logic

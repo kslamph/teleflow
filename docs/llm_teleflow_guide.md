@@ -22,8 +22,15 @@ Teleflow is a Go framework for building Telegram bots. Its main goals are to:
     import "os"
     import "log"
 
-    // Basic initialization
-    bot, err := teleflow.NewBot(os.Getenv("TELEGRAM_BOT_TOKEN"))
+    // Set up the router with your handlers
+    router := teleflow.NewRouter()
+    router.Handle("start", teleflow.Func(func(ctx *teleflow.Context) error {
+        return ctx.ReplyText("Welcome!")
+    }))
+    // Register more handlers or flows as needed...
+
+    // Create the bot with token and router
+    bot, err := teleflow.NewBot(os.Getenv("TELEGRAM_BOT_TOKEN"), router)
     if err != nil {
         log.Fatal(err)
     }
@@ -74,6 +81,16 @@ Teleflow is a Go framework for building Telegram bots. Its main goals are to:
         return ctx.ReplyText("Unknown command. Use /start to begin.")
     }))
     ```
+*   **Important — Inline-Button Routing**: Inline-keyboard button presses arrive as `CallbackQuery` updates, **not** commands. `Router.HandleUpdate` only routes `msg.IsCommand()` messages. To route button presses to a `Flow`, use the `router.Default` forwarding pattern:
+    ```go
+    router.Default(teleflow.Func(func(ctx *teleflow.Context) error {
+        if flow.IsUserInFlow(ctx.ChatID(), ctx.UserID()) {
+            return flow.HandleUpdate(ctx)
+        }
+        return ctx.ReplyText("Unknown command. Use /start.")
+    }))
+    ```
+    Alternatively, register a one-time callback handler via `ctx.RegisterCallback(handler)`, which auto-removes after execution.
 
 ### 4. Flows (`teleflow.Flow[T]`)
 
@@ -118,7 +135,8 @@ Teleflow is a Go framework for building Telegram bots. Its main goals are to:
     }
 
     // 4. Add steps to the flow.
-    registrationFlow.AddStep(welcomeStep).AddStep(ageStep)
+    if _, err := registrationFlow.AddStep(welcomeStep); err != nil { log.Fatal(err) }
+    if _, err := registrationFlow.AddStep(ageStep); err != nil { log.Fatal(err) }
 
     // 5. Set a completion handler.
     registrationFlow.OnComplete(func(ctx *teleflow.Context, data RegistrationData) error {
